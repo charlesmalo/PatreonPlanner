@@ -1,0 +1,16 @@
+# OS
+.DS_Store
+
+# Editors
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Env
+.env
+.env.local
+
+# Dependencies (add stack-specific dirs as the project takes shape)
+node_modules/
