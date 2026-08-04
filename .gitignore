@@ -14,3 +14,12 @@
 
 # Dependencies (add stack-specific dirs as the project takes shape)
 node_modules/
+
+# Build artifacts
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# SDD scratch
+.superpowers/
