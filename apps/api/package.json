@@ -16,6 +16,7 @@
     "@nestjs/core": "10.4.4",
     "@nestjs/platform-express": "10.4.4",
     "@prisma/client": "5.20.0",
+    "ioredis": "5.4.1",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.1",
     "zod": "3.23.8"
@@ -23,6 +24,8 @@
   "devDependencies": {
     "@nestjs/cli": "10.4.5",
     "@nestjs/testing": "10.4.4",
+    "@testcontainers/postgresql": "10.13.2",
+    "@testcontainers/redis": "10.13.2",
     "@types/jest": "29.5.13",
     "@types/node": "20.16.10",
     "@types/supertest": "6.0.2",
