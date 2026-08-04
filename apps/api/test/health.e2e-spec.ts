@@ -7,7 +7,7 @@ describe('GET /healthz', () => {
   let app: INestApplication;
 
   beforeAll(async () => {
-    process.env.DATABASE_URL = 'postgresql://user:pass@localhost:5432/db';
+    process.env.DATABASE_URL = 'postgresql://planner:planner@localhost:5433/planner';
     process.env.REDIS_URL = 'redis://localhost:6379';
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
