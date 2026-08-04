@@ -1,6 +1,7 @@
-import { Global, Module } from '@nestjs/common';
+import { Global, Injectable, Module } from '@nestjs/common';
 import { AppConfig, configSchema } from './config.schema';
 
+@Injectable()
 export class ConfigService {
   private readonly values: AppConfig;
   constructor() {

@@ -16,6 +16,8 @@ describe('GET /healthz', () => {
 
   afterAll(async () => {
     await app.close();
+    delete process.env.DATABASE_URL;
+    delete process.env.REDIS_URL;
   });
 
   it('returns 200 with status ok', async () => {
