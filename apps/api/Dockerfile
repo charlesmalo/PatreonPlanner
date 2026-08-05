@@ -14,6 +14,22 @@ RUN pnpm install --filter @app/api... --frozen-lockfile
 COPY tsconfig.base.json ./
 COPY apps/api apps/api
 RUN pnpm --filter @app/api prisma:generate && pnpm --filter @app/api build
+# Self-contained, production-only node_modules. Without this the runtime image carries the whole
+# dev toolchain — including testcontainers, whose only purpose is talking to a Docker daemon.
+RUN pnpm --filter @app/api deploy --prod /prod
+# `prisma generate` writes the client and its engine to a `.prisma` directory that sits *beside*
+# the @prisma/client package rather than inside it, so `pnpm deploy` does not carry it along.
+# It has to land next to the package in the deployed store, since that is where @prisma/client
+# resolves from — a copy at the node_modules root is never consulted.
+# Both paths are resolved with `ls -d` rather than globbed inline: the destination does not exist
+# yet, so an unmatched glob would be passed through literally and silently create a junk
+# directory, leaving @prisma/client's "did not initialize yet" stub in place.
+RUN set -eu; \
+    src="$(ls -d /repo/node_modules/.pnpm/@prisma+client@*/node_modules/.prisma)"; \
+    dest="$(ls -d /prod/node_modules/.pnpm/@prisma+client@*/node_modules)"; \
+    rm -rf "$dest/.prisma"; \
+    cp -R "$src" "$dest/.prisma"; \
+    test -n "$(ls "$dest"/.prisma/client/*.so.node)"
 
 FROM node:20-slim AS runtime
 # Prisma's query engine links against OpenSSL.
@@ -21,11 +37,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssl \
   && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production
 WORKDIR /app
-# A package's node_modules is a tree of symlinks into the root store, so the workspace layout
-# has to survive the copy or nothing resolves.
-COPY --from=build /repo/node_modules ./node_modules
-COPY --from=build /repo/apps/api/node_modules ./apps/api/node_modules
-COPY --from=build /repo/apps/api/dist ./apps/api/dist
-COPY --from=build /repo/apps/api/package.json ./apps/api/
+# `pnpm deploy` resolves the store symlinks into a real tree, so this copy needs no workspace
+# layout around it.
+COPY --from=build /prod/node_modules ./node_modules
+COPY --from=build /repo/apps/api/dist ./dist
+COPY --from=build /repo/apps/api/package.json ./
+USER node
 EXPOSE 3000
-CMD ["node", "apps/api/dist/main.js"]
+CMD ["node", "dist/main.js"]

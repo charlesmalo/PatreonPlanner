@@ -5,10 +5,22 @@ services:
       POSTGRES_USER: planner
       POSTGRES_PASSWORD: planner
       POSTGRES_DB: planner
-    ports: ['5433:5432']
+    # Bound to loopback: these carry throwaway credentials and must not be reachable from the
+    # network the laptop happens to be on. Override POSTGRES_PORT in .env if 5432 is taken.
+    ports: ['127.0.0.1:${POSTGRES_PORT:-5432}:5432']
     volumes: ['pgdata:/var/lib/postgresql/data']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U planner']
+      interval: 10s
+      timeout: 5s
+      retries: 5
   redis:
     image: redis:7-alpine
-    ports: ['6379:6379']
+    ports: ['127.0.0.1:${REDIS_PORT:-6379}:6379']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
 volumes:
   pgdata:

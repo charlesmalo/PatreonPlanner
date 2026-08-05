@@ -3,6 +3,13 @@ on:
   push:
     branches: [main]
   pull_request:
+# The default token is write-capable; nothing here needs to write.
+permissions:
+  contents: read
+# A new push supersedes an in-flight run for the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   build-test:
     runs-on: ubuntu-latest
@@ -37,3 +44,7 @@ jobs:
       - run: pnpm -r test
       - run: pnpm --filter @app/web build
       - run: pnpm --filter @app/api build
+      # The Dockerfiles are intricate enough that three separate defects were found by hand;
+      # nothing else guards them against regression.
+      - run: docker build -f apps/api/Dockerfile -t patreonplanner-api .
+      - run: docker build -f apps/web/Dockerfile -t patreonplanner-web .

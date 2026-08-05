@@ -5,10 +5,15 @@ import { PostgreSqlContainer, StartedPostgreSqlContainer } from '@testcontainers
 import { RedisContainer, StartedRedisContainer } from '@testcontainers/redis';
 import { AppModule } from '../src/app.module';
 
+// Generous next to the ~2s check timeout, but far below the ~20s ioredis spends exhausting its
+// default reconnect budget — the failure this asserts against.
+const READINESS_BUDGET_MS = 5_000;
+
 describe('GET /readyz (integration)', () => {
   let app: INestApplication;
   let pg: StartedPostgreSqlContainer;
   let redis: StartedRedisContainer;
+  let redisStopped = false;
 
   beforeAll(async () => {
     pg = await new PostgreSqlContainer('pgvector/pgvector:pg16').start();
@@ -23,7 +28,7 @@ describe('GET /readyz (integration)', () => {
   afterAll(async () => {
     await app.close();
     await pg.stop();
-    await redis.stop();
+    if (!redisStopped) await redis.stop();
   });
 
   it('reports ready when db and redis are up', async () => {
@@ -31,4 +36,19 @@ describe('GET /readyz (integration)', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ status: 'ready', checks: { db: true, redis: true } });
   });
+
+  // A readiness probe that blocks is worse than one that answers 503: orchestrators give up
+  // on the probe long before ioredis exhausts its reconnect budget.
+  it('reports unready promptly when redis is down', async () => {
+    await redis.stop();
+    redisStopped = true;
+
+    const startedAt = Date.now();
+    const res = await request(app.getHttpServer()).get('/readyz');
+    const elapsedMs = Date.now() - startedAt;
+
+    expect(res.status).toBe(503);
+    expect(res.body).toEqual({ status: 'unready', checks: { db: true, redis: false } });
+    expect(elapsedMs).toBeLessThan(READINESS_BUDGET_MS);
+  }, 60_000);
 });

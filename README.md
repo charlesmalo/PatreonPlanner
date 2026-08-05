@@ -1,0 +1,63 @@
+# PatreonPlanner
+
+A recommendation and planning web app for Patreon creator communities.
+
+Monorepo: `apps/api` (NestJS) and `apps/web` (Vite + React + Tailwind), managed with pnpm.
+
+## Prerequisites
+
+- Node 20 (see `.nvmrc`)
+- pnpm 9.12.0 (`corepack enable`)
+- Docker — required for local infrastructure _and_ for the API's integration tests
+
+## Local setup
+
+```bash
+pnpm install
+cp .env.example .env
+docker compose up -d
+pnpm --filter @app/api prisma:generate
+```
+
+If host port 5432 or 6379 is already in use, set `POSTGRES_PORT` / `REDIS_PORT` in `.env` and
+update `DATABASE_URL` / `REDIS_URL` to match. Compose binds both services to `127.0.0.1` only.
+
+## Running
+
+```bash
+pnpm --filter @app/api start:dev   # http://localhost:3000
+pnpm --filter @app/web dev         # http://localhost:5173, proxies /api to the API
+```
+
+The REST surface is served under `/api/v1`. The ops probes stay at the root:
+
+- `GET /healthz` — liveness; touches no dependency
+- `GET /readyz` — readiness; checks Postgres and Redis, `503` if either is down
+
+## Verification
+
+```bash
+pnpm -r typecheck
+pnpm -r test
+pnpm format:check
+```
+
+`apps/api`'s readiness test starts its own Postgres and Redis with Testcontainers, so Docker must
+be running. Testcontainers does not read Docker CLI contexts, so `apps/api/test/global-setup.ts`
+resolves the active context into `DOCKER_HOST` — this is what makes Colima and OrbStack work
+without any manual environment setup.
+
+## Docker images
+
+```bash
+docker build -f apps/api/Dockerfile -t patreonplanner-api .
+docker build -f apps/web/Dockerfile -t patreonplanner-web .
+```
+
+Both are built in CI. The API image runs as the unprivileged `node` user with production-only
+dependencies; the web image serves the built SPA from nginx.
+
+## Documentation
+
+- Design: `docs/superpowers/specs/2026-08-03-patreonplanner-phase1-design.md`
+- Plans: `docs/superpowers/plans/`

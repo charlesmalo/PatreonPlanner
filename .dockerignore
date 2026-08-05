@@ -6,4 +6,13 @@ dist
 .github
 .superpowers
 docs
+openspec
+.claude
+coverage
+*.tsbuildinfo
 *.log
+# Never bake credentials into a layer. apps/api/.env is Prisma's conventional location for
+# DATABASE_URL and is gitignored, so it would otherwise ship invisibly.
+.env
+.env.*
+!.env.example
