@@ -4,6 +4,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { RedisService } from '../src/redis/redis.service';
+import { applyTestConfigDefaults } from './support/env';
 
 // /healthz is a liveness probe: it answers "the process is up" and deliberately touches no
 // dependency. Booting AppModule against real Postgres and Redis would make this suite report
@@ -31,6 +32,7 @@ describe('GET /healthz', () => {
 
   beforeAll(async () => {
     for (const key of injectedKeys) process.env[key] = ENV_DEFAULTS[key];
+    applyTestConfigDefaults();
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(PrismaService)
       .useValue(stubPrisma)

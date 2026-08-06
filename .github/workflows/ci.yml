@@ -31,6 +31,12 @@ jobs:
       DATABASE_URL: postgresql://planner:planner@localhost:5432/planner
       REDIS_URL: redis://localhost:6379
       NODE_ENV: test
+      # Literal test values — this plan's tests run against a fake Patreon client, so CI needs
+      # no real credentials and no secrets.
+      PATREON_CLIENT_ID: test-client-id
+      PATREON_CLIENT_SECRET: test-client-secret
+      PATREON_REDIRECT_URI: http://localhost:3000/auth/patreon/callback
+      ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

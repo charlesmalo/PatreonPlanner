@@ -4,6 +4,7 @@ import request from 'supertest';
 import { PostgreSqlContainer, StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, StartedRedisContainer } from '@testcontainers/redis';
 import { AppModule } from '../src/app.module';
+import { applyTestConfigDefaults } from './support/env';
 
 // Generous next to the ~2s check timeout, but far below the ~20s ioredis spends exhausting its
 // default reconnect budget — the failure this asserts against.
@@ -20,6 +21,7 @@ describe('GET /readyz (integration)', () => {
     redis = await new RedisContainer('redis:7-alpine').start();
     process.env.DATABASE_URL = pg.getConnectionUri();
     process.env.REDIS_URL = redis.getConnectionUrl();
+    applyTestConfigDefaults();
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
