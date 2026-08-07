@@ -1,7 +1,8 @@
-import { Controller, Get, Query, Req, Res, UnauthorizedException } from '@nestjs/common';
+import { Controller, Get, Query, Req, Res, UnauthorizedException, UseGuards } from '@nestjs/common';
 import type { CookieOptions, Request, Response } from 'express';
 import { ConfigService } from '../config/config.module';
 import { SESSION_COOKIE } from '../session/session.cookie';
+import { CurrentUser, CurrentUserPayload, SessionGuard } from '../session/session.guard';
 import { SessionService } from '../session/session.service';
 import { AuthService } from './auth.service';
 
@@ -36,6 +37,14 @@ export class AuthController {
     if (token) await this.sessions.destroy(token);
     res.clearCookie(SESSION_COOKIE, this.cookieOptions());
     res.status(204).send();
+  }
+
+  // Served at /api/v1/me: this one is part of the versioned REST surface, unlike the OAuth
+  // routes above.
+  @Get('me')
+  @UseGuards(SessionGuard)
+  me(@CurrentUser() user: CurrentUserPayload): CurrentUserPayload {
+    return user;
   }
 
   private cookieOptions(): CookieOptions {
