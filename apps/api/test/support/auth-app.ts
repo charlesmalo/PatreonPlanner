@@ -10,6 +10,17 @@ import { startDatabase } from './database';
 import { FakePatreonClient } from './fake-patreon.client';
 import { applyTestConfigDefaults } from './env';
 
+/**
+ * Picks a cookie by name. Indexing into set-cookie assumes an ordering nothing guarantees —
+ * once the CSRF middleware started setting its own cookie first, every such assumption broke.
+ */
+export function pickCookie(res: { headers: Record<string, unknown> }, name: string): string {
+  const cookies = (res.headers['set-cookie'] as string[] | undefined) ?? [];
+  const found = cookies.find((cookie) => cookie.startsWith(`${name}=`));
+  if (!found) throw new Error(`Expected a ${name} cookie in the response`);
+  return found;
+}
+
 export interface AuthTestContext {
   app: INestApplication;
   prisma: PrismaClient;

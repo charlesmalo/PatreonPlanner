@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { AuthTestContext, startAuthApp } from './support/auth-app';
+import { AuthTestContext, pickCookie, startAuthApp } from './support/auth-app';
 
 describe('GET /api/v1/me (integration)', () => {
   let ctx: AuthTestContext;
@@ -18,7 +18,7 @@ describe('GET /api/v1/me (integration)', () => {
     const callback = await request(ctx.app.getHttpServer())
       .get(`/auth/patreon/callback?code=auth-code&state=${state}`)
       .expect(302);
-    return (callback.headers['set-cookie'] as unknown as string[])[0];
+    return pickCookie(callback, 'pp_session');
   }
 
   it('returns 401 without a session cookie', async () => {

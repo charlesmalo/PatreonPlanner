@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { AuthTestContext, startAuthApp } from './support/auth-app';
+import { AuthTestContext, pickCookie, startAuthApp } from './support/auth-app';
 
 describe('Patreon auth flow (integration)', () => {
   let ctx: AuthTestContext;
@@ -29,7 +29,7 @@ describe('Patreon auth flow (integration)', () => {
       .get(`/auth/patreon/callback?code=auth-code&state=${state}`)
       .expect(302);
 
-    const cookie = (res.headers['set-cookie'] as unknown as string[])[0];
+    const cookie = pickCookie(res, 'pp_session');
     expect(cookie).toContain('pp_session=');
     expect(cookie).toContain('HttpOnly');
     expect(cookie).toMatch(/SameSite=Lax/i);
@@ -92,7 +92,7 @@ describe('Patreon auth flow (integration)', () => {
       const res = await request(ctx.app.getHttpServer())
         .get(`/auth/patreon/callback?code=auth-code&state=${state}`)
         .expect(302);
-      cookies.push((res.headers['set-cookie'] as unknown as string[])[0]);
+      cookies.push(pickCookie(res, 'pp_session'));
     }
     // Rotation on login: a token captured before login is never the authenticated one.
     expect(cookies[0]).not.toBe(cookies[1]);
