@@ -1,8 +1,10 @@
 name: CI
 on:
+  # Every branch, not just main: pushes to a PR branch were not reliably producing a
+  # synchronize run, which left per-task commits unverified. Push is the trigger that
+  # actually fires, and the concurrency group below still cancels superseded runs.
   push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
 # The default token is write-capable; nothing here needs to write.
 permissions:
   contents: read
