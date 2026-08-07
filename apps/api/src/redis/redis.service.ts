@@ -39,7 +39,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       this.client.disconnect();
     }
   }
-  get raw(): Redis {
+  raw(): Redis {
     return this.client;
   }
   async ping(): Promise<boolean> {

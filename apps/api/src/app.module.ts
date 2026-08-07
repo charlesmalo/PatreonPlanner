@@ -4,9 +4,18 @@ import { CryptoModule } from './crypto/crypto.module';
 import { PatreonModule } from './patreon/patreon.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
+import { SessionModule } from './session/session.module';
 import { HealthModule } from './health/health.module';
 
 @Module({
-  imports: [ConfigModule, CryptoModule, PrismaModule, RedisModule, PatreonModule, HealthModule],
+  imports: [
+    ConfigModule,
+    CryptoModule,
+    PrismaModule,
+    RedisModule,
+    SessionModule,
+    PatreonModule,
+    HealthModule,
+  ],
 })
 export class AppModule {}
