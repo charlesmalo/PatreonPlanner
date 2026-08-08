@@ -41,7 +41,10 @@ export class HttpPatreonClient implements PatreonClient {
       response_type: 'code',
       client_id: this.config.get('PATREON_CLIENT_ID'),
       redirect_uri: this.config.get('PATREON_REDIRECT_URI'),
-      scope: 'identity identity[email] identity.memberships',
+      // `campaigns` is what makes claiming possible: Patreon returns only campaigns this
+      // token's owner controls, which is the ownership proof. Adding it changes the consent
+      // screen, so sessions predating this must log in again before a claim can succeed.
+      scope: 'identity identity[email] identity.memberships campaigns',
       state,
       code_challenge: codeChallenge,
       code_challenge_method: 'S256',
@@ -66,6 +69,33 @@ export class HttpPatreonClient implements PatreonClient {
       // The body can echo back the code or the client secret, so log the status only.
       this.logger.warn(`Patreon token exchange failed with status ${response.status}`);
       throw new Error('Patreon token exchange failed');
+    }
+    const body = (await response.json()) as {
+      access_token: string;
+      refresh_token: string;
+      expires_in: number;
+    };
+    return {
+      accessToken: body.access_token,
+      refreshToken: body.refresh_token,
+      expiresInSeconds: body.expires_in,
+    };
+  }
+
+  async refreshTokens(refreshToken: string): Promise<PatreonTokens> {
+    const response = await fetch(TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        client_id: this.config.get('PATREON_CLIENT_ID'),
+        client_secret: this.config.get('PATREON_CLIENT_SECRET'),
+      }).toString(),
+    });
+    if (!response.ok) {
+      this.logger.warn(`Patreon token refresh failed with status ${response.status}`);
+      throw new Error('Patreon token refresh failed');
     }
     const body = (await response.json()) as {
       access_token: string;

@@ -16,6 +16,8 @@ export class FakePatreonClient implements PatreonClient {
     memberships: [],
   };
   public exchangeShouldFail = false;
+  public refreshCalls: string[] = [];
+  public refreshShouldFail = false;
 
   buildAuthorizationUrl({
     state,
@@ -31,6 +33,16 @@ export class FakePatreonClient implements PatreonClient {
     this.exchangeCalls.push({ code, codeVerifier });
     if (this.exchangeShouldFail) throw new Error('Patreon token exchange failed');
     return { accessToken: 'access-token', refreshToken: 'refresh-token', expiresInSeconds: 3600 };
+  }
+
+  async refreshTokens(refreshToken: string): Promise<PatreonTokens> {
+    this.refreshCalls.push(refreshToken);
+    if (this.refreshShouldFail) throw new Error('Patreon token refresh failed');
+    return {
+      accessToken: 'refreshed-access-token',
+      refreshToken: 'refreshed-refresh-token',
+      expiresInSeconds: 3600,
+    };
   }
 
   async fetchIdentity(): Promise<PatreonIdentity> {
