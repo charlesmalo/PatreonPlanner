@@ -9,6 +9,17 @@ datasource db {
   extensions = [vector]
 }
 
+enum StaffRole {
+  OWNER
+  MOD
+}
+
+enum ViewVisibility {
+  PUBLIC
+  ANY_PATREON_USER
+  SUBSCRIBERS_ONLY
+}
+
 model User {
   id                    String    @id @default(uuid()) @db.Uuid
   patreonUserId         String    @unique
@@ -21,8 +32,10 @@ model User {
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
-  ownedCreators Creator[]    @relation("CreatorOwner")
+  ownedCreators Creator[]      @relation("CreatorOwner")
   memberships   Membership[]
+  staffRoles    CreatorStaff[] @relation("StaffMember")
+  staffAssigned CreatorStaff[] @relation("StaffAssigner")
 }
 
 model Creator {
@@ -31,13 +44,17 @@ model Creator {
   ownerUserId       String   @db.Uuid
   displayName       String
   slug              String   @unique
+  // The creator's own site, registered at claim time for the Phase 4 extension.
+  baseUrl           String?
   claimedAt         DateTime @default(now())
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  owner       User         @relation("CreatorOwner", fields: [ownerUserId], references: [id])
+  owner       User           @relation("CreatorOwner", fields: [ownerUserId], references: [id])
   tiers       Tier[]
   memberships Membership[]
+  staff       CreatorStaff[]
+  policy      CreatorPolicy?
 
   // Postgres does not index foreign keys automatically, and the cascade from Creator scans them.
   @@index([ownerUserId])
@@ -53,8 +70,10 @@ model Tier {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  creator     Creator      @relation(fields: [creatorId], references: [id], onDelete: Cascade)
-  memberships Membership[]
+  creator        Creator         @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  memberships    Membership[]
+  submitPolicies CreatorPolicy[] @relation("SubmitMinTier")
+  upvotePolicies CreatorPolicy[] @relation("UpvoteMinTier")
 
   @@unique([creatorId, patreonTierId])
   @@index([creatorId])
@@ -79,4 +98,43 @@ model Membership {
   // The unique index above only serves a userId prefix; creator-scoped lookups need their own.
   @@index([creatorId])
   @@index([currentTierId])
+}
+
+model CreatorStaff {
+  id               String    @id @default(uuid()) @db.Uuid
+  creatorId        String    @db.Uuid
+  userId           String    @db.Uuid
+  role             StaffRole
+  assignedByUserId String?   @db.Uuid
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  creator    Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  user       User    @relation("StaffMember", fields: [userId], references: [id], onDelete: Cascade)
+  assignedBy User?   @relation("StaffAssigner", fields: [assignedByUserId], references: [id])
+
+  // One row per person per creator: moderation power derives only from this row, so a duplicate
+  // would make "is this user staff?" ambiguous.
+  @@unique([creatorId, userId])
+  @@index([creatorId])
+  @@index([userId])
+  @@index([assignedByUserId])
+}
+
+model CreatorPolicy {
+  id                    String         @id @default(uuid()) @db.Uuid
+  creatorId             String         @unique @db.Uuid
+  viewVisibility        ViewVisibility @default(PUBLIC)
+  submitMinTierId       String?        @db.Uuid
+  upvoteMinTierId       String?        @db.Uuid
+  hidePendingFromPublic Boolean        @default(false)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  creator       Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  submitMinTier Tier?   @relation("SubmitMinTier", fields: [submitMinTierId], references: [id])
+  upvoteMinTier Tier?   @relation("UpvoteMinTier", fields: [upvoteMinTierId], references: [id])
+
+  @@index([submitMinTierId])
+  @@index([upvoteMinTierId])
 }
