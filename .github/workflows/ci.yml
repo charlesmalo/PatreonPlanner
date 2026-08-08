@@ -38,7 +38,7 @@ jobs:
       PATREON_CLIENT_ID: test-client-id
       PATREON_CLIENT_SECRET: test-client-secret
       PATREON_REDIRECT_URI: http://localhost:3000/auth/patreon/callback
-      ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      ENCRYPTION_KEY: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

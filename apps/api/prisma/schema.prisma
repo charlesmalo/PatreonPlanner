@@ -38,6 +38,9 @@ model Creator {
   owner       User         @relation("CreatorOwner", fields: [ownerUserId], references: [id])
   tiers       Tier[]
   memberships Membership[]
+
+  // Postgres does not index foreign keys automatically, and the cascade from Creator scans them.
+  @@index([ownerUserId])
 }
 
 model Tier {
@@ -54,6 +57,7 @@ model Tier {
   memberships Membership[]
 
   @@unique([creatorId, patreonTierId])
+  @@index([creatorId])
 }
 
 model Membership {
@@ -72,4 +76,7 @@ model Membership {
   currentTier Tier?   @relation(fields: [currentTierId], references: [id])
 
   @@unique([userId, creatorId])
+  // The unique index above only serves a userId prefix; creator-scoped lookups need their own.
+  @@index([creatorId])
+  @@index([currentTierId])
 }

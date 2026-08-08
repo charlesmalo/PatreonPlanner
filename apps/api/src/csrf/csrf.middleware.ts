@@ -1,6 +1,7 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { ForbiddenException, Injectable, NestMiddleware } from '@nestjs/common';
 import type { NextFunction, Request, Response } from 'express';
+import { ConfigService } from '../config/config.module';
 
 const CSRF_COOKIE = 'pp_csrf';
 const CSRF_HEADER = 'x-csrf-token';
@@ -14,6 +15,8 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
  */
 @Injectable()
 export class CsrfMiddleware implements NestMiddleware {
+  constructor(private readonly config: ConfigService) {}
+
   use(req: Request, res: Response, next: NextFunction): void {
     if (SAFE_METHODS.has(req.method)) {
       if (!req.cookies?.[CSRF_COOKIE]) {
@@ -21,6 +24,9 @@ export class CsrfMiddleware implements NestMiddleware {
           // Readable by JS on purpose — the SPA has to echo it back.
           httpOnly: false,
           sameSite: 'lax',
+          // Without this an active network attacker on plain HTTP could plant a value they
+          // know and satisfy both halves of the double-submit check.
+          secure: this.config.get('PATREON_REDIRECT_URI').startsWith('https://'),
           path: '/',
         });
       }

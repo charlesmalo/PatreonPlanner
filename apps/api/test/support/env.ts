@@ -9,7 +9,9 @@ export function applyTestConfigDefaults(): void {
     PATREON_CLIENT_ID: 'test-client-id',
     PATREON_CLIENT_SECRET: 'test-client-secret',
     PATREON_REDIRECT_URI: 'http://localhost:3000/auth/patreon/callback',
-    ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+    // Non-zero: the config schema rejects an all-zero key so a placeholder cannot reach
+    // production. Fixed rather than random so failures stay reproducible.
+    ENCRYPTION_KEY: Buffer.alloc(32, 1).toString('base64'),
   };
   for (const [key, value] of Object.entries(defaults)) {
     process.env[key] ??= value;

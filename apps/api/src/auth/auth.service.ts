@@ -16,9 +16,10 @@ export class AuthService {
     private readonly sessions: SessionService,
   ) {}
 
-  async buildLoginUrl(): Promise<string> {
+  /** Returns the redirect target plus the state, which the caller binds to the browser. */
+  async startLogin(): Promise<{ url: string; state: string }> {
     const { state, codeChallenge } = await this.states.start();
-    return this.patreon.buildAuthorizationUrl({ state, codeChallenge });
+    return { url: this.patreon.buildAuthorizationUrl({ state, codeChallenge }), state };
   }
 
   async completeLogin(code: string, state: string): Promise<string> {
@@ -65,6 +66,7 @@ export class AuthService {
    * against a tenant that does not exist yet.
    */
   private async syncMemberships(userId: string, identity: PatreonIdentity): Promise<void> {
+    const syncedCreatorIds: string[] = [];
     for (const membership of identity.memberships) {
       const creator = await this.prisma.creator.findUnique({
         where: { patreonCampaignId: membership.campaignId },
@@ -89,6 +91,15 @@ export class AuthService {
         create: { userId, creatorId: creator.id, ...state },
         update: state,
       });
+      syncedCreatorIds.push(creator.id);
     }
+
+    // Patreon reports current memberships only, so a lapsed one simply stops appearing. Without
+    // this, login re-sync could grant access but never revoke it — and design §4 makes this the
+    // fallback for the webhook path, which a grant-only sync would not actually be.
+    await this.prisma.membership.updateMany({
+      where: { userId, creatorId: { notIn: syncedCreatorIds } },
+      data: { isActivePatron: false, currentTierId: null, lastSyncedAt: new Date() },
+    });
   }
 }

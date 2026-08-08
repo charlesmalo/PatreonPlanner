@@ -1,10 +1,10 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import cookieParser from 'cookie-parser';
 import { PrismaClient } from '@prisma/client';
 import { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, StartedRedisContainer } from '@testcontainers/redis';
 import { AppModule } from '../../src/app.module';
+import { configureApp } from '../../src/app.setup';
 import { PATREON_CLIENT } from '../../src/patreon/patreon.client';
 import { startDatabase } from './database';
 import { FakePatreonClient } from './fake-patreon.client';
@@ -47,15 +47,9 @@ export async function startAuthApp(): Promise<AuthTestContext> {
     .compile();
 
   const app = moduleRef.createNestApplication();
-  // Mirrors main.ts: without these the suite would pass against a request pipeline the
-  // production app does not actually have.
-  app.use(cookieParser());
-  app.useGlobalPipes(
-    new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
-  );
-  app.setGlobalPrefix('api/v1', {
-    exclude: ['healthz', 'readyz', 'auth/patreon/login', 'auth/patreon/callback', 'auth/logout'],
-  });
+  // The same function main.ts calls, so the suites cannot drift onto a pipeline production
+  // does not have.
+  configureApp(app);
   await app.init();
 
   const prisma = new PrismaClient({ datasources: { db: { url: pg.getConnectionUri() } } });

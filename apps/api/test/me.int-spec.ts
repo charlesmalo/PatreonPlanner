@@ -17,8 +17,17 @@ describe('GET /api/v1/me (integration)', () => {
     const state = new URL(start.headers.location).searchParams.get('state') as string;
     const callback = await request(ctx.app.getHttpServer())
       .get(`/auth/patreon/callback?code=auth-code&state=${state}`)
+      .set('Cookie', pickCookie(start, 'pp_oauth_state'))
       .expect(302);
     return pickCookie(callback, 'pp_session');
+  }
+
+  /** Logout is a POST, so it carries CSRF like any other state-changing request. */
+  function logout(sessionCookie: string) {
+    return request(ctx.app.getHttpServer())
+      .post('/auth/logout')
+      .set('Cookie', [sessionCookie, 'pp_csrf=tok'])
+      .set('x-csrf-token', 'tok');
   }
 
   it('returns 401 without a session cookie', async () => {
@@ -58,7 +67,7 @@ describe('GET /api/v1/me (integration)', () => {
 
   it('stops accepting the cookie after logout', async () => {
     const cookie = await login();
-    await request(ctx.app.getHttpServer()).get('/auth/logout').set('Cookie', cookie).expect(204);
+    await logout(cookie).expect(204);
     await request(ctx.app.getHttpServer()).get('/api/v1/me').set('Cookie', cookie).expect(401);
   });
 

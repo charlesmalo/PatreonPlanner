@@ -10,11 +10,16 @@ export const configSchema = z.object({
   PATREON_CLIENT_SECRET: z.string().min(1),
   PATREON_REDIRECT_URI: z.string().url(),
 
-  // 32 raw bytes, base64-encoded — the AES-256 key. Rejected early so a short key fails at
-  // boot rather than at the first token write.
-  ENCRYPTION_KEY: z.string().refine((value) => Buffer.from(value, 'base64').length === 32, {
-    message: 'ENCRYPTION_KEY must be 32 bytes, base64-encoded',
-  }),
+  // 32 raw bytes, base64-encoded — the AES-256 key. The regex matters because Buffer.from
+  // silently discards invalid base64 characters, so a malformed string can still decode to 32
+  // bytes and slip through a length check alone. Rejected at boot rather than at the first
+  // token write, and the all-zero key is refused so CI's placeholder cannot reach production.
+  ENCRYPTION_KEY: z
+    .string()
+    .regex(/^[A-Za-z0-9+/]{43}=$/, 'ENCRYPTION_KEY must be 32 bytes, base64-encoded')
+    .refine((value) => !Buffer.from(value, 'base64').equals(Buffer.alloc(32)), {
+      message: 'ENCRYPTION_KEY must not be all zero bytes',
+    }),
 
   SESSION_TTL_SECONDS: z.coerce
     .number()

@@ -12,9 +12,20 @@ describe('Patreon auth flow (integration)', () => {
     await ctx.teardown();
   });
 
-  async function startLogin(): Promise<string> {
+  /** Returns the state plus the cookie that binds the flow to this "browser". */
+  async function startLogin(): Promise<{ state: string; cookie: string }> {
     const res = await request(ctx.app.getHttpServer()).get('/auth/patreon/login').expect(302);
-    return new URL(res.headers.location).searchParams.get('state') as string;
+    return {
+      state: new URL(res.headers.location).searchParams.get('state') as string,
+      cookie: pickCookie(res, 'pp_oauth_state'),
+    };
+  }
+
+  function callback(state: string, cookie: string | null, code = 'auth-code') {
+    const req = request(ctx.app.getHttpServer()).get(
+      `/auth/patreon/callback?code=${code}&state=${state}`,
+    );
+    return cookie ? req.set('Cookie', cookie) : req;
   }
 
   it('redirects to Patreon with state and a code challenge', async () => {
@@ -24,10 +35,8 @@ describe('Patreon auth flow (integration)', () => {
   });
 
   it('creates the user and a session cookie on a valid callback', async () => {
-    const state = await startLogin();
-    const res = await request(ctx.app.getHttpServer())
-      .get(`/auth/patreon/callback?code=auth-code&state=${state}`)
-      .expect(302);
+    const { state, cookie: stateCookie } = await startLogin();
+    const res = await callback(state, stateCookie).expect(302);
 
     const cookie = pickCookie(res, 'pp_session');
     expect(cookie).toContain('pp_session=');
@@ -42,40 +51,68 @@ describe('Patreon auth flow (integration)', () => {
 
   it('passes a PKCE verifier to the exchange', async () => {
     ctx.patreon.exchangeCalls = [];
-    const state = await startLogin();
-    await request(ctx.app.getHttpServer())
-      .get(`/auth/patreon/callback?code=auth-code&state=${state}`)
-      .expect(302);
+    const { state, cookie: stateCookie } = await startLogin();
+    await callback(state, stateCookie).expect(302);
     expect(ctx.patreon.exchangeCalls).toHaveLength(1);
     expect(ctx.patreon.exchangeCalls[0].codeVerifier).toMatch(/^[\w-]{40,}$/);
   });
 
   it('rejects a forged state', async () => {
-    await request(ctx.app.getHttpServer())
-      .get('/auth/patreon/callback?code=auth-code&state=forged')
-      .expect(401);
+    const { cookie: stateCookie } = await startLogin();
+    await callback('forged', stateCookie).expect(401);
+  });
+
+  // Login CSRF: an attacker completes consent with their own Patreon account, keeps the
+  // resulting code and state, and induces the victim to load the callback. Without binding the
+  // flow to the browser that started it, the victim is handed a session belonging to the
+  // attacker — every action they then take happens under the attacker's identity.
+  it('rejects a callback redeemed from a browser that did not start the flow', async () => {
+    const { state } = await startLogin();
+    await callback(state, null).expect(401);
+  });
+
+  it('rejects a callback whose state cookie belongs to a different flow', async () => {
+    const first = await startLogin();
+    const second = await startLogin();
+    await callback(first.state, second.cookie).expect(401);
+  });
+
+  it('clears the state cookie once the flow completes', async () => {
+    const { state, cookie: stateCookie } = await startLogin();
+    const res = await callback(state, stateCookie).expect(302);
+    // Left in place, it would be replayable against a future state.
+    expect(pickCookie(res, 'pp_oauth_state')).toMatch(/pp_oauth_state=;/);
   });
 
   it('rejects a replayed state', async () => {
-    const state = await startLogin();
-    await request(ctx.app.getHttpServer())
-      .get(`/auth/patreon/callback?code=auth-code&state=${state}`)
-      .expect(302);
+    const { state, cookie: stateCookie } = await startLogin();
+    await callback(state, stateCookie).expect(302);
     await request(ctx.app.getHttpServer())
       .get(`/auth/patreon/callback?code=auth-code&state=${state}`)
       .expect(401);
   });
 
+  // 400, not 401: a missing parameter is a malformed request, rejected by the DTO before the
+  // handler runs. It reveals nothing about whether any state exists.
   it('rejects a callback with no code', async () => {
-    const state = await startLogin();
-    await request(ctx.app.getHttpServer()).get(`/auth/patreon/callback?state=${state}`).expect(401);
+    const { state, cookie: stateCookie } = await startLogin();
+    await request(ctx.app.getHttpServer())
+      .get(`/auth/patreon/callback?state=${state}`)
+      .set('Cookie', stateCookie)
+      .expect(400);
+  });
+
+  it('rejects a callback whose code arrives as an array', async () => {
+    const { state, cookie: stateCookie } = await startLogin();
+    await request(ctx.app.getHttpServer())
+      .get(`/auth/patreon/callback?code=a&code=b&state=${state}`)
+      .set('Cookie', stateCookie)
+      .expect(400);
   });
 
   it('stores patreon tokens encrypted, never in plaintext', async () => {
-    const state = await startLogin();
-    await request(ctx.app.getHttpServer())
-      .get(`/auth/patreon/callback?code=auth-code&state=${state}`)
-      .expect(302);
+    const { state, cookie: stateCookie } = await startLogin();
+    await callback(state, stateCookie).expect(302);
     const user = await ctx.prisma.user.findUnique({
       where: { patreonUserId: 'patreon-user-1' },
     });
@@ -88,10 +125,8 @@ describe('Patreon auth flow (integration)', () => {
   it('issues a different session token on each login', async () => {
     const cookies: string[] = [];
     for (let i = 0; i < 2; i += 1) {
-      const state = await startLogin();
-      const res = await request(ctx.app.getHttpServer())
-        .get(`/auth/patreon/callback?code=auth-code&state=${state}`)
-        .expect(302);
+      const { state, cookie: stateCookie } = await startLogin();
+      const res = await callback(state, stateCookie).expect(302);
       cookies.push(pickCookie(res, 'pp_session'));
     }
     // Rotation on login: a token captured before login is never the authenticated one.
@@ -138,10 +173,8 @@ describe('Patreon auth flow (integration)', () => {
       ],
     };
 
-    const state = await startLogin();
-    await request(ctx.app.getHttpServer())
-      .get(`/auth/patreon/callback?code=auth-code&state=${state}`)
-      .expect(302);
+    const { state, cookie: stateCookie } = await startLogin();
+    await callback(state, stateCookie).expect(302);
 
     const patron = await ctx.prisma.user.findUnique({ where: { patreonUserId: 'patron-1' } });
     const memberships = await ctx.prisma.membership.findMany({
@@ -152,5 +185,16 @@ describe('Patreon auth flow (integration)', () => {
     expect(memberships[0].creatorId).toBe(creator.id);
     expect(memberships[0].isActivePatron).toBe(true);
     expect(memberships[0].currentTier?.patreonTierId).toBe('tier-a');
+
+    // A lapsed membership stops appearing in Patreon's payload rather than being reported as
+    // inactive, so re-sync has to revoke as well as grant — otherwise Plan 03's guards would
+    // keep honouring access that ended.
+    ctx.patreon.identity = { ...ctx.patreon.identity, memberships: [] };
+    const next = await startLogin();
+    await callback(next.state, next.cookie).expect(302);
+
+    const after = await ctx.prisma.membership.findFirst({ where: { userId: patron?.id } });
+    expect(after?.isActivePatron).toBe(false);
+    expect(after?.currentTierId).toBeNull();
   });
 });

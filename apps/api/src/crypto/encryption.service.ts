@@ -4,8 +4,10 @@ import { ConfigService } from '../config/config.module';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_BYTES = 12;
-// Payloads carry a version tag so the key or algorithm can be rotated later without having to
-// guess how an existing row was written.
+// Payloads carry a version tag so a future algorithm change can be told apart from this one.
+// Note it does NOT yet enable key rotation: there is a single key and no key id in the payload,
+// so changing ENCRYPTION_KEY makes every stored token undecryptable and forces re-authentication.
+// Real rotation needs a key id segment plus a keyring.
 const VERSION = 'v1';
 
 @Injectable()
