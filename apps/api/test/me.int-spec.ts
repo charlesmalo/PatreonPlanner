@@ -22,12 +22,21 @@ describe('GET /api/v1/me (integration)', () => {
     return pickCookie(callback, 'pp_session');
   }
 
-  /** Logout is a POST, so it carries CSRF like any other state-changing request. */
-  function logout(sessionCookie: string) {
+  /**
+   * Logout is a POST, so it carries CSRF like any other state-changing request. The token has
+   * to be one this server signed for this session, so it is minted by a safe request.
+   */
+  async function logout(sessionCookie: string): Promise<request.Response> {
+    const safe = await request(ctx.app.getHttpServer())
+      .get('/healthz')
+      .set('Cookie', sessionCookie)
+      .expect(200);
+    const csrf = pickCookie(safe, 'pp_csrf').split(';')[0];
+    const token = csrf.split('=').slice(1).join('=');
     return request(ctx.app.getHttpServer())
       .post('/auth/logout')
-      .set('Cookie', [sessionCookie, 'pp_csrf=tok'])
-      .set('x-csrf-token', 'tok');
+      .set('Cookie', [sessionCookie, csrf])
+      .set('x-csrf-token', token);
   }
 
   it('returns 401 without a session cookie', async () => {
@@ -67,7 +76,7 @@ describe('GET /api/v1/me (integration)', () => {
 
   it('stops accepting the cookie after logout', async () => {
     const cookie = await login();
-    await logout(cookie).expect(204);
+    expect((await logout(cookie)).status).toBe(204);
     await request(ctx.app.getHttpServer()).get('/api/v1/me').set('Cookie', cookie).expect(401);
   });
 

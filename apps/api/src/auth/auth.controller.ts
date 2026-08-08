@@ -12,6 +12,8 @@ import {
 } from '@nestjs/common';
 import type { CookieOptions, Request, Response } from 'express';
 import { ConfigService } from '../config/config.module';
+import { setCsrfCookie } from '../csrf/csrf.cookie';
+import { CsrfTokenService } from '../csrf/csrf-token.service';
 import { SESSION_COOKIE } from '../session/session.cookie';
 import { CurrentUser, CurrentUserPayload, SessionGuard } from '../session/session.guard';
 import { SessionService } from '../session/session.service';
@@ -24,6 +26,7 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly sessions: SessionService,
+    private readonly csrfTokens: CsrfTokenService,
     private readonly config: ConfigService,
   ) {}
 
@@ -61,6 +64,9 @@ export class AuthController {
     // Rotation is only complete if the old session stops working, not merely stops being sent.
     if (previous) await this.sessions.destroy(previous);
     res.cookie(SESSION_COOKIE, token, this.sessionCookieOptions());
+    // Re-bind CSRF to the new session here rather than letting the middleware heal it on the
+    // next safe request, so the first write after login cannot 403.
+    setCsrfCookie(res, this.csrfTokens.issue(token), this.config);
     res.redirect(this.config.get('WEB_ORIGIN'));
   }
 
@@ -70,6 +76,9 @@ export class AuthController {
     const token = req.cookies?.[SESSION_COOKIE];
     if (token) await this.sessions.destroy(token);
     res.clearCookie(SESSION_COOKIE, this.clearOptions());
+    // The old token was bound to the session just destroyed; re-issue it anonymous so the SPA
+    // is not left holding one that can never verify again.
+    setCsrfCookie(res, this.csrfTokens.issue(undefined), this.config);
     res.send();
   }
 

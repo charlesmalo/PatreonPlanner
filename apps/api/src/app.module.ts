@@ -3,6 +3,7 @@ import { AuthModule } from './auth/auth.module';
 import { ConfigModule } from './config/config.module';
 import { CryptoModule } from './crypto/crypto.module';
 import { CsrfMiddleware } from './csrf/csrf.middleware';
+import { CsrfModule } from './csrf/csrf.module';
 import { PatreonModule } from './patreon/patreon.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
@@ -13,6 +14,7 @@ import { HealthModule } from './health/health.module';
   imports: [
     ConfigModule,
     CryptoModule,
+    CsrfModule,
     PrismaModule,
     RedisModule,
     SessionModule,

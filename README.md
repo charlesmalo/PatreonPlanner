@@ -29,10 +29,21 @@ pnpm --filter @app/api start:dev   # http://localhost:3000
 pnpm --filter @app/web dev         # http://localhost:5173, proxies /api to the API
 ```
 
-The REST surface is served under `/api/v1`. The ops probes stay at the root:
+The SPA and API share one origin: Vite proxies `/api` and `/auth` to the API in development, and
+nginx does the same in production. See
+[the decision record](docs/decisions/2026-08-08-same-origin-deployment.md) for why, and keep
+`vite.config.ts` and `nginx.conf` in step.
+
+The REST surface is served under `/api/v1`. The ops probes and OAuth routes stay at the root:
 
 - `GET /healthz` — liveness; touches no dependency
 - `GET /readyz` — readiness; checks Postgres and Redis, `503` if either is down
+- `GET /auth/patreon/login` → `GET /auth/patreon/callback` — Patreon OAuth
+- `POST /auth/logout` — destroys the session
+- `GET /api/v1/me` — the authenticated user
+
+State-changing requests need the `pp_csrf` cookie echoed in an `x-csrf-token` header. The token is
+signed and bound to the session, and is re-minted automatically on any safe request.
 
 ## Verification
 
@@ -61,3 +72,4 @@ dependencies; the web image serves the built SPA from nginx.
 
 - Design: `docs/superpowers/specs/2026-08-03-patreonplanner-phase1-design.md`
 - Plans: `docs/superpowers/plans/`
+- Decisions: `docs/decisions/`
