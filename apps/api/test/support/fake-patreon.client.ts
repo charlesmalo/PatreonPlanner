@@ -1,5 +1,5 @@
 import { PatreonClient } from '../../src/patreon/patreon.client';
-import { PatreonIdentity, PatreonTokens } from '../../src/patreon/patreon.types';
+import { PatreonCampaign, PatreonIdentity, PatreonTokens } from '../../src/patreon/patreon.types';
 
 /**
  * Records what it was called with so tests can assert the PKCE verifier actually reached the
@@ -18,6 +18,8 @@ export class FakePatreonClient implements PatreonClient {
   public exchangeShouldFail = false;
   public refreshCalls: string[] = [];
   public refreshShouldFail = false;
+  public campaigns: PatreonCampaign[] = [];
+  public campaignsShouldFail = false;
 
   buildAuthorizationUrl({
     state,
@@ -47,5 +49,10 @@ export class FakePatreonClient implements PatreonClient {
 
   async fetchIdentity(): Promise<PatreonIdentity> {
     return this.identity;
+  }
+
+  async fetchOwnedCampaigns(): Promise<PatreonCampaign[]> {
+    if (this.campaignsShouldFail) throw new Error('Patreon campaign lookup failed');
+    return this.campaigns;
   }
 }

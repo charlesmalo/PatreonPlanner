@@ -11,6 +11,19 @@ export interface PatreonMembership {
   isActivePatron: boolean;
 }
 
+export interface PatreonTier {
+  patreonTierId: string;
+  title: string;
+  amountCents: number;
+  order: number;
+}
+
+export interface PatreonCampaign {
+  campaignId: string;
+  displayName: string;
+  tiers: PatreonTier[];
+}
+
 export interface PatreonIdentity {
   patreonUserId: string;
   fullName: string | null;
