@@ -106,20 +106,23 @@ describe('Creator read and policy endpoints (integration)', () => {
   it('lets staff update the policy', async () => {
     const auth = await loginAs('policy-staff-2');
     await makeStaff('policy-staff-2');
-    const res = await request(ctx.app.getHttpServer())
-      .patch(`/api/v1/creators/${creatorId}/policy`)
-      .set('Cookie', [auth.session, auth.csrf])
-      .set('x-csrf-token', auth.csrfToken)
-      .send({ viewVisibility: 'SUBSCRIBERS_ONLY', submitMinTierId: tierIds.hi })
-      .expect(200);
-    expect(res.body.viewVisibility).toBe('SUBSCRIBERS_ONLY');
-    expect(res.body.submitMinTierId).toBe(tierIds.hi);
-
-    // Restore, so ordering between tests cannot lock the suite out of its own fixture.
-    await ctx.prisma.creatorPolicy.update({
-      where: { creatorId },
-      data: { viewVisibility: 'PUBLIC', submitMinTierId: null },
-    });
+    try {
+      const res = await request(ctx.app.getHttpServer())
+        .patch(`/api/v1/creators/${creatorId}/policy`)
+        .set('Cookie', [auth.session, auth.csrf])
+        .set('x-csrf-token', auth.csrfToken)
+        .send({ viewVisibility: 'SUBSCRIBERS_ONLY', submitMinTierId: tierIds.hi })
+        .expect(200);
+      expect(res.body.viewVisibility).toBe('SUBSCRIBERS_ONLY');
+      expect(res.body.submitMinTierId).toBe(tierIds.hi);
+    } finally {
+      // In a finally: a failure here would otherwise leave the shared fixture gated and cascade
+      // into misleading failures downstream.
+      await ctx.prisma.creatorPolicy.update({
+        where: { creatorId },
+        data: { viewVisibility: 'PUBLIC', submitMinTierId: null },
+      });
+    }
   });
 
   it('rejects a policy update without a csrf token', async () => {
@@ -141,6 +144,30 @@ describe('Creator read and policy endpoints (integration)', () => {
       .set('x-csrf-token', auth.csrfToken)
       .send({ viewVisibility: 'EVERYONE' })
       .expect(400);
+  });
+
+  it('rejects an explicit null on a non-nullable policy field', async () => {
+    const auth = await loginAs('policy-staff-6');
+    await makeStaff('policy-staff-6');
+    // @IsOptional() waves null through, so this reached Prisma and surfaced as a 500.
+    await request(ctx.app.getHttpServer())
+      .patch(`/api/v1/creators/${creatorId}/policy`)
+      .set('Cookie', [auth.session, auth.csrf])
+      .set('x-csrf-token', auth.csrfToken)
+      .send({ viewVisibility: null })
+      .expect(400);
+  });
+
+  it('clears a gate when a tier id is explicitly null', async () => {
+    const auth = await loginAs('policy-staff-7');
+    await makeStaff('policy-staff-7');
+    const res = await request(ctx.app.getHttpServer())
+      .patch(`/api/v1/creators/${creatorId}/policy`)
+      .set('Cookie', [auth.session, auth.csrf])
+      .set('x-csrf-token', auth.csrfToken)
+      .send({ submitMinTierId: null })
+      .expect(200);
+    expect(res.body.submitMinTierId).toBeNull();
   });
 
   it('refuses a tier belonging to another creator', async () => {

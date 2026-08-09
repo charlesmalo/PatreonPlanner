@@ -6,11 +6,12 @@ export interface Viewer {
   isAuthenticated: boolean;
   isActivePatron: boolean;
   /**
-   * The pledge behind the viewer's current tier. Gates compare this rather than Tier.order:
-   * design §14 leaves tier ordering unverified, while the pledge amount is the value a patron
-   * actually commits. `order` is retained for display only.
+   * What the viewer actually pledges to this creator, from Patreon's entitled amount — not the
+   * list price of the tier we mirrored. Gates compare this rather than Tier.order: design §14
+   * leaves tier ordering unverified, while the pledge is the value a patron commits. `order` is
+   * retained for display only.
    */
-  tierAmountCents: number | null;
+  pledgeAmountCents: number | null;
   isStaff: boolean;
 }
 
@@ -27,12 +28,13 @@ export interface Policy {
  */
 export function can(capability: Capability, viewer: Viewer, policy: Policy): boolean {
   // Design §3: moderation power derives only from a CreatorStaff row, so no amount of pledging
-  // reaches it.
-  if (capability === 'MODERATE') return viewer.isStaff;
+  // reaches it. Plan 06's staff management is OWNER-only and will need StaffRole here, not just
+  // the boolean.
+  if (capability === 'MODERATE') return viewer.isAuthenticated && viewer.isStaff;
 
   // Staff bypass the patron gates: a creator's own moderators must be able to work the board
   // they moderate without also pledging to it.
-  if (viewer.isStaff) return true;
+  if (viewer.isAuthenticated && viewer.isStaff) return true;
 
   switch (capability) {
     case 'VIEW':
@@ -59,5 +61,5 @@ function meetsPledge(viewer: Viewer, minimumCents: number | null): boolean {
   // An active pledge is required even when the creator sets no minimum, so writing is never
   // open to a merely logged-in visitor.
   if (!viewer.isActivePatron) return false;
-  return (viewer.tierAmountCents ?? 0) >= (minimumCents ?? 0);
+  return (viewer.pledgeAmountCents ?? 0) >= (minimumCents ?? 0);
 }

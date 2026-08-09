@@ -156,6 +156,98 @@ describe('CreatorAccessGuard (integration)', () => {
     await get(cookie).expect(403);
   });
 
+  it('gates SUBMIT on the pledge actually held, not the mirrored tier price', async () => {
+    await setVisibility('PUBLIC');
+    await ctx.prisma.creatorPolicy.update({
+      where: { creatorId },
+      data: {
+        submitMinTierId: (
+          await ctx.prisma.tier.findFirstOrThrow({
+            where: { creatorId, amountCents: 1000 },
+          })
+        ).id,
+      },
+    });
+    const cookie = await loginAs('guard-pledge');
+    const user = await ctx.prisma.user.findUniqueOrThrow({
+      where: { patreonUserId: 'guard-pledge' },
+    });
+    // A tier that exists on Patreon but has not been imported here leaves currentTierId null
+    // while the pledge is real. Reading the mirrored tier price would deny this patron.
+    await ctx.prisma.membership.create({
+      data: {
+        userId: user.id,
+        creatorId,
+        currentTierId: null,
+        amountCents: 5000,
+        isActivePatron: true,
+      },
+    });
+
+    const res = await request(ctx.app.getHttpServer())
+      .get('/api/v1/creators/guarded/capabilities')
+      .set('Cookie', cookie)
+      .expect(200);
+    expect(res.body).toEqual({ view: true, upvote: true, submit: true, moderate: false });
+
+    await ctx.prisma.creatorPolicy.update({
+      where: { creatorId },
+      data: { submitMinTierId: null },
+    });
+  });
+
+  it('reports no capabilities beyond view for an anonymous caller', async () => {
+    await setVisibility('PUBLIC');
+    const res = await request(ctx.app.getHttpServer())
+      .get('/api/v1/creators/guarded/capabilities')
+      .expect(200);
+    expect(res.body).toEqual({ view: true, upvote: false, submit: false, moderate: false });
+  });
+
+  it('does not treat staff of one creator as staff of another', async () => {
+    await setVisibility('PUBLIC');
+    const other = await ctx.prisma.user.create({ data: { patreonUserId: 'cross-owner' } });
+    const otherCreator = await ctx.prisma.creator.create({
+      data: {
+        patreonCampaignId: 'cross-campaign',
+        ownerUserId: other.id,
+        displayName: 'Cross',
+        slug: 'cross',
+        policy: { create: {} },
+      },
+    });
+    const cookie = await loginAs('cross-staff');
+    const user = await ctx.prisma.user.findUniqueOrThrow({
+      where: { patreonUserId: 'cross-staff' },
+    });
+    await ctx.prisma.creatorStaff.create({
+      data: { creatorId: otherCreator.id, userId: user.id, role: 'OWNER' },
+    });
+    // Staff of `cross` must not moderate `guarded`.
+    await request(ctx.app.getHttpServer())
+      .get(`/api/v1/creators/${creatorId}/policy`)
+      .set('Cookie', cookie)
+      .expect(403);
+  });
+
+  it('404s rather than 500s on a malformed creator id', async () => {
+    await request(ctx.app.getHttpServer()).get('/api/v1/creators/not-a-uuid/policy').expect(404);
+  });
+
+  it('fails closed for a creator with no policy row', async () => {
+    const owner = await ctx.prisma.user.create({ data: { patreonUserId: 'policyless-owner' } });
+    await ctx.prisma.creator.create({
+      data: {
+        patreonCampaignId: 'policyless-campaign',
+        ownerUserId: owner.id,
+        displayName: 'Policyless',
+        slug: 'policyless',
+      },
+    });
+    // No policy is a data fault, not consent to publish.
+    await request(ctx.app.getHttpServer()).get('/api/v1/creators/policyless').expect(401);
+  });
+
   it('does not honour a session whose user was deleted', async () => {
     await setVisibility('ANY_PATREON_USER');
     const cookie = await loginAs('guard-user-6');

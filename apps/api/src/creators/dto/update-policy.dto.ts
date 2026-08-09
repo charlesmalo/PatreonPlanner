@@ -1,10 +1,15 @@
-import { IsBoolean, IsIn, IsOptional, IsUUID } from 'class-validator';
+import { IsBoolean, IsIn, IsOptional, IsUUID, ValidateIf } from 'class-validator';
 import { ViewVisibilityValue } from '../../access/capability';
 
 const VISIBILITIES: ViewVisibilityValue[] = ['PUBLIC', 'ANY_PATREON_USER', 'SUBSCRIBERS_ONLY'];
 
+/**
+ * `@IsOptional()` waves through `null` as well as `undefined`, so it is used only where null is
+ * a meaningful value. On the non-nullable columns it would let an explicit null reach Prisma and
+ * surface as a 500.
+ */
 export class UpdatePolicyDto {
-  @IsOptional()
+  @ValidateIf((_, value) => value !== undefined)
   @IsIn(VISIBILITIES)
   viewVisibility?: ViewVisibilityValue;
 
@@ -17,7 +22,7 @@ export class UpdatePolicyDto {
   @IsUUID()
   upvoteMinTierId?: string | null;
 
-  @IsOptional()
+  @ValidateIf((_, value) => value !== undefined)
   @IsBoolean()
   hidePendingFromPublic?: boolean;
 }

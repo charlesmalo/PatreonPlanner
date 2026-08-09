@@ -132,8 +132,11 @@ model CreatorPolicy {
   updatedAt             DateTime       @updatedAt
 
   creator       Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
-  submitMinTier Tier?   @relation("SubmitMinTier", fields: [submitMinTierId], references: [id])
-  upvoteMinTier Tier?   @relation("UpvoteMinTier", fields: [upvoteMinTierId], references: [id])
+  // Restrict, not SetNull: nulling a gate does not disable it, it drops the requirement to
+  // "any active patron", so deleting a tier would silently widen access. Plan 04's tier re-sync
+  // now has to decide explicitly what happens to a gated tier.
+  submitMinTier Tier?   @relation("SubmitMinTier", fields: [submitMinTierId], references: [id], onDelete: Restrict)
+  upvoteMinTier Tier?   @relation("UpvoteMinTier", fields: [upvoteMinTierId], references: [id], onDelete: Restrict)
 
   @@index([submitMinTierId])
   @@index([upvoteMinTierId])

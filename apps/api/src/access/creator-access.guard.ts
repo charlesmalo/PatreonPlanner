@@ -32,18 +32,31 @@ export class CreatorAccessGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const capability = this.reflector.get<Capability>(REQUIRED_CAPABILITY, context.getHandler());
+    // getAllAndOverride so a controller-level decorator is honoured, and a hard failure when
+    // absent: can(undefined, ...) returns true for staff, so a route that forgot the decorator
+    // would silently be open to them.
+    const capability = this.reflector.getAllAndOverride<Capability>(REQUIRED_CAPABILITY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (!capability) {
+      throw new Error('CreatorAccessGuard used without @RequireCapability');
+    }
     const request = context.switchToHttp().getRequest<CreatorRequest>();
 
     const creator = await this.loadCreator(request);
-    // 404 before any authorization work, so an unauthenticated probe cannot distinguish a
-    // private creator from one that does not exist.
+    // Resolved before the viewer, so an unauthorized caller never triggers the membership and
+    // staff queries. Note this does NOT hide existence: a missing creator 404s while a gated
+    // one 401s, so one request still distinguishes them. Slugs are public by design, but do not
+    // build anything on the assumption that they are secret.
     if (!creator) throw new NotFoundException();
 
     const userId = await this.resolveUser(request);
     const viewer = await this.loadViewer(creator.id, userId);
     const policy: Policy = {
-      viewVisibility: creator.policy?.viewVisibility ?? 'PUBLIC',
+      // Fail closed. A creator without a policy row is a data-integrity fault, not consent to
+      // publish; claiming always creates one, so this default should be unreachable.
+      viewVisibility: creator.policy?.viewVisibility ?? 'SUBSCRIBERS_ONLY',
       submitMinTierAmountCents: creator.policy?.submitMinTier?.amountCents ?? null,
       upvoteMinTierAmountCents: creator.policy?.upvoteMinTier?.amountCents ?? null,
     };
@@ -94,7 +107,7 @@ export class CreatorAccessGuard implements CanActivate {
       return {
         isAuthenticated: false,
         isActivePatron: false,
-        tierAmountCents: null,
+        pledgeAmountCents: null,
         isStaff: false,
       };
     }
@@ -102,7 +115,7 @@ export class CreatorAccessGuard implements CanActivate {
       this.prisma.user.findUnique({ where: { id: userId }, select: { id: true } }),
       this.prisma.membership.findUnique({
         where: { userId_creatorId: { userId, creatorId } },
-        select: { isActivePatron: true, currentTier: { select: { amountCents: true } } },
+        select: { isActivePatron: true, amountCents: true },
       }),
       this.prisma.creatorStaff.findUnique({
         where: { creatorId_userId: { creatorId, userId } },
@@ -115,18 +128,27 @@ export class CreatorAccessGuard implements CanActivate {
       return {
         isAuthenticated: false,
         isActivePatron: false,
-        tierAmountCents: null,
+        pledgeAmountCents: null,
         isStaff: false,
       };
     }
     return {
       isAuthenticated: true,
       isActivePatron: membership?.isActivePatron ?? false,
-      tierAmountCents: membership?.currentTier?.amountCents ?? null,
+      // Membership.amountCents is Patreon's entitled amount — the pledge actually held. The
+      // mirrored Tier's price would be wrong whenever a tier exists on Patreon but has not been
+      // imported here, denying a creator's highest-paying patrons.
+      pledgeAmountCents: membership?.amountCents ?? null,
       isStaff: staff !== null,
     };
   }
 }
+
+/** The viewer the guard resolved, so a handler can report capabilities without redoing the work. */
+export const CurrentViewer = createParamDecorator(
+  (_data: unknown, context: ExecutionContext): Viewer =>
+    context.switchToHttp().getRequest<CreatorRequest>().viewer as Viewer,
+);
 
 export const CurrentCreator = createParamDecorator(
   (_data: unknown, context: ExecutionContext): ResolvedCreator =>

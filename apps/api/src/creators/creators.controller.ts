@@ -1,7 +1,9 @@
 import { Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
+import { Capability, Policy, Viewer, can } from '../access/capability';
 import {
   CreatorAccessGuard,
   CurrentCreator,
+  CurrentViewer,
   ResolvedCreator,
 } from '../access/creator-access.guard';
 import { RequireCapability } from '../access/require-capability.decorator';
@@ -27,6 +29,27 @@ export class CreatorsController {
   @UseGuards(CreatorAccessGuard)
   profile(@CurrentCreator() creator: ResolvedCreator) {
     return this.creators.publicProfile(creator.id);
+  }
+
+  /**
+   * What this viewer may do here. The SPA needs it to decide which controls to render — design
+   * §4 is explicit that the SPA never gates security, so this is a rendering hint computed by
+   * the same resolver the guard uses, never a substitute for it.
+   */
+  @Get(':slug/capabilities')
+  @RequireCapability('VIEW')
+  @UseGuards(CreatorAccessGuard)
+  async capabilities(
+    @CurrentCreator() creator: ResolvedCreator,
+    @CurrentViewer() viewer: Viewer,
+  ): Promise<Record<Lowercase<Capability>, boolean>> {
+    const policy: Policy = await this.creators.policyForResolver(creator.id);
+    return {
+      view: can('VIEW', viewer, policy),
+      upvote: can('UPVOTE', viewer, policy),
+      submit: can('SUBMIT', viewer, policy),
+      moderate: can('MODERATE', viewer, policy),
+    };
   }
 
   @Get(':creatorId/policy')

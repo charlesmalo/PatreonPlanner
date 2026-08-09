@@ -6,8 +6,10 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { Policy } from '../access/capability';
 import { PATREON_CLIENT, PatreonClient } from '../patreon/patreon.client';
 import { PatreonTokenService } from '../patreon/patreon-token.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -24,6 +26,8 @@ const POLICY_FIELDS = {
 
 @Injectable()
 export class CreatorsService {
+  private readonly logger = new Logger(CreatorsService.name);
+
   constructor(
     @Inject(PATREON_CLIENT) private readonly patreon: PatreonClient,
     private readonly tokens: PatreonTokenService,
@@ -37,7 +41,13 @@ export class CreatorsService {
     let owned;
     try {
       owned = await this.patreon.fetchOwnedCampaigns(await this.tokens.getAccessToken(userId));
-    } catch {
+    } catch (error) {
+      // The likeliest cause is a session predating the `campaigns` scope, which is
+      // indistinguishable from an outage in the response — so it has to be diagnosable from the
+      // logs. Message only, never the token.
+      this.logger.warn(
+        `Claim failed reaching Patreon for user ${userId}: ${(error as Error).message}`,
+      );
       // An upstream failure is not the caller's fault, and must not be reported as though the
       // ownership check ran and rejected them.
       throw new BadGatewayException('Could not reach Patreon');
@@ -96,6 +106,23 @@ export class CreatorsService {
         },
       },
     });
+  }
+
+  /** The policy in the shape the resolver consumes, with the same fail-closed default as the guard. */
+  async policyForResolver(creatorId: string): Promise<Policy> {
+    const policy = await this.prisma.creatorPolicy.findUnique({
+      where: { creatorId },
+      select: {
+        viewVisibility: true,
+        submitMinTier: { select: { amountCents: true } },
+        upvoteMinTier: { select: { amountCents: true } },
+      },
+    });
+    return {
+      viewVisibility: policy?.viewVisibility ?? 'SUBSCRIBERS_ONLY',
+      submitMinTierAmountCents: policy?.submitMinTier?.amountCents ?? null,
+      upvoteMinTierAmountCents: policy?.upvoteMinTier?.amountCents ?? null,
+    };
   }
 
   async getPolicy(creatorId: string) {

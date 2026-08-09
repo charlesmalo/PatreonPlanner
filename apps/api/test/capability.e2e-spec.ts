@@ -3,11 +3,11 @@ import { Policy, Viewer, can } from '../src/access/capability';
 const anonymous: Viewer = {
   isAuthenticated: false,
   isActivePatron: false,
-  tierAmountCents: null,
+  pledgeAmountCents: null,
   isStaff: false,
 };
 const loggedIn: Viewer = { ...anonymous, isAuthenticated: true };
-const patron: Viewer = { ...loggedIn, isActivePatron: true, tierAmountCents: 500 };
+const patron: Viewer = { ...loggedIn, isActivePatron: true, pledgeAmountCents: 500 };
 const staff: Viewer = { ...loggedIn, isStaff: true };
 
 const open: Policy = {
@@ -56,8 +56,8 @@ describe('can()', () => {
     it('compares pledge amount against the gate', () => {
       const policy: Policy = { ...open, submitMinTierAmountCents: 1000 };
       expect(can('SUBMIT', patron, policy)).toBe(false);
-      expect(can('SUBMIT', { ...patron, tierAmountCents: 1000 }, policy)).toBe(true);
-      expect(can('SUBMIT', { ...patron, tierAmountCents: 1500 }, policy)).toBe(true);
+      expect(can('SUBMIT', { ...patron, pledgeAmountCents: 1000 }, policy)).toBe(true);
+      expect(can('SUBMIT', { ...patron, pledgeAmountCents: 1500 }, policy)).toBe(true);
     });
 
     it('gates upvote and submit independently', () => {
@@ -71,7 +71,7 @@ describe('can()', () => {
     });
 
     it('treats an active patron with no entitled tier as pledging nothing', () => {
-      const tierless: Viewer = { ...patron, tierAmountCents: null };
+      const tierless: Viewer = { ...patron, pledgeAmountCents: null };
       expect(can('UPVOTE', tierless, open)).toBe(true);
       expect(can('UPVOTE', tierless, { ...open, upvoteMinTierAmountCents: 1 })).toBe(false);
     });
@@ -88,7 +88,7 @@ describe('can()', () => {
       expect(can('MODERATE', loggedIn, open)).toBe(false);
       // Design §3: moderation power derives only from a CreatorStaff row — paying the top tier
       // must not confer it.
-      expect(can('MODERATE', { ...patron, tierAmountCents: 100_000 }, open)).toBe(false);
+      expect(can('MODERATE', { ...patron, pledgeAmountCents: 100_000 }, open)).toBe(false);
       expect(can('MODERATE', staff, open)).toBe(true);
     });
   });
