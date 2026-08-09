@@ -170,6 +170,33 @@ describe('Creator read and policy endpoints (integration)', () => {
     expect(res.body.submitMinTierId).toBeNull();
   });
 
+  it('lets staff register a webhook secret without echoing it back', async () => {
+    const auth = await loginAs('policy-staff-8');
+    await makeStaff('policy-staff-8');
+    const res = await request(ctx.app.getHttpServer())
+      .put(`/api/v1/creators/${creatorId}/webhook-secret`)
+      .set('Cookie', [auth.session, auth.csrf])
+      .set('x-csrf-token', auth.csrfToken)
+      .send({ secret: 'the-patreon-webhook-secret' })
+      .expect(200);
+    expect(JSON.stringify(res.body)).not.toContain('the-patreon-webhook-secret');
+
+    const creator = await ctx.prisma.creator.findUniqueOrThrow({ where: { id: creatorId } });
+    // Encrypted at rest like the OAuth tokens.
+    expect(creator.webhookSecretEncrypted).toContain('v1:');
+    expect(creator.webhookSecretEncrypted).not.toContain('the-patreon-webhook-secret');
+  });
+
+  it('refuses a webhook secret from a non-staff user', async () => {
+    const auth = await loginAs('policy-outsider');
+    await request(ctx.app.getHttpServer())
+      .put(`/api/v1/creators/${creatorId}/webhook-secret`)
+      .set('Cookie', [auth.session, auth.csrf])
+      .set('x-csrf-token', auth.csrfToken)
+      .send({ secret: 'nope' })
+      .expect(403);
+  });
+
   it('refuses a tier belonging to another creator', async () => {
     const auth = await loginAs('policy-staff-4');
     await makeStaff('policy-staff-4');

@@ -27,6 +27,13 @@ export const configSchema = z.object({
     .positive()
     .default(60 * 60 * 24 * 14),
   WEB_ORIGIN: z.string().url().default('http://localhost:5173'),
+
+  MEMBERSHIP_TTL_HOURS: z.coerce.number().int().positive().default(24),
+  // Disabled in tests, where a scheduler firing mid-assertion is pure flake.
+  JOBS_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
 });
 
 export type AppConfig = z.infer<typeof configSchema>;

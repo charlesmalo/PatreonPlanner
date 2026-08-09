@@ -1,7 +1,8 @@
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { EncryptionService } from '../crypto/encryption.service';
 import { PATREON_CLIENT, PatreonClient } from '../patreon/patreon.client';
-import { PatreonIdentity, PatreonTokens } from '../patreon/patreon.types';
+import { PatreonTokens } from '../patreon/patreon.types';
+import { MembershipSyncService } from '../memberships/membership-sync.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionService } from '../session/session.service';
 import { OAuthStateService } from './oauth-state.service';
@@ -14,6 +15,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly encryption: EncryptionService,
     private readonly sessions: SessionService,
+    private readonly memberships: MembershipSyncService,
   ) {}
 
   /** Returns the redirect target plus the state, which the caller binds to the browser. */
@@ -45,7 +47,7 @@ export class AuthService {
       update: profile,
     });
 
-    await this.syncMemberships(user.id, identity);
+    await this.memberships.applyIdentity(user.id, identity.memberships);
 
     // Rotation on login: a session is always freshly minted, so a token captured beforehand is
     // never the one that ends up authenticated.
@@ -58,48 +60,5 @@ export class AuthService {
       refreshTokenEncrypted: this.encryption.encrypt(tokens.refreshToken),
       tokenExpiresAt: new Date(Date.now() + tokens.expiresInSeconds * 1000),
     };
-  }
-
-  /**
-   * Only a campaign already claimed as a Creator can produce a Membership row. Claiming
-   * arrives in Plan 03; until then an unclaimed campaign is skipped rather than half-created
-   * against a tenant that does not exist yet.
-   */
-  private async syncMemberships(userId: string, identity: PatreonIdentity): Promise<void> {
-    const syncedCreatorIds: string[] = [];
-    for (const membership of identity.memberships) {
-      const creator = await this.prisma.creator.findUnique({
-        where: { patreonCampaignId: membership.campaignId },
-      });
-      if (!creator) continue;
-
-      const patreonTierId = membership.patreonTierIds[0];
-      const tier = patreonTierId
-        ? await this.prisma.tier.findUnique({
-            where: { creatorId_patreonTierId: { creatorId: creator.id, patreonTierId } },
-          })
-        : null;
-
-      const state = {
-        currentTierId: tier?.id ?? null,
-        amountCents: membership.amountCents,
-        isActivePatron: membership.isActivePatron,
-        lastSyncedAt: new Date(),
-      };
-      await this.prisma.membership.upsert({
-        where: { userId_creatorId: { userId, creatorId: creator.id } },
-        create: { userId, creatorId: creator.id, ...state },
-        update: state,
-      });
-      syncedCreatorIds.push(creator.id);
-    }
-
-    // Patreon reports current memberships only, so a lapsed one simply stops appearing. Without
-    // this, login re-sync could grant access but never revoke it — and design §4 makes this the
-    // fallback for the webhook path, which a grant-only sync would not actually be.
-    await this.prisma.membership.updateMany({
-      where: { userId, creatorId: { notIn: syncedCreatorIds } },
-      data: { isActivePatron: false, currentTierId: null, lastSyncedAt: new Date() },
-    });
   }
 }

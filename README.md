@@ -41,6 +41,28 @@ The REST surface is served under `/api/v1`. The ops probes and OAuth routes stay
 - `GET /auth/patreon/login` → `GET /auth/patreon/callback` — Patreon OAuth
 - `POST /auth/logout` — destroys the session
 - `GET /api/v1/me` — the authenticated user
+- `POST /webhooks/patreon/:creatorId` — Patreon events; authenticated by that creator's HMAC secret, exempt from CSRF
+
+## Webhooks
+
+Each creator registers their **own** webhook secret — Patreon issues one per webhook, and a
+webhook belongs to one campaign, so a single shared secret could neither serve more than one
+creator nor stop its holder forging events for the rest. Staff `PUT` it to
+`/api/v1/creators/:creatorId/webhook-secret`; it is encrypted at rest like the OAuth tokens.
+
+The callback URL to register in Patreon's portal is
+`https://<your-origin>/webhooks/patreon/<creatorId>`; the creator id is in the path so the right
+secret can be selected before the body is trusted. Events whose campaign does not match that
+creator are discarded.
+
+Ordering caveat: Patreon retries failed deliveries, so a `pledge:create` can in principle arrive
+after a later `pledge:delete` and re-activate a lapsed membership until the next login or TTL
+refresh. Nothing orders events today.
+
+Missing webhooks degrade rather than break: a BullMQ job re-syncs any membership whose
+`lastSyncedAt` is older than `MEMBERSHIP_TTL_HOURS` (default 24), and re-imports creator tiers on
+the same pass. Set `JOBS_ENABLED=false` to run an instance that serves traffic but schedules
+nothing.
 
 State-changing requests need the `pp_csrf` cookie echoed in an `x-csrf-token` header. The token is
 signed and bound to the session, and is re-minted automatically on any safe request.
