@@ -41,6 +41,18 @@ The REST surface is served under `/api/v1`. The ops probes and OAuth routes stay
 - `GET /auth/patreon/login` → `GET /auth/patreon/callback` — Patreon OAuth
 - `POST /auth/logout` — destroys the session
 - `GET /api/v1/me` — the authenticated user
+- `POST /webhooks/patreon` — Patreon events; authenticated by HMAC signature, exempt from CSRF
+
+## Webhooks
+
+`PATREON_WEBHOOK_SECRET` must match the value configured for the webhook in Patreon's developer
+portal, and the endpoint must be publicly reachable for events to arrive at all. Events keep
+`Membership` current between logins.
+
+Missing webhooks degrade rather than break: a BullMQ job re-syncs any membership whose
+`lastSyncedAt` is older than `MEMBERSHIP_TTL_HOURS` (default 24), and re-imports creator tiers on
+the same pass. Set `JOBS_ENABLED=false` to run an instance that serves traffic but schedules
+nothing.
 
 State-changing requests need the `pp_csrf` cookie echoed in an `x-csrf-token` header. The token is
 signed and bound to the session, and is re-minted automatically on any safe request.
