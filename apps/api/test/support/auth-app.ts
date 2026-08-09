@@ -46,7 +46,7 @@ export async function startAuthApp(): Promise<AuthTestContext> {
     .useValue(patreon)
     .compile();
 
-  const app = moduleRef.createNestApplication();
+  const app = moduleRef.createNestApplication({ rawBody: true });
   // The same function main.ts calls, so the suites cannot drift onto a pipeline production
   // does not have.
   configureApp(app);

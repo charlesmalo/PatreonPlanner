@@ -20,6 +20,14 @@ export function configureApp(app: INestApplication): void {
   // version, the OAuth routes because the redirect URI is registered with Patreon and changing
   // it later means editing their app settings.
   app.setGlobalPrefix('api/v1', {
-    exclude: ['healthz', 'readyz', 'auth/patreon/login', 'auth/patreon/callback', 'auth/logout'],
+    exclude: [
+      'healthz',
+      'readyz',
+      'auth/patreon/login',
+      'auth/patreon/callback',
+      'auth/logout',
+      // Design §8 places webhooks at the root; the URL is registered with Patreon.
+      'webhooks/patreon',
+    ],
   });
 }

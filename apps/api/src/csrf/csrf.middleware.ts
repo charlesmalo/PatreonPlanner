@@ -8,6 +8,9 @@ import { CsrfTokenService } from './csrf-token.service';
 
 const CSRF_HEADER = 'x-csrf-token';
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+// Patreon's servers cannot carry our double-submit token; those routes authenticate with an
+// HMAC signature instead. Anything added here MUST authenticate by some other means.
+const CSRF_EXEMPT_PREFIXES = ['/webhooks/'];
 
 /**
  * Double-submit CSRF over signed, session-bound tokens. The token sits in a cookie the SPA can
@@ -23,6 +26,10 @@ export class CsrfMiddleware implements NestMiddleware {
   ) {}
 
   use(req: Request, res: Response, next: NextFunction): void {
+    if (CSRF_EXEMPT_PREFIXES.some((prefix) => req.originalUrl.startsWith(prefix))) {
+      return next();
+    }
+
     const sessionToken = req.cookies?.[SESSION_COOKIE];
     const cookieToken = req.cookies?.[CSRF_COOKIE];
 
