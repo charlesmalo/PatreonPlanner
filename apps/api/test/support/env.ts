@@ -9,7 +9,6 @@ export function applyTestConfigDefaults(): void {
     PATREON_CLIENT_ID: 'test-client-id',
     PATREON_CLIENT_SECRET: 'test-client-secret',
     PATREON_REDIRECT_URI: 'http://localhost:3000/auth/patreon/callback',
-    PATREON_WEBHOOK_SECRET: 'test-webhook-secret',
     JOBS_ENABLED: 'false',
     // Non-zero: the config schema rejects an all-zero key so a placeholder cannot reach
     // production. Fixed rather than random so failures stay reproducible.

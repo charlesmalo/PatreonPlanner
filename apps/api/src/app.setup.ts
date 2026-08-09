@@ -26,8 +26,9 @@ export function configureApp(app: INestApplication): void {
       'auth/patreon/login',
       'auth/patreon/callback',
       'auth/logout',
-      // Design §8 places webhooks at the root; the URL is registered with Patreon.
-      'webhooks/patreon',
+      // Design §8 places webhooks at the root; the URL is registered with Patreon. The creator
+      // id is in the path so the right secret can be selected before the body is trusted.
+      'webhooks/patreon/:creatorId',
     ],
   });
 }

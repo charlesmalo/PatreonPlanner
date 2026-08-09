@@ -8,9 +8,10 @@ import { CsrfTokenService } from './csrf-token.service';
 
 const CSRF_HEADER = 'x-csrf-token';
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-// Patreon's servers cannot carry our double-submit token; those routes authenticate with an
-// HMAC signature instead. Anything added here MUST authenticate by some other means.
-const CSRF_EXEMPT_PREFIXES = ['/webhooks/'];
+// Patreon's servers cannot carry our double-submit token; this route authenticates with an
+// HMAC signature instead. Scoped to exactly the namespace WebhookSignatureGuard covers, so the
+// exempt boundary and the verified boundary are the same set by construction.
+const CSRF_EXEMPT_PREFIXES = ['/webhooks/patreon/'];
 
 /**
  * Double-submit CSRF over signed, session-bound tokens. The token sits in a cookie the SPA can

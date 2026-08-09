@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post, Put, UseGuards } from '@nestjs/common';
 import { Capability, Policy, Viewer, can } from '../access/capability';
 import {
   CreatorAccessGuard,
@@ -10,6 +10,7 @@ import { RequireCapability } from '../access/require-capability.decorator';
 import { CurrentUser, CurrentUserPayload, SessionGuard } from '../session/session.guard';
 import { CreatorsService } from './creators.service';
 import { ClaimCreatorDto } from './dto/claim-creator.dto';
+import { SetWebhookSecretDto } from './dto/set-webhook-secret.dto';
 import { UpdatePolicyDto } from './dto/update-policy.dto';
 
 @Controller('creators')
@@ -57,6 +58,13 @@ export class CreatorsController {
   @UseGuards(CreatorAccessGuard)
   policy(@CurrentCreator() creator: ResolvedCreator) {
     return this.creators.getPolicy(creator.id);
+  }
+
+  @Put(':creatorId/webhook-secret')
+  @RequireCapability('MODERATE')
+  @UseGuards(CreatorAccessGuard)
+  setWebhookSecret(@CurrentCreator() creator: ResolvedCreator, @Body() dto: SetWebhookSecretDto) {
+    return this.creators.setWebhookSecret(creator.id, dto.secret);
   }
 
   @Patch(':creatorId/policy')

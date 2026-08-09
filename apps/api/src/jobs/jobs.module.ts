@@ -1,4 +1,4 @@
-import { Global, Module, OnApplicationShutdown, OnModuleInit } from '@nestjs/common';
+import { Global, Logger, Module, OnApplicationShutdown, OnModuleInit } from '@nestjs/common';
 import { Queue, Worker } from 'bullmq';
 import { ConfigService } from '../config/config.module';
 import { MembershipRefreshJob } from './membership-refresh.job';
@@ -9,6 +9,7 @@ const EVERY_MS = 15 * 60 * 1000;
 @Global()
 @Module({ providers: [MembershipRefreshJob], exports: [MembershipRefreshJob] })
 export class JobsModule implements OnModuleInit, OnApplicationShutdown {
+  private readonly logger = new Logger(JobsModule.name);
   private queue?: Queue;
   private worker?: Worker;
 
@@ -32,12 +33,25 @@ export class JobsModule implements OnModuleInit, OnApplicationShutdown {
       },
       { connection },
     );
+    // BullMQ swallows an unhandled 'error' into a bare console.error, so Redis failures and
+    // failed ticks would otherwise appear nowhere structured.
+    this.worker.on('failed', (_job, error) =>
+      this.logger.error(`Membership refresh tick failed: ${error.message}`),
+    );
+    this.worker.on('error', (error) => this.logger.error(`Job worker error: ${error.message}`));
+    this.queue.on('error', (error) => this.logger.error(`Job queue error: ${error.message}`));
     // A fixed jobId means every API instance schedules the same repeatable job rather than one
     // copy each.
     await this.queue.add(
       'tick',
       {},
-      { repeat: { every: EVERY_MS }, jobId: 'membership-refresh-tick' },
+      {
+        repeat: { every: EVERY_MS },
+        jobId: 'membership-refresh-tick',
+        // Bounded history: ~96 ticks a day would otherwise accumulate in Redis forever.
+        removeOnComplete: 24,
+        removeOnFail: 48,
+      },
     );
   }
 

@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { Policy } from '../access/capability';
+import { EncryptionService } from '../crypto/encryption.service';
 import { PATREON_CLIENT, PatreonClient } from '../patreon/patreon.client';
 import { PatreonTokenService } from '../patreon/patreon-token.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -32,6 +33,7 @@ export class CreatorsService {
     @Inject(PATREON_CLIENT) private readonly patreon: PatreonClient,
     private readonly tokens: PatreonTokenService,
     private readonly prisma: PrismaService,
+    private readonly encryption: EncryptionService,
   ) {}
 
   async claim(
@@ -148,6 +150,20 @@ export class CreatorsService {
       data: dto,
       select: POLICY_FIELDS,
     });
+  }
+
+  /**
+   * Stores the creator's own Patreon webhook secret, encrypted like the OAuth tokens. Per
+   * creator rather than global: Patreon issues one secret per webhook, and a shared secret
+   * would let any holder forge membership events for every other creator.
+   */
+  async setWebhookSecret(creatorId: string, secret: string): Promise<{ configured: true }> {
+    await this.prisma.creator.update({
+      where: { id: creatorId },
+      data: { webhookSecretEncrypted: this.encryption.encrypt(secret) },
+    });
+    // Never echo it back.
+    return { configured: true };
   }
 
   private async uniqueSlug(tx: Prisma.TransactionClient, base: string): Promise<string> {

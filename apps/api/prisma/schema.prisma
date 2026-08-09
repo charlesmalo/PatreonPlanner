@@ -21,16 +21,19 @@ enum ViewVisibility {
 }
 
 model User {
-  id                    String    @id @default(uuid()) @db.Uuid
-  patreonUserId         String    @unique
-  fullName              String?
-  email                 String?
-  avatarUrl             String?
-  accessTokenEncrypted  String?
-  refreshTokenEncrypted String?
-  tokenExpiresAt        DateTime?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  id                     String    @id @default(uuid()) @db.Uuid
+  patreonUserId          String    @unique
+  fullName               String?
+  email                  String?
+  avatarUrl              String?
+  accessTokenEncrypted   String?
+  refreshTokenEncrypted  String?
+  tokenExpiresAt         DateTime?
+  // When the staleness job last *attempted* this user, success or not. Ordering on it stops a
+  // permanently failing user from occupying the batch forever and starving everyone else.
+  membershipsRefreshedAt DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
   ownedCreators Creator[]      @relation("CreatorOwner")
   memberships   Membership[]
@@ -39,16 +42,21 @@ model User {
 }
 
 model Creator {
-  id                String   @id @default(uuid()) @db.Uuid
-  patreonCampaignId String   @unique
-  ownerUserId       String   @db.Uuid
-  displayName       String
-  slug              String   @unique
+  id                     String    @id @default(uuid()) @db.Uuid
+  patreonCampaignId      String    @unique
+  ownerUserId            String    @db.Uuid
+  displayName            String
+  slug                   String    @unique
   // The creator's own site, registered at claim time for the Phase 4 extension.
-  baseUrl           String?
-  claimedAt         DateTime @default(now())
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  baseUrl                String?
+  // Patreon issues one webhook secret per webhook, and a webhook belongs to one campaign — so
+  // the secret is per creator, never global. Encrypted at rest like the OAuth tokens.
+  webhookSecretEncrypted String?
+  // Ordering key for tier re-sync, so every creator is reached rather than the first N by id.
+  tiersSyncedAt          DateTime?
+  claimedAt              DateTime  @default(now())
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
   owner       User           @relation("CreatorOwner", fields: [ownerUserId], references: [id])
   tiers       Tier[]

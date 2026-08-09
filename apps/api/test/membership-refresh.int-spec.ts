@@ -104,4 +104,34 @@ describe('MembershipRefreshJob (integration)', () => {
     // One failure must not abandon the rest of the batch.
     expect(await job.runOnce()).toBe(1);
   });
+
+  it('stamps an attempt even when it fails, so a broken user cannot hold the batch', async () => {
+    const brokenId = await loginAs('refresh-starver');
+    await ctx.prisma.user.update({
+      where: { id: brokenId },
+      data: { accessTokenEncrypted: null, refreshTokenEncrypted: null },
+    });
+    await ctx.prisma.membership.create({
+      data: {
+        userId: brokenId,
+        creatorId,
+        amountCents: 1,
+        isActivePatron: true,
+        lastSyncedAt: stale(),
+      },
+    });
+
+    await job.runOnce();
+
+    const user = await ctx.prisma.user.findUniqueOrThrow({ where: { id: brokenId } });
+    // Without this stamp the user stays permanently selectable and, ordered ahead of everyone
+    // else, starves the whole fallback path.
+    expect(user.membershipsRefreshedAt).not.toBeNull();
+
+    // Immediately re-running must not pick them again inside the retry window.
+    const before = user.membershipsRefreshedAt as Date;
+    await job.runOnce();
+    const after = await ctx.prisma.user.findUniqueOrThrow({ where: { id: brokenId } });
+    expect(after.membershipsRefreshedAt?.getTime()).toBe(before.getTime());
+  });
 });

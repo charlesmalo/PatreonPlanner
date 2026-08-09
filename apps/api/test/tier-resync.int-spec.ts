@@ -46,6 +46,18 @@ describe('Tier re-sync (integration)', () => {
     await ctx.teardown();
   });
 
+  /** Tier re-sync only revisits a creator once a day, so tests make theirs due first. */
+  async function makeDue() {
+    await ctx.prisma.creator.update({
+      where: { id: creatorId },
+      data: { tiersSyncedAt: null },
+    });
+  }
+
+  beforeEach(async () => {
+    await makeDue();
+  });
+
   it('imports a tier added on Patreon after the claim', async () => {
     ctx.patreon.campaigns = [
       {
@@ -87,6 +99,23 @@ describe('Tier re-sync (integration)', () => {
     await job.resyncTiers();
     // Deleting would fail against a policy gate (Restrict) or silently widen it.
     expect(await ctx.prisma.tier.count({ where: { creatorId } })).toBeGreaterThan(0);
+  });
+
+  it('skips a creator that was re-synced recently', async () => {
+    ctx.patreon.campaigns = [
+      {
+        campaignId: 'tier-campaign',
+        displayName: 'Tier Co',
+        tiers: [{ patreonTierId: 't-lo', title: 'Bronze', amountCents: 400, order: 0 }],
+      },
+    ];
+    await ctx.prisma.creator.update({
+      where: { id: creatorId },
+      data: { tiersSyncedAt: new Date() },
+    });
+    // Tiers change monthly; re-reading every creator every tick would be 96 Patreon calls each
+    // per day, and would starve creator N+1 entirely.
+    expect(await job.resyncTiers()).toBe(0);
   });
 
   it('skips a creator whose owner token is gone rather than failing the batch', async () => {

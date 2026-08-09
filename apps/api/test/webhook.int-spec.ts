@@ -1,6 +1,9 @@
 import { createHmac } from 'node:crypto';
 import request from 'supertest';
+import { EncryptionService } from '../src/crypto/encryption.service';
 import { AuthTestContext, startAuthApp } from './support/auth-app';
+
+const SECRET = 'creator-hook-secret';
 
 describe('POST /webhooks/patreon (integration)', () => {
   let ctx: AuthTestContext;
@@ -26,6 +29,13 @@ describe('POST /webhooks/patreon (integration)', () => {
     });
     creatorId = creator.id;
     tierId = creator.tiers[0].id;
+    // Each creator registers their own Patreon webhook secret; it is stored encrypted.
+    await ctx.prisma.creator.update({
+      where: { id: creatorId },
+      data: {
+        webhookSecretEncrypted: ctx.app.get(EncryptionService).encrypt(SECRET),
+      },
+    });
     const patron = await ctx.prisma.user.create({ data: { patreonUserId: 'hook-patron' } });
     userId = patron.id;
   }, 240_000);
@@ -34,13 +44,11 @@ describe('POST /webhooks/patreon (integration)', () => {
     await ctx.teardown();
   });
 
-  function event(trigger: string, body: object) {
+  function event(trigger: string, body: object, secret = SECRET, target?: string) {
     const raw = JSON.stringify(body);
-    const signature = createHmac('md5', process.env.PATREON_WEBHOOK_SECRET as string)
-      .update(Buffer.from(raw))
-      .digest('hex');
+    const signature = createHmac('md5', secret).update(Buffer.from(raw)).digest('hex');
     return request(ctx.app.getHttpServer())
-      .post('/webhooks/patreon')
+      .post(`/webhooks/patreon/${target ?? creatorId}`)
       .set('X-Patreon-Event', trigger)
       .set('X-Patreon-Signature', signature)
       .set('Content-Type', 'application/json')
@@ -63,22 +71,80 @@ describe('POST /webhooks/patreon (integration)', () => {
 
   it('rejects an unsigned request', async () => {
     await request(ctx.app.getHttpServer())
-      .post('/webhooks/patreon')
+      .post(`/webhooks/patreon/${creatorId}`)
       .set('X-Patreon-Event', 'members:pledge:create')
       .send(pledge({ status: 'active_patron', cents: 1000 }))
       .expect(401);
   });
 
   it('rejects a request signed with the wrong secret', async () => {
-    const raw = JSON.stringify(pledge({ status: 'active_patron', cents: 1000 }));
-    const signature = createHmac('md5', 'not-the-secret').update(Buffer.from(raw)).digest('hex');
-    await request(ctx.app.getHttpServer())
-      .post('/webhooks/patreon')
-      .set('X-Patreon-Event', 'members:pledge:create')
-      .set('X-Patreon-Signature', signature)
-      .set('Content-Type', 'application/json')
-      .send(raw)
-      .expect(401);
+    await event(
+      'members:pledge:create',
+      pledge({ status: 'active_patron', cents: 1000 }),
+      'not-the-secret',
+    ).expect(401);
+  });
+
+  it('rejects a creator that has registered no secret', async () => {
+    const owner = await ctx.prisma.user.findUniqueOrThrow({
+      where: { patreonUserId: 'hook-owner' },
+    });
+    const bare = await ctx.prisma.creator.create({
+      data: {
+        patreonCampaignId: 'bare-campaign',
+        ownerUserId: owner.id,
+        displayName: 'Bare',
+        slug: 'bare',
+        policy: { create: {} },
+      },
+    });
+    await event(
+      'members:pledge:create',
+      pledge({ status: 'active_patron', cents: 1000 }),
+      SECRET,
+      bare.id,
+    ).expect(401);
+  });
+
+  it('discards an event naming another creator’s campaign', async () => {
+    const owner = await ctx.prisma.user.findUniqueOrThrow({
+      where: { patreonUserId: 'hook-owner' },
+    });
+    const victim = await ctx.prisma.creator.create({
+      data: {
+        patreonCampaignId: 'victim-campaign',
+        ownerUserId: owner.id,
+        displayName: 'Victim',
+        slug: 'victim',
+        policy: { create: {} },
+      },
+    });
+    // Correctly signed for OUR creator, but naming someone else's campaign in the body. The
+    // secret proves who sent it, not what they may write about.
+    await event('members:pledge:create', {
+      data: {
+        attributes: { patron_status: 'active_patron', currently_entitled_amount_cents: 9999 },
+        relationships: {
+          user: { data: { id: 'hook-patron' } },
+          campaign: { data: { id: 'victim-campaign' } },
+          currently_entitled_tiers: { data: [] },
+        },
+      },
+    }).expect(204);
+    expect(await ctx.prisma.membership.count({ where: { creatorId: victim.id } })).toBe(0);
+  });
+
+  it('rejects a malformed payload rather than writing zeros over a membership', async () => {
+    // attributes present but the wrong type: without validation this wrote amountCents 0.
+    await event('members:pledge:update', {
+      data: {
+        attributes: { currently_entitled_amount_cents: 'lots' },
+        relationships: {
+          user: { data: { id: 'hook-patron' } },
+          campaign: { data: { id: 'hook-campaign' } },
+        },
+      },
+    }).expect(400);
   });
 
   it('is exempt from CSRF, which would otherwise 403 every event', async () => {
@@ -195,7 +261,24 @@ describe('POST /webhooks/patreon (integration)', () => {
     await event('posts:publish', { data: { id: 'post-1' } }).expect(204);
   });
 
-  it('discards a malformed payload without erroring', async () => {
-    await event('members:pledge:create', { data: {} }).expect(204);
+  it('discards an event with no attributes rather than revoking', async () => {
+    await event('members:pledge:update', pledge({ status: 'active_patron', cents: 4200 })).expect(
+      204,
+    );
+    // An event that validates but carries no attributes says nothing about patron status;
+    // treating that as "not a patron" would revoke on a payload change.
+    await event('members:pledge:update', {
+      data: {
+        relationships: {
+          user: { data: { id: 'hook-patron' } },
+          campaign: { data: { id: 'hook-campaign' } },
+        },
+      },
+    }).expect(204);
+    const membership = await ctx.prisma.membership.findUniqueOrThrow({
+      where: { userId_creatorId: { userId, creatorId } },
+    });
+    expect(membership.isActivePatron).toBe(true);
+    expect(membership.amountCents).toBe(4200);
   });
 });

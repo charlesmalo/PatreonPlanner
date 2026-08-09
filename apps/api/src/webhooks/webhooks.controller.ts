@@ -1,40 +1,28 @@
-import {
-  Body,
-  Controller,
-  Headers,
-  HttpCode,
-  Post,
-  Req,
-  UnauthorizedException,
-} from '@nestjs/common';
-import type { RawBodyRequest } from '@nestjs/common';
-import type { Request } from 'express';
-import { WebhookSignatureService } from './webhook-signature.service';
+import { Body, Controller, Headers, HttpCode, Post, UseGuards } from '@nestjs/common';
+import { VerifiedCreator, WebhookCreator, WebhookSignatureGuard } from './webhook-signature.guard';
 import { WebhooksService } from './webhooks.service';
 
-@Controller('webhooks')
+/**
+ * The path carries the creator so the right secret can be selected *before* the body is
+ * trusted. Patreon issues one secret per webhook, and each creator registers their own.
+ */
+@Controller('webhooks/patreon')
+@UseGuards(WebhookSignatureGuard)
 export class WebhooksController {
-  constructor(
-    private readonly signatures: WebhookSignatureService,
-    private readonly webhooks: WebhooksService,
-  ) {}
+  constructor(private readonly webhooks: WebhooksService) {}
 
-  @Post('patreon')
+  @Post(':creatorId')
   @HttpCode(204)
   async patreon(
-    @Req() req: RawBodyRequest<Request>,
+    @VerifiedCreator() creator: WebhookCreator,
     @Headers('x-patreon-event') trigger: string | undefined,
-    @Headers('x-patreon-signature') signature: string | undefined,
+    // Deliberately untyped here: the global ValidationPipe's forbidNonWhitelisted would reject
+    // Patreon's other event shapes outright, and they must be accepted-and-ignored rather than
+    // retried forever. WebhooksService validates the shapes it actually acts on.
     @Body() body: unknown,
   ): Promise<void> {
-    if (!req.rawBody || !this.signatures.verify(req.rawBody, signature)) {
-      // Generic: a caller must not learn whether the secret, the body or the header was wrong.
-      throw new UnauthorizedException();
-    }
     // Anything accepted returns 204, including events we do not act on. Patreon retries
     // failures, and an event we will never handle would otherwise retry forever.
-    await this.webhooks.handle(trigger, body as PledgeBody);
+    await this.webhooks.handle(creator, trigger, body);
   }
 }
-
-type PledgeBody = Parameters<WebhooksService['handle']>[1];
