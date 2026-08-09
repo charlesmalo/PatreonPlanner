@@ -6,6 +6,7 @@ import { CreatorsModule } from './creators/creators.module';
 import { CryptoModule } from './crypto/crypto.module';
 import { CsrfMiddleware } from './csrf/csrf.middleware';
 import { CsrfModule } from './csrf/csrf.module';
+import { MembershipsModule } from './memberships/memberships.module';
 import { PatreonModule } from './patreon/patreon.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
@@ -22,6 +23,7 @@ import { HealthModule } from './health/health.module';
     RedisModule,
     SessionModule,
     PatreonModule,
+    MembershipsModule,
     AuthModule,
     CreatorsModule,
     HealthModule,
