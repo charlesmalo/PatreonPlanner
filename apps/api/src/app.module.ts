@@ -1,4 +1,5 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { AccessModule } from './access/access.module';
 import { AuthModule } from './auth/auth.module';
 import { ConfigModule } from './config/config.module';
 import { CreatorsModule } from './creators/creators.module';
@@ -14,6 +15,7 @@ import { HealthModule } from './health/health.module';
 @Module({
   imports: [
     ConfigModule,
+    AccessModule,
     CryptoModule,
     CsrfModule,
     PrismaModule,

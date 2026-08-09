@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import {
   BadGatewayException,
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Inject,
@@ -11,7 +12,15 @@ import { PATREON_CLIENT, PatreonClient } from '../patreon/patreon.client';
 import { PatreonTokenService } from '../patreon/patreon-token.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClaimCreatorDto } from './dto/claim-creator.dto';
+import { UpdatePolicyDto } from './dto/update-policy.dto';
 import { slugify } from './slug';
+
+const POLICY_FIELDS = {
+  viewVisibility: true,
+  submitMinTierId: true,
+  upvoteMinTierId: true,
+  hidePendingFromPublic: true,
+} as const;
 
 @Injectable()
 export class CreatorsService {
@@ -69,6 +78,49 @@ export class CreatorsService {
       }
       throw error;
     }
+  }
+
+  async publicProfile(creatorId: string) {
+    return this.prisma.creator.findUniqueOrThrow({
+      where: { id: creatorId },
+      // Explicit select: ownerUserId and patreonCampaignId are internal and must never be
+      // serialized into a public response.
+      select: {
+        id: true,
+        slug: true,
+        displayName: true,
+        baseUrl: true,
+        tiers: {
+          select: { id: true, title: true, amountCents: true, order: true },
+          orderBy: { amountCents: 'asc' },
+        },
+      },
+    });
+  }
+
+  async getPolicy(creatorId: string) {
+    return this.prisma.creatorPolicy.findUniqueOrThrow({
+      where: { creatorId },
+      select: POLICY_FIELDS,
+    });
+  }
+
+  async updatePolicy(creatorId: string, dto: UpdatePolicyDto) {
+    for (const tierId of [dto.submitMinTierId, dto.upvoteMinTierId]) {
+      if (!tierId) continue;
+      const tier = await this.prisma.tier.findFirst({
+        where: { id: tierId, creatorId },
+        select: { id: true },
+      });
+      // A tier belonging to another creator would gate this board on something nobody who
+      // pledges here can ever hold.
+      if (!tier) throw new BadRequestException('Tier does not belong to this creator');
+    }
+    return this.prisma.creatorPolicy.update({
+      where: { creatorId },
+      data: dto,
+      select: POLICY_FIELDS,
+    });
   }
 
   private async uniqueSlug(tx: Prisma.TransactionClient, base: string): Promise<string> {
