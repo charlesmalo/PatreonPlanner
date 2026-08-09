@@ -1,5 +1,6 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
+import { PrismaExceptionFilter } from './common/prisma-exception.filter';
 
 /**
  * The single definition of the request pipeline, shared by main.ts and the integration tests.
@@ -8,6 +9,7 @@ import cookieParser from 'cookie-parser';
  */
 export function configureApp(app: INestApplication): void {
   app.use(cookieParser());
+  app.useGlobalFilters(new PrismaExceptionFilter());
   // whitelist + forbidNonWhitelisted: unknown properties are rejected rather than silently
   // dropped, so a client cannot smuggle fields past a DTO.
   app.useGlobalPipes(
