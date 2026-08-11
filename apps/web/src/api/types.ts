@@ -1,0 +1,53 @@
+export interface SessionUser {
+  id: string;
+  patreonUserId: string;
+  fullName: string | null;
+  avatarUrl: string | null;
+}
+
+export interface Capabilities {
+  view: boolean;
+  upvote: boolean;
+  submit: boolean;
+  moderate: boolean;
+}
+
+export interface RecommendationLink {
+  url: string;
+  label: string | null;
+}
+
+export interface Recommendation {
+  id: string;
+  type: string;
+  customTitle: string;
+  description: string | null;
+  status: string;
+  upvoteCount: number;
+  createdAt: string;
+  links: RecommendationLink[];
+  submittedBy: { id: string; fullName: string | null; avatarUrl: string | null };
+}
+
+export interface Board {
+  items: Recommendation[];
+  nextCursor: string | null;
+}
+
+export interface CreatorProfile {
+  id: string;
+  slug: string;
+  displayName: string;
+  baseUrl: string | null;
+  tiers: Array<{ id: string; title: string; amountCents: number; order: number }>;
+}
+
+export interface SubmitResult {
+  duplicate: boolean;
+  recommendation: Recommendation;
+}
+
+export interface UpvoteResult {
+  upvoted: boolean;
+  upvoteCount: number;
+}

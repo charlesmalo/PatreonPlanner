@@ -1,7 +1,21 @@
+import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import { useSession } from './api/hooks';
+import { Layout } from './components/Layout';
+import { CreatorBoard } from './routes/CreatorBoard';
+import { LandingPage } from './routes/LandingPage';
+
 export default function App() {
+  const { user, loading, signOut } = useSession();
+
   return (
-    <main className="min-h-screen flex items-center justify-center">
-      <h1 className="text-2xl font-bold">PatreonPlanner</h1>
-    </main>
+    <BrowserRouter>
+      <Layout user={user} loadingSession={loading} onSignOut={signOut}>
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/c/:slug" element={<CreatorBoard />} />
+          <Route path="*" element={<p>Page not found.</p>} />
+        </Routes>
+      </Layout>
+    </BrowserRouter>
   );
 }

@@ -26,8 +26,12 @@ update `DATABASE_URL` / `REDIS_URL` to match. Compose binds both services to `12
 
 ```bash
 pnpm --filter @app/api start:dev   # http://localhost:3000
-pnpm --filter @app/web dev         # http://localhost:5173, proxies /api to the API
+pnpm --filter @app/web dev         # http://localhost:5173, proxies /api and /auth to the API
 ```
+
+Open a creator's board at `/c/<slug>`. The SPA reads `GET /creators/:slug/capabilities` to decide
+which controls to render — the server still decides what is allowed, so a forged flag only
+produces a visible error.
 
 The SPA and API share one origin: Vite proxies `/api` and `/auth` to the API in development, and
 nginx does the same in production. See
