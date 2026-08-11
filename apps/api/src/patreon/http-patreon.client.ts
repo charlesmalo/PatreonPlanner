@@ -8,10 +8,10 @@ import {
   PatreonTokens,
 } from './patreon.types';
 
-const AUTHORIZE_URL = 'https://www.patreon.com/oauth2/authorize';
-const TOKEN_URL = 'https://www.patreon.com/api/oauth2/token';
-const IDENTITY_URL = 'https://www.patreon.com/api/oauth2/v2/identity';
-const CAMPAIGNS_URL = 'https://www.patreon.com/api/oauth2/v2/campaigns';
+const AUTHORIZE_PATH = '/oauth2/authorize';
+const TOKEN_PATH = '/api/oauth2/token';
+const IDENTITY_PATH = '/api/oauth2/v2/identity';
+const CAMPAIGNS_PATH = '/api/oauth2/v2/campaigns';
 
 interface CampaignsPayload {
   data?: Array<{
@@ -49,6 +49,10 @@ export class HttpPatreonClient implements PatreonClient {
 
   constructor(private readonly config: ConfigService) {}
 
+  private apiUrl(path: string): string {
+    return `${this.config.get('PATREON_API_BASE_URL')}${path}`;
+  }
+
   buildAuthorizationUrl({
     state,
     codeChallenge,
@@ -68,11 +72,11 @@ export class HttpPatreonClient implements PatreonClient {
       code_challenge: codeChallenge,
       code_challenge_method: 'S256',
     });
-    return `${AUTHORIZE_URL}?${params.toString()}`;
+    return `${this.config.get('PATREON_OAUTH_BASE_URL')}${AUTHORIZE_PATH}?${params.toString()}`;
   }
 
   async exchangeCode(code: string, codeVerifier: string): Promise<PatreonTokens> {
-    const response = await fetch(TOKEN_URL, {
+    const response = await fetch(this.apiUrl(TOKEN_PATH), {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -102,7 +106,7 @@ export class HttpPatreonClient implements PatreonClient {
   }
 
   async refreshTokens(refreshToken: string): Promise<PatreonTokens> {
-    const response = await fetch(TOKEN_URL, {
+    const response = await fetch(this.apiUrl(TOKEN_PATH), {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -134,7 +138,7 @@ export class HttpPatreonClient implements PatreonClient {
       'fields[user]': 'full_name,email,image_url',
       'fields[member]': 'patron_status,currently_entitled_amount_cents',
     });
-    const response = await fetch(`${IDENTITY_URL}?${params.toString()}`, {
+    const response = await fetch(`${this.apiUrl(IDENTITY_PATH)}?${params.toString()}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!response.ok) {
@@ -154,7 +158,7 @@ export class HttpPatreonClient implements PatreonClient {
       'fields[campaign]': 'creation_name',
       'fields[tier]': 'title,amount_cents',
     });
-    const response = await fetch(`${CAMPAIGNS_URL}?${params.toString()}`, {
+    const response = await fetch(`${this.apiUrl(CAMPAIGNS_PATH)}?${params.toString()}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!response.ok) {
