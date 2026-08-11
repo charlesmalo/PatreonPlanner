@@ -57,3 +57,29 @@ jobs:
       # nothing else guards them against regression.
       - run: docker build -f apps/api/Dockerfile -t patreonplanner-api .
       - run: docker build -f apps/web/Dockerfile -t patreonplanner-web .
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9.12.0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @app/e2e exec playwright install --with-deps chromium
+      # The real images behind the real nginx proxy: the contract failures this job exists to
+      # catch only exist in that arrangement, and both other suites pass straight through them.
+      - run: docker compose -p patreonplanner-e2e -f docker-compose.e2e.yml up -d --build --wait
+      - run: pnpm --filter @app/e2e test
+      - name: Container logs on failure
+        if: failure()
+        run: docker compose -p patreonplanner-e2e -f docker-compose.e2e.yml logs --tail 100
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: e2e/test-results
+          retention-days: 7
+      - if: always()
+        run: docker compose -p patreonplanner-e2e -f docker-compose.e2e.yml down -v

@@ -1,0 +1,17 @@
+{
+  "name": "@app/e2e",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "playwright test",
+    "stack:up": "docker compose -p patreonplanner-e2e -f ../docker-compose.e2e.yml up -d --build --wait",
+    "stack:down": "docker compose -p patreonplanner-e2e -f ../docker-compose.e2e.yml down -v"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.48.2",
+    "@types/node": "20.16.10",
+    "typescript": "5.5.4"
+  }
+}

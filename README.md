@@ -82,6 +82,19 @@ pnpm -r test
 pnpm format:check
 ```
 
+### End-to-end
+
+```bash
+pnpm --filter @app/e2e stack:up     # builds and starts the real images plus a Patreon stub
+pnpm --filter @app/e2e test         # drives them with Playwright
+pnpm --filter @app/e2e stack:down
+```
+
+This is the only suite that exercises the contract _between_ the SPA and the API. Component tests
+use a fake client and API tests use supertest against the module, so a route the SPA calls at a
+path the API does not mount passes both — that exact bug shipped once. The stack runs under its
+own compose project name, so it never touches your dev containers.
+
 `apps/api`'s readiness test starts its own Postgres and Redis with Testcontainers, so Docker must
 be running. Testcontainers does not read Docker CLI contexts, so `apps/api/test/global-setup.ts`
 resolves the active context into `DOCKER_HOST` — this is what makes Colima and OrbStack work

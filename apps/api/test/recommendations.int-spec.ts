@@ -150,6 +150,8 @@ describe('Recommendations (integration)', () => {
       }).expect(201);
 
       expect(res.body.duplicate).toBe(false);
+      // Same shape as a board item: a client prepending this must not get a different card.
+      expect(res.body.recommendation.hasUpvoted).toBe(false);
       expect(res.body.recommendation.status).toBe('PENDING');
       expect(res.body.recommendation.upvoteCount).toBe(0);
       expect(res.body.recommendation.links).toEqual([
@@ -184,6 +186,7 @@ describe('Recommendations (integration)', () => {
 
       expect(again.body.duplicate).toBe(true);
       expect(again.body.recommendation.id).toBe(created.body.recommendation.id);
+      expect(again.body.recommendation.hasUpvoted).toBe(false);
       expect(
         await ctx.prisma.recommendation.count({
           where: { creatorId, normalizedTitle: 'shared pick' },

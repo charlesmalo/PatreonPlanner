@@ -75,6 +75,11 @@ export class RecommendationsService {
     private readonly config: ConfigService,
   ) {}
 
+  /**
+   * The returned recommendation carries hasUpvoted like the board's does. Without it a client
+   * prepending the result renders a card in a different shape from every other card — which is
+   * precisely what the end-to-end suite caught.
+   */
   async submit(creatorId: string, userId: string, dto: SubmitRecommendationDto) {
     // Rate limit first: moderation is the expensive stage, and a flood must not be able to
     // drive that cost.
@@ -126,7 +131,7 @@ export class RecommendationsService {
       // Refund: nothing was created, and at 1/hour charging for it would lock a patron out for
       // an hour for doing exactly what design §5 wants them to do.
       await this.refund(perCreatorKey, globalKey);
-      return { duplicate: true as const, recommendation: existing };
+      return { duplicate: true as const, recommendation: await this.withUpvoted(existing, userId) };
     }
 
     try {
@@ -141,10 +146,19 @@ export class RecommendationsService {
           where: { creatorId, normalizedTitle },
           select: RECOMMENDATION_FIELDS,
         });
-        return { duplicate: true as const, recommendation: winner };
+        return { duplicate: true as const, recommendation: await this.withUpvoted(winner, userId) };
       }
       throw error;
     }
+  }
+
+  /** A duplicate may already be upvoted by this viewer; a fresh one never is. */
+  private async withUpvoted<T extends { id: string }>(recommendation: T, userId: string) {
+    const upvote = await this.prisma.upvote.findUnique({
+      where: { recommendationId_userId: { recommendationId: recommendation.id, userId } },
+      select: { id: true },
+    });
+    return { ...recommendation, hasUpvoted: upvote !== null };
   }
 
   private async refund(...keys: string[]): Promise<void> {
@@ -171,7 +185,8 @@ export class RecommendationsService {
       },
       select: RECOMMENDATION_FIELDS,
     });
-    return { duplicate: false as const, recommendation };
+    // Nothing can have upvoted a recommendation that did not exist a moment ago.
+    return { duplicate: false as const, recommendation: { ...recommendation, hasUpvoted: false } };
   }
 
   async toggleUpvote(creatorId: string, recommendationId: string, userId: string) {

@@ -9,6 +9,11 @@ export const configSchema = z.object({
   PATREON_CLIENT_ID: z.string().min(1),
   PATREON_CLIENT_SECRET: z.string().min(1),
   PATREON_REDIRECT_URI: z.string().url(),
+  // Split because one is browser-facing and the other server-facing: the consent redirect is
+  // followed by the user's browser, while token/identity/campaign calls come from this process.
+  // In production both are patreon.com; end-to-end tests point them at a stub.
+  PATREON_OAUTH_BASE_URL: z.string().url().default('https://www.patreon.com'),
+  PATREON_API_BASE_URL: z.string().url().default('https://www.patreon.com'),
 
   // 32 raw bytes, base64-encoded — the AES-256 key. The regex matters because Buffer.from
   // silently discards invalid base64 characters, so a malformed string can still decode to 32
