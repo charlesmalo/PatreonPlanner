@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import type { SessionUser } from '../api/types';
 
 interface LayoutProps {
@@ -13,12 +14,12 @@ export function Layout({ user, loadingSession, onSignOut, children }: LayoutProp
     <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <header className="border-b border-slate-200 dark:border-slate-800">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 py-3">
-          <a
-            href="/"
+          <Link
+            to="/"
             className="text-lg font-semibold tracking-tight focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
           >
             PatreonPlanner
-          </a>
+          </Link>
           {loadingSession ? null : user ? (
             <div className="flex items-center gap-3">
               <span className="text-sm text-slate-600 dark:text-slate-300">

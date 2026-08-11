@@ -30,6 +30,7 @@ export function recommendation(overrides: Partial<Recommendation> = {}): Recomme
     description: 'A classic.',
     status: 'PENDING',
     upvoteCount: 3,
+    hasUpvoted: false,
     createdAt: new Date().toISOString(),
     links: [],
     submittedBy: { id: 'user-1', fullName: 'Grace', avatarUrl: null },
@@ -37,17 +38,22 @@ export function recommendation(overrides: Partial<Recommendation> = {}): Recomme
   };
 }
 
-/** Routes fetches by URL so a test states what the server says, not how it is called. */
+/**
+ * Routes fetches by method and exact pathname. Substring matching let `/recommendations` also
+ * match `/recommendations/:id/upvote`, so a test could silently receive the wrong payload —
+ * which is how the upvote path went untested without anyone noticing.
+ */
 export function fakeApi(routes: Record<string, unknown | (() => unknown)>) {
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(input);
-    const key = Object.keys(routes).find((route) => url.includes(route));
-    if (!key) throw new Error(`No fake route for ${url} (${init?.method ?? 'GET'})`);
+    const url = new URL(String(input), 'http://localhost');
+    const key = `${(init?.method ?? 'GET').toUpperCase()} ${url.pathname}`;
+    if (!(key in routes)) {
+      throw new Error(`No fake route for ${key}. Known: ${Object.keys(routes).join(', ')}`);
+    }
     const value = routes[key];
     const resolved = typeof value === 'function' ? (value as () => unknown)() : value;
     if (resolved instanceof Error) {
-      const status = Number(resolved.message) || 500;
-      return { ok: false, status } as Response;
+      return { ok: false, status: Number(resolved.message) || 500 } as Response;
     }
     return { ok: true, status: 200, json: async () => resolved } as Response;
   });

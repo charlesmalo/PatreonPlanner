@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { RecommendationCard } from './components/RecommendationCard';
 import { recommendation } from './test-support';
@@ -6,9 +7,11 @@ import { recommendation } from './test-support';
 describe('accessibility basics', () => {
   it('offers a sign-in link when signed out and a sign-out button when signed in', () => {
     const { rerender } = render(
-      <Layout user={null} loadingSession={false} onSignOut={vi.fn()}>
-        <p>content</p>
-      </Layout>,
+      <MemoryRouter>
+        <Layout user={null} loadingSession={false} onSignOut={vi.fn()}>
+          <p>content</p>
+        </Layout>
+      </MemoryRouter>,
     );
     expect(screen.getByRole('link', { name: /sign in with patreon/i })).toHaveAttribute(
       'href',
@@ -16,19 +19,37 @@ describe('accessibility basics', () => {
     );
 
     rerender(
-      <Layout
-        user={{ id: 'u', patreonUserId: 'p', fullName: 'Ada', avatarUrl: null }}
-        loadingSession={false}
-        onSignOut={vi.fn()}
-      >
-        <p>content</p>
-      </Layout>,
+      <MemoryRouter>
+        <Layout
+          user={{ id: 'u', patreonUserId: 'p', fullName: 'Ada', avatarUrl: null }}
+          loadingSession={false}
+          onSignOut={vi.fn()}
+        >
+          <p>content</p>
+        </Layout>
+      </MemoryRouter>,
     );
     expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument();
     expect(screen.getByText('Ada')).toBeInTheDocument();
   });
 
-  it('gives the upvote control an accessible name including the count', () => {
+  it('keeps a live region mounted so its updates are announced', () => {
+    const { container } = render(
+      <ul>
+        <RecommendationCard
+          slug="s"
+          recommendation={recommendation()}
+          canUpvote
+          onCount={vi.fn()}
+        />
+      </ul>,
+    );
+    // Screen readers announce mutations of an existing region; one that appears already
+    // populated is unreliably announced.
+    expect(container.querySelector('[role="status"][aria-live="polite"]')).not.toBeNull();
+  });
+
+  it('gives the upvote control an accessible name naming its suggestion', () => {
     render(
       <ul>
         <RecommendationCard
@@ -39,8 +60,10 @@ describe('accessibility basics', () => {
         />
       </ul>,
     );
-    // "▲ 7 upvotes" — the arrow is aria-hidden, so the name is meaningful without it.
-    expect(screen.getByRole('button', { name: /7 upvotes/i })).toBeInTheDocument();
+    // Naming the entry matters: otherwise every button on the board reads "7 upvotes".
+    expect(
+      screen.getByRole('button', { name: /upvote Spirited Away — 7 upvotes/i }),
+    ).toBeInTheDocument();
   });
 
   it('uses no positive tabIndex anywhere in a rendered card', () => {

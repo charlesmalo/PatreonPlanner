@@ -74,7 +74,7 @@ export function SubmitForm({ slug, onCreated }: SubmitFormProps) {
         </div>
         <div>
           <label htmlFor="rec-description" className="block text-sm font-medium">
-            Why? <span className="font-normal text-slate-500">(optional)</span>
+            Why? <span className="font-normal text-slate-500 dark:text-slate-400">(optional)</span>
           </label>
           <textarea
             id="rec-description"
@@ -87,7 +87,7 @@ export function SubmitForm({ slug, onCreated }: SubmitFormProps) {
         </div>
         <div>
           <label htmlFor="rec-url" className="block text-sm font-medium">
-            Link <span className="font-normal text-slate-500">(optional)</span>
+            Link <span className="font-normal text-slate-500 dark:text-slate-400">(optional)</span>
           </label>
           <input
             id="rec-url"

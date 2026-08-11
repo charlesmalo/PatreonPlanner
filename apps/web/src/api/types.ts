@@ -24,6 +24,8 @@ export interface Recommendation {
   description: string | null;
   status: string;
   upvoteCount: number;
+  /** Whether the current viewer upvoted this. False for anonymous readers. */
+  hasUpvoted: boolean;
   createdAt: string;
   links: RecommendationLink[];
   submittedBy: { id: string; fullName: string | null; avatarUrl: string | null };

@@ -1,11 +1,25 @@
 import type { Recommendation } from '../api/types';
+
+/**
+ * The API restricts link URLs to http(s) at submit time. This repeats the check at the one place
+ * attacker input becomes an attribute, so a future API regression is not immediately exploitable
+ * — React only warns on a javascript: href, it does not block it.
+ */
+function isSafeHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
 import { UpvoteButton } from './UpvoteButton';
 
 interface RecommendationCardProps {
   slug: string;
   recommendation: Recommendation;
   canUpvote: boolean;
-  onCount: (id: string, count: number) => void;
+  onCount: (id: string, count: number, upvoted?: boolean) => void;
 }
 
 export function RecommendationCard({
@@ -19,34 +33,38 @@ export function RecommendationCard({
       <UpvoteButton
         slug={slug}
         recommendationId={recommendation.id}
+        title={recommendation.customTitle}
         upvoteCount={recommendation.upvoteCount}
+        hasUpvoted={recommendation.hasUpvoted}
         canUpvote={canUpvote}
         onCount={onCount}
       />
       <div className="min-w-0 flex-1">
         {/* Rendered as text, never as HTML: every field here is submitter-controlled. */}
-        <h3 className="font-medium">{recommendation.customTitle}</h3>
+        <h3 className="font-medium break-words">{recommendation.customTitle}</h3>
         {recommendation.description ? (
-          <p className="mt-1 whitespace-pre-line text-sm text-slate-600 dark:text-slate-300">
+          <p className="mt-1 whitespace-pre-line break-words text-sm text-slate-600 dark:text-slate-300">
             {recommendation.description}
           </p>
         ) : null}
         {recommendation.links.length > 0 ? (
           <ul className="mt-2 flex flex-wrap gap-3">
-            {recommendation.links.map((link) => (
-              <li key={link.url}>
-                <a
-                  href={link.url}
-                  target="_blank"
-                  // The URL is entirely submitter-chosen, so the opened page must not get a
-                  // handle on this one.
-                  rel="noopener noreferrer"
-                  className="text-sm text-sky-700 underline focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:text-sky-400"
-                >
-                  {link.label ?? link.url}
-                </a>
-              </li>
-            ))}
+            {recommendation.links
+              .filter((link) => isSafeHttpUrl(link.url))
+              .map((link, index) => (
+                <li key={`${link.url}-${index}`}>
+                  <a
+                    href={link.url}
+                    target="_blank"
+                    // The URL is entirely submitter-chosen, so the opened page must not get a
+                    // handle on this one.
+                    rel="noopener noreferrer"
+                    className="break-all text-sm text-sky-700 underline focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:text-sky-400"
+                  >
+                    {link.label ?? link.url}
+                  </a>
+                </li>
+              ))}
           </ul>
         ) : null}
         <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">

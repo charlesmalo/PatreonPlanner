@@ -22,9 +22,12 @@ describe('CreatorBoard', () => {
 
   it('shows a loading state, then the creator and its entries', async () => {
     global.fetch = fakeApi({
-      '/capabilities': viewOnly,
-      '/recommendations': { items: [recommendation()], nextCursor: null },
-      '/creators/ada-writes': creator,
+      'GET /api/v1/creators/ada-writes/capabilities': viewOnly,
+      'GET /api/v1/creators/ada-writes/recommendations': {
+        items: [recommendation()],
+        nextCursor: null,
+      },
+      'GET /api/v1/creators/ada-writes': creator,
     });
     renderBoard();
     expect(screen.getByRole('status')).toHaveTextContent(/loading/i);
@@ -36,9 +39,9 @@ describe('CreatorBoard', () => {
 
   it('shows an empty state when there is nothing yet', async () => {
     global.fetch = fakeApi({
-      '/capabilities': viewOnly,
-      '/recommendations': { items: [], nextCursor: null },
-      '/creators/ada-writes': creator,
+      'GET /api/v1/creators/ada-writes/capabilities': viewOnly,
+      'GET /api/v1/creators/ada-writes/recommendations': { items: [], nextCursor: null },
+      'GET /api/v1/creators/ada-writes': creator,
     });
     renderBoard();
     expect(await screen.findByText(/nothing suggested yet/i)).toBeInTheDocument();
@@ -49,19 +52,19 @@ describe('CreatorBoard', () => {
     [401, /sign in to see this board/i],
     [403, /for the creator’s patrons/i],
   ])('explains a %i rather than rendering blank', async (status, expected) => {
-    global.fetch = fakeApi({ '/creators/ada-writes': new Error(String(status)) });
+    global.fetch = fakeApi({ 'GET /api/v1/creators/ada-writes': new Error(String(status)) });
     renderBoard();
     expect(await screen.findByText(expected)).toBeInTheDocument();
   });
 
   it('renders a title containing markup as text, never as HTML', async () => {
     global.fetch = fakeApi({
-      '/capabilities': viewOnly,
-      '/recommendations': {
+      'GET /api/v1/creators/ada-writes/capabilities': viewOnly,
+      'GET /api/v1/creators/ada-writes/recommendations': {
         items: [recommendation({ customTitle: '<img src=x onerror=alert(1)>' })],
         nextCursor: null,
       },
-      '/creators/ada-writes': creator,
+      'GET /api/v1/creators/ada-writes': creator,
     });
     const { container } = renderBoard();
     expect(await screen.findByText('<img src=x onerror=alert(1)>')).toBeInTheDocument();
@@ -71,12 +74,12 @@ describe('CreatorBoard', () => {
 
   it('opens external links safely', async () => {
     global.fetch = fakeApi({
-      '/capabilities': viewOnly,
-      '/recommendations': {
+      'GET /api/v1/creators/ada-writes/capabilities': viewOnly,
+      'GET /api/v1/creators/ada-writes/recommendations': {
         items: [recommendation({ links: [{ url: 'https://example.com/x', label: 'Trailer' }] })],
         nextCursor: null,
       },
-      '/creators/ada-writes': creator,
+      'GET /api/v1/creators/ada-writes': creator,
     });
     renderBoard();
     const link = await screen.findByRole('link', { name: 'Trailer' });
@@ -88,14 +91,14 @@ describe('CreatorBoard', () => {
   it('appends the next page and stops offering more', async () => {
     let call = 0;
     global.fetch = fakeApi({
-      '/capabilities': viewOnly,
-      '/recommendations': () => {
+      'GET /api/v1/creators/ada-writes/capabilities': viewOnly,
+      'GET /api/v1/creators/ada-writes/recommendations': () => {
         call += 1;
         return call === 1
           ? { items: [recommendation({ id: 'a', customTitle: 'First' })], nextCursor: 'cur' }
           : { items: [recommendation({ id: 'b', customTitle: 'Second' })], nextCursor: null };
       },
-      '/creators/ada-writes': creator,
+      'GET /api/v1/creators/ada-writes': creator,
     });
     renderBoard();
     await screen.findByText('First');
@@ -110,9 +113,9 @@ describe('CreatorBoard', () => {
 
   it('hides the submit form when the viewer cannot submit', async () => {
     global.fetch = fakeApi({
-      '/capabilities': viewOnly,
-      '/recommendations': { items: [], nextCursor: null },
-      '/creators/ada-writes': creator,
+      'GET /api/v1/creators/ada-writes/capabilities': viewOnly,
+      'GET /api/v1/creators/ada-writes/recommendations': { items: [], nextCursor: null },
+      'GET /api/v1/creators/ada-writes': creator,
     });
     renderBoard();
     await screen.findByRole('heading', { name: 'Ada Writes' });
@@ -121,9 +124,9 @@ describe('CreatorBoard', () => {
 
   it('shows the submit form when the viewer can submit', async () => {
     global.fetch = fakeApi({
-      '/capabilities': allCapabilities,
-      '/recommendations': { items: [], nextCursor: null },
-      '/creators/ada-writes': creator,
+      'GET /api/v1/creators/ada-writes/capabilities': allCapabilities,
+      'GET /api/v1/creators/ada-writes/recommendations': { items: [], nextCursor: null },
+      'GET /api/v1/creators/ada-writes': creator,
     });
     renderBoard();
     expect(await screen.findByRole('heading', { name: /suggest something/i })).toBeInTheDocument();

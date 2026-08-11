@@ -13,9 +13,23 @@ export function readCsrfToken(): string | null {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+interface RequestOptions {
+  /**
+   * Skip the /api/v1 prefix. The OAuth and logout routes are mounted at the root — they are
+   * excluded from the API's global prefix because their URLs are registered with Patreon — so
+   * prefixing them yields a 404.
+   */
+  rootPath?: boolean;
+}
+
+async function request<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+  options: RequestOptions = {},
+): Promise<T> {
   const token = readCsrfToken();
-  const response = await fetch(`/api/v1${path}`, {
+  const response = await fetch(options.rootPath ? path : `/api/v1${path}`, {
     method,
     // Same-origin by deployment (docs/decisions/2026-08-08-same-origin-deployment.md), so the
     // session cookie rides along without CORS credentials mode.
@@ -36,4 +50,6 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 export const api = {
   get: <T>(path: string) => request<T>('GET', path),
   post: <T>(path: string, body?: unknown) => request<T>('POST', path, body),
+  /** For the root-mounted auth routes, which sit outside the versioned prefix. */
+  postRoot: <T>(path: string, body?: unknown) => request<T>('POST', path, body, { rootPath: true }),
 };

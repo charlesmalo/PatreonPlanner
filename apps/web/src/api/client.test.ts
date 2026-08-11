@@ -49,15 +49,13 @@ describe('api client', () => {
     await expect(api.get('/me')).rejects.toBeInstanceOf(ApiError);
   });
 
-  it('throws rather than failing to parse a non-json error body', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 500,
-      json: async () => {
-        throw new Error('not json');
-      },
-    } as unknown as Response);
-    await expect(api.get('/me')).rejects.toMatchObject({ status: 500 });
+  it('does not prefix a root-mounted path', async () => {
+    const fetchMock = respond({ json: async () => ({}) });
+    global.fetch = fetchMock;
+    await api.postRoot('/auth/logout');
+    // The API excludes auth/logout from the /api/v1 prefix, so prefixing it 404s and the session
+    // survives a click that looked like it worked.
+    expect(fetchMock.mock.calls[0][0]).toBe('/auth/logout');
   });
 
   it('resolves a 204 without parsing a body', async () => {

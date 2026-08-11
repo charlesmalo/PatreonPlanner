@@ -1,12 +1,13 @@
 import { Policy, Viewer, can } from '../src/access/capability';
 
 const anonymous: Viewer = {
+  userId: null,
   isAuthenticated: false,
   isActivePatron: false,
   pledgeAmountCents: null,
   isStaff: false,
 };
-const loggedIn: Viewer = { ...anonymous, isAuthenticated: true };
+const loggedIn: Viewer = { ...anonymous, userId: 'user-1', isAuthenticated: true };
 const patron: Viewer = { ...loggedIn, isActivePatron: true, pledgeAmountCents: 500 };
 const staff: Viewer = { ...loggedIn, isStaff: true };
 
