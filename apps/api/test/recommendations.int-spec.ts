@@ -99,6 +99,14 @@ describe('Recommendations (integration)', () => {
     it('keeps genuinely different titles apart', () => {
       expect(normalizeTitle('Dune')).not.toBe(normalizeTitle('Dune Part Two'));
     });
+
+    it('keeps non-Latin titles distinct rather than collapsing them', () => {
+      // An ASCII-only class emptied all of these, so every one de-duped into the same entry.
+      const titles = ['君の名は。', '기생충', 'Москва слезам не верит', 'الفيلم'];
+      const normalized = titles.map(normalizeTitle);
+      expect(normalized.every((n) => n.length > 0)).toBe(true);
+      expect(new Set(normalized).size).toBe(titles.length);
+    });
   });
 
   describe('submitting', () => {
@@ -209,6 +217,62 @@ describe('Recommendations (integration)', () => {
       }).expect(400);
     });
 
+    it('blocks a profane link label, which bypassed moderation entirely', async () => {
+      const auth = await loginAs('rec-label');
+      await makePatron('rec-label', 1000);
+      await submit(auth, {
+        type: 'EXTERNAL_LINK',
+        customTitle: 'Innocent Title',
+        links: [{ url: 'https://example.com/x', label: 'shit' }],
+      }).expect(400);
+      expect(
+        await ctx.prisma.recommendation.count({ where: { normalizedTitle: 'innocent title' } }),
+      ).toBe(0);
+    });
+
+    it('blocks profanity in a link url', async () => {
+      const auth = await loginAs('rec-urlword');
+      await makePatron('rec-urlword', 1000);
+      await submit(auth, {
+        type: 'EXTERNAL_LINK',
+        customTitle: 'Also Innocent',
+        links: [{ url: 'https://example.com/shit' }],
+      }).expect(400);
+    });
+
+    it('accepts a non-Latin title and does not collide with another', async () => {
+      const a = await loginAs('rec-jp');
+      await makePatron('rec-jp', 1000);
+      const first = await submit(a, { type: 'EXTERNAL_LINK', customTitle: '君の名は。' }).expect(
+        201,
+      );
+
+      const b = await loginAs('rec-kr');
+      await makePatron('rec-kr', 1000);
+      const second = await submit(b, { type: 'EXTERNAL_LINK', customTitle: '기생충' }).expect(201);
+
+      expect(second.body.duplicate).toBe(false);
+      expect(second.body.recommendation.id).not.toBe(first.body.recommendation.id);
+    });
+
+    it('rejects a title with no letters or digits at all', async () => {
+      const auth = await loginAs('rec-punct');
+      await makePatron('rec-punct', 1000);
+      await submit(auth, { type: 'EXTERNAL_LINK', customTitle: '!!! ---' }).expect(400);
+    });
+
+    it('refunds the allowance when the submission was a duplicate', async () => {
+      const auth = await loginAs('rec-refund');
+      await makePatron('rec-refund', 1000);
+      await submit(auth, { type: 'EXTERNAL_LINK', customTitle: 'Refund Target' }).expect(201);
+
+      const other = await loginAs('rec-refund-2');
+      await makePatron('rec-refund-2', 1000);
+      // Hitting an existing title must not cost the hour: design §5 wants this behaviour.
+      await submit(other, { type: 'EXTERNAL_LINK', customTitle: 'Refund Target' }).expect(200);
+      await submit(other, { type: 'EXTERNAL_LINK', customTitle: 'Something New' }).expect(201);
+    });
+
     it('rejects a type that has no Title behind it yet', async () => {
       const auth = await loginAs('rec-movie');
       await makePatron('rec-movie', 1000);
@@ -308,19 +372,92 @@ describe('Recommendations (integration)', () => {
       );
     });
 
-    it('pages with a cursor, returning each item exactly once', async () => {
+    async function pageThrough(limit = 2): Promise<string[]> {
       const seen: string[] = [];
       let cursor: string | null = null;
-      for (let page = 0; page < 10; page += 1) {
+      for (let page = 0; page < 40; page += 1) {
         const res: request.Response = await request(ctx.app.getHttpServer())
           .get('/api/v1/creators/board-co/recommendations')
-          .query({ limit: 2, ...(cursor ? { cursor } : {}) })
+          .query({ limit, ...(cursor ? { cursor } : {}) })
           .expect(200);
         seen.push(...res.body.items.map((i: { id: string }) => i.id));
         cursor = res.body.nextCursor;
         if (!cursor) break;
       }
+      return seen;
+    }
+
+    it('pages through every item exactly once — completeness, not just uniqueness', async () => {
+      const all = await ctx.prisma.recommendation.findMany({
+        where: { creatorId, status: { notIn: ['DELETED', 'REJECTED'] } },
+        select: { id: true },
+      });
+      const seen = await pageThrough();
       expect(new Set(seen).size).toBe(seen.length);
+      // The half the old test missed: uniqueness alone passes even when pages drop entries.
+      expect(new Set(seen)).toEqual(new Set(all.map((r) => r.id)));
+    });
+
+    it('does not drop an entry when the cursor row is soft-deleted mid-scroll', async () => {
+      const first: request.Response = await request(ctx.app.getHttpServer())
+        .get('/api/v1/creators/board-co/recommendations')
+        .query({ limit: 2 })
+        .expect(200);
+      const cursor = first.body.nextCursor as string;
+      const lastId = first.body.items[first.body.items.length - 1].id as string;
+
+      // skip:1 was an unconditional OFFSET, so removing the cursor row ate a real one instead.
+      await ctx.prisma.recommendation.update({
+        where: { id: lastId },
+        data: { status: 'DELETED' },
+      });
+      try {
+        const expected = await ctx.prisma.recommendation.findMany({
+          where: { creatorId, status: { notIn: ['DELETED', 'REJECTED'] } },
+          orderBy: [{ upvoteCount: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+          select: { id: true },
+        });
+        const next: request.Response = await request(ctx.app.getHttpServer())
+          .get('/api/v1/creators/board-co/recommendations')
+          .query({ limit: 2, cursor })
+          .expect(200);
+        const stillExpected = expected.map((r) => r.id).filter((id) => id !== lastId);
+        const firstPageIds = first.body.items.map((i: { id: string }) => i.id) as string[];
+        const remaining = stillExpected.filter((id) => !firstPageIds.includes(id));
+        expect(next.body.items.map((i: { id: string }) => i.id)).toEqual(remaining.slice(0, 2));
+      } finally {
+        await ctx.prisma.recommendation.update({
+          where: { id: lastId },
+          data: { status: 'PENDING' },
+        });
+      }
+    });
+
+    it('rejects a cursor it did not mint', async () => {
+      await request(ctx.app.getHttpServer())
+        .get('/api/v1/creators/board-co/recommendations')
+        .query({ cursor: 'not-a-real-cursor' })
+        .expect(400);
+    });
+
+    it('orders by upvote count descending with a controlled fixture', async () => {
+      const auth = await loginAs('order-author');
+      await makePatron('order-author', 1000);
+      const created = await submit(auth, {
+        type: 'EXTERNAL_LINK',
+        customTitle: 'Top Of The Board',
+      }).expect(201);
+      // Give it more upvotes than anything else, so position is a real assertion rather than a
+      // sorted-equals-itself tautology.
+      await ctx.prisma.recommendation.update({
+        where: { id: created.body.recommendation.id },
+        data: { upvoteCount: 999 },
+      });
+
+      const res = await request(ctx.app.getHttpServer())
+        .get('/api/v1/creators/board-co/recommendations')
+        .expect(200);
+      expect(res.body.items[0].id).toBe(created.body.recommendation.id);
     });
 
     it('rejects an out-of-range limit', async () => {

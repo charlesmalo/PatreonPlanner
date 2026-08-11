@@ -192,9 +192,13 @@ model Recommendation {
   links       RecommendationLink[]
   upvotes     Upvote[]
 
-  // Serves the board's ordering and the keyset cursor.
-  @@index([creatorId, status, upvoteCount])
-  @@index([creatorId, normalizedTitle])
+  // De-duplication is enforced here, not by the read-then-write check: two concurrent
+  // submissions of the same title both miss that read.
+  @@unique([creatorId, normalizedTitle])
+  // status sits between the equality column and the sort columns, so an index leading with it
+  // cannot be walked in sort order — the board fell back to sorting the creator's whole table.
+  // This one matches the ORDER BY exactly.
+  @@index([creatorId, upvoteCount(sort: Desc), createdAt(sort: Desc), id(sort: Desc)])
   @@index([submittedByUserId])
 }
 
