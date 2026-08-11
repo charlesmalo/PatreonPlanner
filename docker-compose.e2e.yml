@@ -99,7 +99,9 @@ services:
     ports:
       - '8080:80'
     healthcheck:
-      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://localhost/']
+      # 127.0.0.1, not localhost: nginx listens on IPv4 only, and busybox wget resolves
+      # localhost to ::1 first, so the check fails against a perfectly healthy server.
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1/']
       interval: 3s
       timeout: 5s
       retries: 20

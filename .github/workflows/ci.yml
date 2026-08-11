@@ -71,7 +71,7 @@ jobs:
       # The real images behind the real nginx proxy: the contract failures this job exists to
       # catch only exist in that arrangement, and both other suites pass straight through them.
       - run: docker compose -p patreonplanner-e2e -f docker-compose.e2e.yml up -d --build --wait
-      - run: pnpm --filter @app/e2e test
+      - run: pnpm --filter @app/e2e e2e
       - name: Container logs on failure
         if: failure()
         run: docker compose -p patreonplanner-e2e -f docker-compose.e2e.yml logs --tail 100

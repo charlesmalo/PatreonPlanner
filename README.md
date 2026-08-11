@@ -86,7 +86,7 @@ pnpm format:check
 
 ```bash
 pnpm --filter @app/e2e stack:up     # builds and starts the real images plus a Patreon stub
-pnpm --filter @app/e2e test         # drives them with Playwright
+pnpm --filter @app/e2e e2e          # drives them with Playwright
 pnpm --filter @app/e2e stack:down
 ```
 
