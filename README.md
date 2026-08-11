@@ -46,7 +46,8 @@ The REST surface is served under `/api/v1`. The ops probes and OAuth routes stay
 - `POST /auth/logout` — destroys the session
 - `GET /api/v1/me` — the authenticated user
 - `GET /api/v1/creators/:slug/recommendations` — the board, paginated by cursor (`VIEW`)
-- `POST /api/v1/creators/:slug/recommendations` — submit; `200` + `duplicate: true` if it already exists (`SUBMIT`)
+- `GET /api/v1/creators/:slug/catalog/search?q=` — film and show search, cached (`SUBMIT`)
+- `POST /api/v1/creators/:slug/recommendations` — submit a catalogue title (`type`+`tmdbId`) or an external link; `200` + `duplicate: true` if it already exists (`SUBMIT`)
 - `POST /api/v1/creators/:slug/recommendations/:id/upvote` — toggle an upvote (`UPVOTE`)
 - `POST /webhooks/patreon/:creatorId` — Patreon events; authenticated by that creator's HMAC secret, exempt from CSRF
 

@@ -33,6 +33,11 @@ export const configSchema = z.object({
     .default(60 * 60 * 24 * 14),
   WEB_ORIGIN: z.string().url().default('http://localhost:5173'),
 
+  // Optional: without it, mainstream search and submissions are refused while EXTERNAL_LINK
+  // keeps working. Requiring it would mean no developer and no CI run could boot the API.
+  TMDB_API_KEY: z.string().min(1).optional(),
+  TMDB_API_BASE_URL: z.string().url().default('https://api.themoviedb.org/3'),
+
   SUBMIT_LIMIT_PER_HOUR: z.coerce.number().int().positive().default(1),
   // Design §6 item 3: a looser cap across all creators, so a patron of twenty creators cannot
   // submit twenty an hour.

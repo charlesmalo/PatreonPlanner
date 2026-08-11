@@ -31,6 +31,7 @@ export function recommendation(overrides: Partial<Recommendation> = {}): Recomme
     status: 'PENDING',
     upvoteCount: 3,
     hasUpvoted: false,
+    title: null,
     createdAt: new Date().toISOString(),
     links: [],
     submittedBy: { id: 'user-1', fullName: 'Grace', avatarUrl: null },

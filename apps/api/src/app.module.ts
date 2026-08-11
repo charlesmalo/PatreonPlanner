@@ -1,6 +1,7 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { AccessModule } from './access/access.module';
 import { AuthModule } from './auth/auth.module';
+import { CatalogModule } from './catalog/catalog.module';
 import { ConfigModule } from './config/config.module';
 import { CreatorsModule } from './creators/creators.module';
 import { CryptoModule } from './crypto/crypto.module';
@@ -33,6 +34,7 @@ import { HealthModule } from './health/health.module';
     LimitsModule,
     ModerationModule,
     AuthModule,
+    CatalogModule,
     CreatorsModule,
     RecommendationsModule,
     WebhooksModule,

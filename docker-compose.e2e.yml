@@ -70,6 +70,9 @@ services:
       # the API reaches it inside the compose network.
       PATREON_OAUTH_BASE_URL: http://localhost:4000
       PATREON_API_BASE_URL: http://patreon-stub:4000
+      # The same stub also stands in for TMDB; only the API calls it, so the in-network URL.
+      TMDB_API_BASE_URL: http://patreon-stub:4000/3
+      TMDB_API_KEY: e2e-tmdb-key
       WEB_ORIGIN: http://localhost:8080
       ENCRYPTION_KEY: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=
       JOBS_ENABLED: 'false'

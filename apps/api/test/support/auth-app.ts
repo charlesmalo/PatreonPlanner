@@ -7,6 +7,8 @@ import { AppModule } from '../../src/app.module';
 import { configureApp } from '../../src/app.setup';
 import { PATREON_CLIENT } from '../../src/patreon/patreon.client';
 import { startDatabase } from './database';
+import { CATALOG_PROVIDER } from '../../src/catalog/catalog.provider';
+import { FakeCatalogProvider } from './fake-catalog.provider';
 import { FakePatreonClient } from './fake-patreon.client';
 import { applyTestConfigDefaults } from './env';
 
@@ -25,6 +27,7 @@ export interface AuthTestContext {
   app: INestApplication;
   prisma: PrismaClient;
   patreon: FakePatreonClient;
+  catalog: FakeCatalogProvider;
   teardown: () => Promise<void>;
 }
 
@@ -41,9 +44,12 @@ export async function startAuthApp(): Promise<AuthTestContext> {
   applyTestConfigDefaults();
 
   const patreon = new FakePatreonClient();
+  const catalog = new FakeCatalogProvider();
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(PATREON_CLIENT)
     .useValue(patreon)
+    .overrideProvider(CATALOG_PROVIDER)
+    .useValue(catalog)
     .compile();
 
   const app = moduleRef.createNestApplication({ rawBody: true });
@@ -59,6 +65,7 @@ export async function startAuthApp(): Promise<AuthTestContext> {
     app,
     prisma,
     patreon,
+    catalog,
     teardown: async () => {
       await prisma.$disconnect();
       await app.close();

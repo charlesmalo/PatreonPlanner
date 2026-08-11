@@ -16,9 +16,10 @@ describe('SubmitForm', () => {
 
   it('labels every field', () => {
     setup();
-    expect(screen.getByLabelText('Title')).toBeInTheDocument();
+    expect(screen.getByLabelText(/search films and shows/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/catalogue does not have/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/why\?/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/link/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^link/i)).toBeInTheDocument();
   });
 
   it('blocks an empty title without a request', async () => {
@@ -26,7 +27,9 @@ describe('SubmitForm', () => {
     global.fetch = fetchMock;
     setup();
     await userEvent.click(screen.getByRole('button', { name: 'Suggest' }));
-    expect(await screen.findByText(/give it a title/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/search for a title, or give it one yourself/i),
+    ).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -40,13 +43,65 @@ describe('SubmitForm', () => {
     });
     const onCreated = setup();
 
-    await userEvent.type(screen.getByLabelText('Title'), 'Akira');
+    await userEvent.type(screen.getByLabelText(/catalogue does not have/i), 'Akira');
     await userEvent.click(screen.getByRole('button', { name: 'Suggest' }));
 
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith(created));
     expect(await screen.findByText(/pending review/i)).toBeInTheDocument();
     // Cleared, so a second suggestion does not resubmit the first.
-    expect(screen.getByLabelText('Title')).toHaveValue('');
+    expect(screen.getByLabelText(/catalogue does not have/i)).toHaveValue('');
+  });
+
+  it('searches the catalogue after a debounce and binds the picked title', async () => {
+    const created = recommendation({ id: 'new-2', customTitle: 'Spirited Away' });
+    const fetchMock = fakeApi({
+      'GET /api/v1/creators/ada-writes/catalog/search': {
+        results: [
+          {
+            tmdbId: 129,
+            mediaType: 'MOVIE',
+            name: 'Spirited Away',
+            year: 2001,
+            posterPath: '/p.jpg',
+            overview: null,
+          },
+        ],
+      },
+      'POST /api/v1/creators/ada-writes/recommendations': {
+        duplicate: false,
+        recommendation: created,
+      },
+    });
+    global.fetch = fetchMock;
+    setup();
+
+    await userEvent.type(screen.getByLabelText(/search films and shows/i), 'spirited');
+    const option = await screen.findByRole('button', { name: /spirited away \(2001\)/i });
+    await userEvent.click(option);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest' }));
+
+    await waitFor(() => {
+      const submitCall = fetchMock.mock.calls.find(
+        (c) => (c[1] as RequestInit | undefined)?.method === 'POST',
+      );
+      // The canonical name comes from the catalogue, so none is sent.
+      expect(JSON.parse((submitCall?.[1] as RequestInit).body as string)).toEqual({
+        type: 'MOVIE',
+        tmdbId: 129,
+      });
+    });
+  });
+
+  it('lets the reader fall back to a free-text link when the catalogue fails', async () => {
+    global.fetch = fakeApi({
+      'GET /api/v1/creators/ada-writes/catalog/search': new Error('502'),
+    });
+    setup();
+    await userEvent.type(screen.getByLabelText(/search films and shows/i), 'anything');
+    // Design §5: no match means refine or switch to an external link, not a dead end.
+    expect(await screen.findByText(/still add a link below/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/catalogue does not have/i)).toBeVisible();
   });
 
   it('explains a duplicate instead of pretending it was added', async () => {
@@ -57,7 +112,7 @@ describe('SubmitForm', () => {
       },
     });
     setup();
-    await userEvent.type(screen.getByLabelText('Title'), 'Spirited Away');
+    await userEvent.type(screen.getByLabelText(/catalogue does not have/i), 'Spirited Away');
     await userEvent.click(screen.getByRole('button', { name: 'Suggest' }));
     expect(await screen.findByText(/already on the board/i)).toBeInTheDocument();
   });
@@ -71,7 +126,7 @@ describe('SubmitForm', () => {
       'POST /api/v1/creators/ada-writes/recommendations': new Error(String(status)),
     });
     setup();
-    await userEvent.type(screen.getByLabelText('Title'), 'Something');
+    await userEvent.type(screen.getByLabelText(/catalogue does not have/i), 'Something');
     await userEvent.click(screen.getByRole('button', { name: 'Suggest' }));
     expect(await screen.findByText(expected)).toBeInTheDocument();
   });
