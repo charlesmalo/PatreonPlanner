@@ -1,0 +1,137 @@
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { useBoard, useSession } from './hooks';
+import { fakeApi, recommendation } from '../test-support';
+
+describe('useSession', () => {
+  const originalFetch = global.fetch;
+  const originalLocation = window.location;
+
+  beforeEach(() => {
+    Object.defineProperty(window, 'location', {
+      value: { assign: vi.fn() },
+      writable: true,
+    });
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    Object.defineProperty(window, 'location', { value: originalLocation, writable: true });
+  });
+
+  it('exposes the signed-in user', async () => {
+    global.fetch = fakeApi({
+      'GET /api/v1/me': { id: 'u1', patreonUserId: 'p1', fullName: 'Ada', avatarUrl: null },
+    });
+    const { result } = renderHook(() => useSession());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.user?.fullName).toBe('Ada');
+  });
+
+  it('treats a 401 as anonymous rather than an error', async () => {
+    global.fetch = fakeApi({ 'GET /api/v1/me': new Error('401') });
+    const { result } = renderHook(() => useSession());
+    // Every logged-out visitor hits this path; an error state here would be wrong.
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.user).toBeNull();
+  });
+
+  it('signs out against the root-mounted route, not the versioned one', async () => {
+    const fetchMock = fakeApi({
+      'GET /api/v1/me': { id: 'u1', patreonUserId: 'p1', fullName: 'Ada', avatarUrl: null },
+      'POST /auth/logout': null,
+    });
+    global.fetch = fetchMock;
+    const { result } = renderHook(() => useSession());
+    await waitFor(() => expect(result.current.user).not.toBeNull());
+
+    await act(async () => {
+      await result.current.signOut();
+    });
+
+    // The API excludes auth/logout from /api/v1. Calling the prefixed path 404s and the session
+    // is never destroyed — which is exactly what shipped before this test existed.
+    const called = fetchMock.mock.calls.map((c) => String(c[0]));
+    expect(called).toContain('/auth/logout');
+    expect(called).not.toContain('/api/v1/auth/logout');
+  });
+
+  it('still clears the session when logout fails', async () => {
+    global.fetch = fakeApi({
+      'GET /api/v1/me': { id: 'u1', patreonUserId: 'p1', fullName: 'Ada', avatarUrl: null },
+      'POST /auth/logout': new Error('500'),
+    });
+    const { result } = renderHook(() => useSession());
+    await waitFor(() => expect(result.current.user).not.toBeNull());
+
+    await act(async () => {
+      await result.current.signOut().catch(() => undefined);
+    });
+    // Leaving a signed-in header over a session we can no longer vouch for would be worse.
+    expect(window.location.assign).toHaveBeenCalledWith('/');
+  });
+});
+
+describe('useBoard', () => {
+  const originalFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('reports loading until the fetch for this creator lands', async () => {
+    global.fetch = fakeApi({
+      'GET /api/v1/creators/a/recommendations': { items: [recommendation()], nextCursor: null },
+    });
+    const { result } = renderHook(() => useBoard('a', true));
+    // Not "loaded and empty" — that flashed an empty state before the fetch began.
+    expect(result.current.loading).toBe(true);
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.items).toHaveLength(1);
+  });
+
+  it('stays in a loading state while disabled rather than claiming an empty board', () => {
+    global.fetch = fakeApi({});
+    const { result } = renderHook(() => useBoard('a', false));
+    expect(result.current.loading).toBe(true);
+    expect(result.current.items).toEqual([]);
+  });
+
+  it('does not show one creator’s entries under another', async () => {
+    global.fetch = fakeApi({
+      'GET /api/v1/creators/a/recommendations': {
+        items: [recommendation({ id: 'from-a' })],
+        nextCursor: null,
+      },
+      'GET /api/v1/creators/b/recommendations': {
+        items: [recommendation({ id: 'from-b' })],
+        nextCursor: null,
+      },
+    });
+    const { result, rerender } = renderHook(({ slug }) => useBoard(slug, true), {
+      initialProps: { slug: 'a' },
+    });
+    await waitFor(() => expect(result.current.items[0].id).toBe('from-a'));
+
+    rerender({ slug: 'b' });
+    // The moment the slug changes the previous creator's data is no longer "loaded".
+    expect(result.current.loading).toBe(true);
+    await waitFor(() => expect(result.current.items[0].id).toBe('from-b'));
+  });
+
+  it('surfaces a load-more failure instead of failing silently', async () => {
+    let call = 0;
+    global.fetch = fakeApi({
+      'GET /api/v1/creators/a/recommendations': () => {
+        call += 1;
+        return call === 1 ? { items: [recommendation()], nextCursor: 'cur' } : new Error('500');
+      },
+    });
+    const { result } = renderHook(() => useBoard('a', true));
+    await waitFor(() => expect(result.current.hasMore).toBe(true));
+
+    await act(async () => {
+      await result.current.loadMore();
+    });
+    // Previously this rejected into the click handler and the button just stopped spinning.
+    expect(result.current.moreError).toMatch(/could not load more/i);
+  });
+});

@@ -105,6 +105,7 @@ export class CreatorAccessGuard implements CanActivate {
   private async loadViewer(creatorId: string, userId: string | null): Promise<Viewer> {
     if (!userId) {
       return {
+        userId: null,
         isAuthenticated: false,
         isActivePatron: false,
         pledgeAmountCents: null,
@@ -126,6 +127,7 @@ export class CreatorAccessGuard implements CanActivate {
     // sufficient to lock someone out here too, matching SessionGuard.
     if (!user) {
       return {
+        userId: null,
         isAuthenticated: false,
         isActivePatron: false,
         pledgeAmountCents: null,
@@ -133,6 +135,7 @@ export class CreatorAccessGuard implements CanActivate {
       };
     }
     return {
+      userId,
       isAuthenticated: true,
       isActivePatron: membership?.isActivePatron ?? false,
       // Membership.amountCents is Patreon's entitled amount — the pledge actually held. The

@@ -11,9 +11,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import type { Viewer } from '../access/capability';
 import {
   CreatorAccessGuard,
   CurrentCreator,
+  CurrentViewer,
   ResolvedCreator,
 } from '../access/creator-access.guard';
 import { RequireCapability } from '../access/require-capability.decorator';
@@ -30,8 +32,12 @@ export class RecommendationsController {
   @Get()
   @RequireCapability('VIEW')
   @UseGuards(CreatorAccessGuard)
-  list(@CurrentCreator() creator: ResolvedCreator, @Query() query: ListRecommendationsQuery) {
-    return this.recommendations.list(creator.id, query.cursor, query.limit);
+  list(
+    @CurrentCreator() creator: ResolvedCreator,
+    @CurrentViewer() viewer: Viewer,
+    @Query() query: ListRecommendationsQuery,
+  ) {
+    return this.recommendations.list(creator.id, query.cursor, query.limit, viewer.userId);
   }
 
   @Post()

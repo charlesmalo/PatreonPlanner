@@ -460,6 +460,37 @@ describe('Recommendations (integration)', () => {
       expect(res.body.items[0].id).toBe(created.body.recommendation.id);
     });
 
+    it('tells the viewer whether they upvoted, so a client can render state truthfully', async () => {
+      const auth = await loginAs('board-flagger');
+      await makePatron('board-flagger', 300);
+      const created = await submit(auth, {
+        type: 'EXTERNAL_LINK',
+        customTitle: 'Flag Me',
+      }).expect(201);
+      const id = created.body.recommendation.id as string;
+
+      const anonymous = await request(ctx.app.getHttpServer())
+        .get('/api/v1/creators/board-co/recommendations')
+        .expect(200);
+      expect(anonymous.body.items.find((i: { id: string }) => i.id === id).hasUpvoted).toBe(false);
+
+      await upvote(auth, id).expect(201);
+      const mine = await request(ctx.app.getHttpServer())
+        .get('/api/v1/creators/board-co/recommendations')
+        .set('Cookie', auth.session)
+        .expect(200);
+      expect(mine.body.items.find((i: { id: string }) => i.id === id).hasUpvoted).toBe(true);
+
+      // Another patron's board must not show it as theirs.
+      const other = await loginAs('board-flagger-2');
+      await makePatron('board-flagger-2', 300);
+      const theirs = await request(ctx.app.getHttpServer())
+        .get('/api/v1/creators/board-co/recommendations')
+        .set('Cookie', other.session)
+        .expect(200);
+      expect(theirs.body.items.find((i: { id: string }) => i.id === id).hasUpvoted).toBe(false);
+    });
+
     it('rejects an out-of-range limit', async () => {
       await request(ctx.app.getHttpServer())
         .get('/api/v1/creators/board-co/recommendations')

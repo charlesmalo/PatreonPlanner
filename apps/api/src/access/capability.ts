@@ -3,6 +3,8 @@ export type Capability = 'VIEW' | 'UPVOTE' | 'SUBMIT' | 'MODERATE';
 export type ViewVisibilityValue = 'PUBLIC' | 'ANY_PATREON_USER' | 'SUBSCRIBERS_ONLY';
 
 export interface Viewer {
+  /** Null when anonymous. Lets a handler answer "did *you* do this?" without a second lookup. */
+  userId: string | null;
   isAuthenticated: boolean;
   isActivePatron: boolean;
   /**

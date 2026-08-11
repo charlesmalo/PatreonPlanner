@@ -221,11 +221,16 @@ export class RecommendationsService {
    * key is mutable. That is inherent to ordering by a live counter, not something keyset fixes;
    * callers should de-duplicate by id.
    */
-  async list(creatorId: string, rawCursor: string | undefined, limit: number | undefined) {
+  async list(
+    creatorId: string,
+    rawCursor: string | undefined,
+    limit: number | undefined,
+    viewerUserId: string | null,
+  ) {
     const take = Math.min(Math.max(limit ?? 20, 1), MAX_PAGE);
     const cursor = decodeCursor(rawCursor);
 
-    const items = await this.prisma.recommendation.findMany({
+    const items = (await this.prisma.recommendation.findMany({
       where: {
         creatorId,
         status: { notIn: HIDDEN_STATUSES },
@@ -248,14 +253,31 @@ export class RecommendationsService {
       },
       orderBy: [{ upvoteCount: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
       take: take + 1,
-      select: { ...RECOMMENDATION_FIELDS, upvoteCount: true, createdAt: true },
-    });
+      select: {
+        ...RECOMMENDATION_FIELDS,
+        upvoteCount: true,
+        createdAt: true,
+        // Whether *this* viewer upvoted. Without it a client cannot render the control's state
+        // truthfully, and an optimistic toggle guesses the direction wrong.
+        ...(viewerUserId
+          ? { upvotes: { where: { userId: viewerUserId }, select: { id: true }, take: 1 } }
+          : {}),
+      },
+    })) as Array<{
+      id: string;
+      upvoteCount: number;
+      createdAt: Date;
+      upvotes?: Array<{ id: string }>;
+    }>;
 
     const hasMore = items.length > take;
     const page = hasMore ? items.slice(0, take) : items;
     const last = page[page.length - 1];
     return {
-      items: page,
+      items: page.map(({ upvotes, ...item }) => ({
+        ...item,
+        hasUpvoted: (upvotes ?? []).length > 0,
+      })),
       nextCursor: hasMore && last ? encodeCursor(last) : null,
     };
   }
