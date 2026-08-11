@@ -28,6 +28,10 @@ export const configSchema = z.object({
     .default(60 * 60 * 24 * 14),
   WEB_ORIGIN: z.string().url().default('http://localhost:5173'),
 
+  SUBMIT_LIMIT_PER_HOUR: z.coerce.number().int().positive().default(1),
+  // Design §6 item 3: a looser cap across all creators, so a patron of twenty creators cannot
+  // submit twenty an hour.
+  SUBMIT_LIMIT_PER_HOUR_GLOBAL: z.coerce.number().int().positive().default(5),
   MEMBERSHIP_TTL_HOURS: z.coerce.number().int().positive().default(24),
   // Disabled in tests, where a scheduler firing mid-assertion is pure flake.
   JOBS_ENABLED: z
