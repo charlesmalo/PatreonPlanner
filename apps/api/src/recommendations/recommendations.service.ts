@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, RecommendationStatus } from '@prisma/client';
+import { CatalogService } from '../catalog/catalog.service';
 import { ConfigService } from '../config/config.module';
 import { RateLimitService } from '../limits/rate-limit.service';
 import { ModerationService } from '../moderation/moderation.service';
@@ -60,6 +61,9 @@ const RECOMMENDATION_FIELDS = {
   status: true,
   upvoteCount: true,
   createdAt: true,
+  title: {
+    select: { tmdbId: true, mediaType: true, name: true, year: true, posterPath: true },
+  },
   links: { select: { url: true, label: true } },
   submittedBy: { select: { id: true, fullName: true, avatarUrl: true } },
 } satisfies Prisma.RecommendationSelect;
@@ -73,6 +77,7 @@ export class RecommendationsService {
     private readonly limits: RateLimitService,
     private readonly moderation: ModerationService,
     private readonly config: ConfigService,
+    private readonly catalog: CatalogService,
   ) {}
 
   /**
@@ -115,14 +120,23 @@ export class RecommendationsService {
       throw new BadRequestException('Submission rejected');
     }
 
+    // Resolved after moderation, for the same reason de-dupe is: a blocked submission must not
+    // be able to probe the catalogue or spend its quota.
+    const title = await this.resolveTitle(dto);
+
     // De-dupe after moderation, so a blocked resubmission cannot be used to confirm what
     // already exists on a board the sender cannot read.
-    const normalizedTitle = normalizeTitle(dto.customTitle);
+    const displayTitle = title?.name ?? (dto.customTitle as string);
+    const normalizedTitle = normalizeTitle(displayTitle);
     // A title of pure punctuation carries no de-dupe key; storing '' would make every such
     // title collide.
     if (normalizedTitle.length === 0) throw new BadRequestException('Title must contain letters');
+    // Canonical when bound, normalized-title otherwise — matching the two partial indexes that
+    // actually enforce it.
     const existing = await this.prisma.recommendation.findFirst({
-      where: { creatorId, normalizedTitle, status: { notIn: HIDDEN_STATUSES } },
+      where: title
+        ? { creatorId, titleId: title.id, type: dto.type, status: { notIn: HIDDEN_STATUSES } }
+        : { creatorId, titleId: null, normalizedTitle, status: { notIn: HIDDEN_STATUSES } },
       select: RECOMMENDATION_FIELDS,
     });
     // Design §5: a resubmit returns the existing entry and invites an upvote rather than
@@ -135,7 +149,14 @@ export class RecommendationsService {
     }
 
     try {
-      return await this.create(creatorId, userId, dto, normalizedTitle);
+      return await this.create(
+        creatorId,
+        userId,
+        dto,
+        displayTitle,
+        normalizedTitle,
+        title?.id ?? null,
+      );
     } catch (error) {
       // Two patrons submitting the same title concurrently both miss the read above; the unique
       // index is what actually enforces de-duplication, and the loser resolves to the winner's
@@ -143,7 +164,9 @@ export class RecommendationsService {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         await this.refund(perCreatorKey, globalKey);
         const winner = await this.prisma.recommendation.findFirstOrThrow({
-          where: { creatorId, normalizedTitle },
+          where: title
+            ? { creatorId, titleId: title.id, type: dto.type }
+            : { creatorId, titleId: null, normalizedTitle },
           select: RECOMMENDATION_FIELDS,
         });
         return { duplicate: true as const, recommendation: await this.withUpvoted(winner, userId) };
@@ -165,19 +188,58 @@ export class RecommendationsService {
     await Promise.all(keys.map((key) => this.limits.refund(key)));
   }
 
+  /**
+   * Confirms a mainstream submission against the catalogue and persists the canonical title, so
+   * the stored name is TMDB's rather than whatever the client typed. Returns null for external
+   * links, which have no canonical identity.
+   */
+  private async resolveTitle(dto: SubmitRecommendationDto) {
+    if (dto.type === 'EXTERNAL_LINK') {
+      // Whitelisting keeps declared properties, so without this a client could attach a binding
+      // that never passed the catalogue check.
+      if (dto.tmdbId !== undefined) {
+        throw new BadRequestException('An external link cannot carry a catalogue id');
+      }
+      return null;
+    }
+    const mediaType = dto.type === 'SHOW' ? 'TV' : 'MOVIE';
+    const result = await this.catalog.fetchTitle(dto.tmdbId as number, mediaType);
+    // An id the catalogue does not know is a client mistake; writing it would create an entry
+    // nothing can ever resolve.
+    if (!result) throw new BadRequestException('Unknown title');
+
+    return this.prisma.title.upsert({
+      where: { tmdbId_mediaType: { tmdbId: result.tmdbId, mediaType } },
+      create: {
+        tmdbId: result.tmdbId,
+        mediaType,
+        name: result.name,
+        year: result.year,
+        posterPath: result.posterPath,
+        overview: result.overview,
+      },
+      // Refreshed on each binding: posters and overviews change upstream.
+      update: { name: result.name, year: result.year, posterPath: result.posterPath },
+      select: { id: true, name: true },
+    });
+  }
+
   private async create(
     creatorId: string,
     userId: string,
     dto: SubmitRecommendationDto,
+    displayTitle: string,
     normalizedTitle: string,
+    titleId: string | null,
   ) {
     const recommendation = await this.prisma.recommendation.create({
       data: {
         creatorId,
         submittedByUserId: userId,
         type: dto.type,
-        customTitle: dto.customTitle,
+        customTitle: displayTitle,
         normalizedTitle,
+        titleId,
         description: dto.description ?? null,
         links: dto.links
           ? { create: dto.links.map((l) => ({ url: l.url, label: l.label })) }

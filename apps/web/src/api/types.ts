@@ -17,6 +17,23 @@ export interface RecommendationLink {
   label: string | null;
 }
 
+export interface TitleSummary {
+  tmdbId: number;
+  mediaType: 'MOVIE' | 'TV';
+  name: string;
+  year: number | null;
+  posterPath: string | null;
+}
+
+export interface CatalogResult {
+  tmdbId: number;
+  mediaType: 'MOVIE' | 'TV';
+  name: string;
+  year: number | null;
+  posterPath: string | null;
+  overview: string | null;
+}
+
 export interface Recommendation {
   id: string;
   type: string;
@@ -26,6 +43,8 @@ export interface Recommendation {
   upvoteCount: number;
   /** Whether the current viewer upvoted this. False for anonymous readers. */
   hasUpvoted: boolean;
+  /** Present when the entry is bound to a catalogue title. */
+  title: TitleSummary | null;
   createdAt: string;
   links: RecommendationLink[];
   submittedBy: { id: string; fullName: string | null; avatarUrl: string | null };

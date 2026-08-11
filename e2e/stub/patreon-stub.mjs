@@ -19,6 +19,26 @@ let identity = {
 };
 let memberships = [];
 let campaigns = [];
+// TMDB stand-in. Same process because it is the same kind of thing — a third party the API and
+// the browser both talk to — and one container is easier to reason about than two.
+let catalog = [
+  {
+    id: 129,
+    media_type: 'movie',
+    title: 'Spirited Away',
+    release_date: '2001-07-20',
+    poster_path: '/spirited.jpg',
+    overview: 'A girl wanders into a world of spirits.',
+  },
+  {
+    id: 8392,
+    media_type: 'movie',
+    title: 'My Neighbor Totoro',
+    release_date: '1988-04-16',
+    poster_path: '/totoro.jpg',
+    overview: 'Two sisters meet a forest spirit.',
+  },
+];
 
 function json(res, body, status = 200) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -40,6 +60,7 @@ const server = createServer(async (req, res) => {
     if (body.identity) identity = { ...identity, ...body.identity };
     if (body.memberships) memberships = body.memberships;
     if (body.campaigns) campaigns = body.campaigns;
+    if (body.catalog) catalog = body.catalog;
     return json(res, { ok: true });
   }
 
@@ -102,6 +123,21 @@ const server = createServer(async (req, res) => {
         })),
       ),
     });
+  }
+
+  // TMDB routes.
+  if (url.pathname === '/3/search/multi') {
+    const query = (url.searchParams.get('query') ?? '').toLowerCase();
+    return json(res, {
+      results: catalog.filter((item) => (item.title ?? item.name ?? '').toLowerCase().includes(query)),
+    });
+  }
+
+  const detail = url.pathname.match(/^\/3\/(movie|tv)\/(\d+)$/);
+  if (detail) {
+    const wanted = detail[1] === 'tv' ? 'tv' : 'movie';
+    const item = catalog.find((c) => c.id === Number(detail[2]) && c.media_type === wanted);
+    return item ? json(res, item) : json(res, { error: 'not found' }, 404);
   }
 
   json(res, { error: 'not found' }, 404);

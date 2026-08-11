@@ -1,6 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ApiError, api } from '../api/client';
-import type { Recommendation, SubmitResult } from '../api/types';
+import type { CatalogResult, Recommendation, SubmitResult } from '../api/types';
+
+// Long enough that typing a title is one request, not one per keystroke — the endpoint spends a
+// third-party quota.
+const SEARCH_DEBOUNCE_MS = 300;
 
 interface SubmitFormProps {
   slug: string;
@@ -11,18 +15,49 @@ const MAX_TITLE = 200;
 const MAX_DESCRIPTION = 2000;
 
 export function SubmitForm({ slug, onCreated }: SubmitFormProps) {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<CatalogResult[]>([]);
+  const [picked, setPicked] = useState<CatalogResult | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [customTitle, setCustomTitle] = useState('');
   const [description, setDescription] = useState('');
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
+  const searchSeq = useRef(0);
+
+  useEffect(() => {
+    if (picked || query.trim().length < 2) {
+      setResults([]);
+      return;
+    }
+    const seq = ++searchSeq.current;
+    const timer = setTimeout(async () => {
+      try {
+        const response = await api.get<{ results: CatalogResult[] }>(
+          `/creators/${encodeURIComponent(slug)}/catalog/search?q=${encodeURIComponent(query.trim())}`,
+        );
+        // Ignore a response that a later keystroke has superseded, or results flicker backwards.
+        if (seq !== searchSeq.current) return;
+        setResults(response.results);
+        setSearchError(null);
+      } catch {
+        if (seq !== searchSeq.current) return;
+        setResults([]);
+        // Design §5: no match means refine or switch to an external link, not a dead end.
+        setSearchError('Could not search the catalogue. You can still add a link below.');
+      }
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [query, picked, slug]);
+
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
     // Mirrors the DTO's bounds so the common mistake costs no round-trip — a convenience, not a
     // control; the server's 400 is still rendered when it disagrees.
-    if (customTitle.trim().length === 0) {
-      setMessage('Give it a title.');
+    if (!picked && customTitle.trim().length === 0) {
+      setMessage('Search for a title, or give it one yourself.');
       return;
     }
     setBusy(true);
@@ -30,12 +65,19 @@ export function SubmitForm({ slug, onCreated }: SubmitFormProps) {
     try {
       const result = await api.post<SubmitResult>(
         `/creators/${encodeURIComponent(slug)}/recommendations`,
-        {
-          type: 'EXTERNAL_LINK',
-          customTitle: customTitle.trim(),
-          ...(description.trim() ? { description: description.trim() } : {}),
-          ...(url.trim() ? { links: [{ url: url.trim() }] } : {}),
-        },
+        picked
+          ? {
+              // The canonical name comes from the catalogue, so none is sent.
+              type: picked.mediaType === 'TV' ? 'SHOW' : 'MOVIE',
+              tmdbId: picked.tmdbId,
+              ...(description.trim() ? { description: description.trim() } : {}),
+            }
+          : {
+              type: 'EXTERNAL_LINK',
+              customTitle: customTitle.trim(),
+              ...(description.trim() ? { description: description.trim() } : {}),
+              ...(url.trim() ? { links: [{ url: url.trim() }] } : {}),
+            },
       );
       if (result.duplicate) {
         setMessage('That one is already on the board — upvote it instead.');
@@ -46,6 +88,9 @@ export function SubmitForm({ slug, onCreated }: SubmitFormProps) {
       setCustomTitle('');
       setDescription('');
       setUrl('');
+      setQuery('');
+      setPicked(null);
+      setResults([]);
     } catch (err) {
       setMessage(messageFor(err));
     } finally {
@@ -61,8 +106,59 @@ export function SubmitForm({ slug, onCreated }: SubmitFormProps) {
       <h2 className="font-medium">Suggest something</h2>
       <div className="mt-3 space-y-3">
         <div>
+          <label htmlFor="rec-search" className="block text-sm font-medium">
+            Search films and shows
+          </label>
+          {picked ? (
+            <div className="mt-1 flex items-center gap-2">
+              <span className="rounded bg-slate-100 px-2 py-1 text-sm dark:bg-slate-800">
+                {picked.name}
+                {picked.year ? ` (${picked.year})` : ''}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPicked(null)}
+                className="text-sm underline focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+              >
+                Change
+              </button>
+            </div>
+          ) : (
+            <>
+              <input
+                id="rec-search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="e.g. Spirited Away"
+                className="mt-1 w-full rounded border border-slate-300 px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-slate-700 dark:bg-slate-950"
+              />
+              {results.length > 0 ? (
+                <ul className="mt-2 space-y-1">
+                  {results.slice(0, 5).map((result) => (
+                    <li key={`${result.mediaType}-${result.tmdbId}`}>
+                      <button
+                        type="button"
+                        onClick={() => setPicked(result)}
+                        className="w-full rounded px-2 py-1 text-left text-sm hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:hover:bg-slate-800"
+                      >
+                        {result.name}
+                        {result.year ? ` (${result.year})` : ''}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {searchError ? (
+                <p role="status" className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                  {searchError}
+                </p>
+              ) : null}
+            </>
+          )}
+        </div>
+        <div className={picked ? 'hidden' : undefined}>
           <label htmlFor="rec-title" className="block text-sm font-medium">
-            Title
+            …or add something the catalogue does not have
           </label>
           <input
             id="rec-title"
@@ -85,7 +181,7 @@ export function SubmitForm({ slug, onCreated }: SubmitFormProps) {
             className="mt-1 w-full rounded border border-slate-300 px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-slate-700 dark:bg-slate-950"
           />
         </div>
-        <div>
+        <div className={picked ? 'hidden' : undefined}>
           <label htmlFor="rec-url" className="block text-sm font-medium">
             Link <span className="font-normal text-slate-500 dark:text-slate-400">(optional)</span>
           </label>

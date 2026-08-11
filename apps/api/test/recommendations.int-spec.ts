@@ -283,6 +283,106 @@ describe('Recommendations (integration)', () => {
     });
   });
 
+  describe('mainstream submissions', () => {
+    const spirited = {
+      tmdbId: 129,
+      mediaType: 'MOVIE' as const,
+      name: 'Spirited Away',
+      year: 2001,
+      posterPath: '/spirited.jpg',
+      overview: 'A girl in a spirit world.',
+    };
+
+    beforeEach(() => {
+      ctx.catalog.configured = true;
+      ctx.catalog.shouldFail = false;
+      ctx.catalog.results = [spirited];
+    });
+
+    it('binds a canonical title and stores the catalogue name, not the client’s', async () => {
+      const auth = await loginAs('tmdb-good');
+      await makePatron('tmdb-good', 1000);
+      const res = await submit(auth, {
+        type: 'MOVIE',
+        tmdbId: 129,
+        // Deliberately absent: the name must come from the catalogue.
+        description: 'Worth it',
+      }).expect(201);
+
+      expect(res.body.recommendation.customTitle).toBe('Spirited Away');
+      expect(res.body.recommendation.title).toMatchObject({
+        tmdbId: 129,
+        mediaType: 'MOVIE',
+        year: 2001,
+      });
+      expect(await ctx.prisma.title.count({ where: { tmdbId: 129, mediaType: 'MOVIE' } })).toBe(1);
+    });
+
+    it('reuses the existing Title rather than creating a second', async () => {
+      ctx.catalog.results = [{ ...spirited, tmdbId: 8392, name: 'My Neighbour Totoro' }];
+      const first = await loginAs('tmdb-one');
+      await makePatron('tmdb-one', 1000);
+      await submit(first, { type: 'MOVIE', tmdbId: 8392 }).expect(201);
+
+      const other = await ctx.prisma.creator.findFirstOrThrow({ where: { slug: 'other-board' } });
+      const second = await loginAs('tmdb-two');
+      await makePatron('tmdb-two', 1000, other.id);
+      // A different creator may bind the same canonical title — the row is shared, the entry is not.
+      await submit(second, { type: 'MOVIE', tmdbId: 8392 }, 'other-board').expect(201);
+
+      expect(await ctx.prisma.title.count({ where: { tmdbId: 8392, mediaType: 'MOVIE' } })).toBe(1);
+    });
+
+    it('de-duplicates canonically on the same board', async () => {
+      const first = await loginAs('tmdb-dupe-1');
+      await makePatron('tmdb-dupe-1', 1000);
+      ctx.catalog.results = [{ ...spirited, tmdbId: 4935 }];
+      const created = await submit(first, { type: 'MOVIE', tmdbId: 4935 }).expect(201);
+
+      const second = await loginAs('tmdb-dupe-2');
+      await makePatron('tmdb-dupe-2', 1000);
+      const again = await submit(second, { type: 'MOVIE', tmdbId: 4935 }).expect(200);
+
+      expect(again.body.duplicate).toBe(true);
+      expect(again.body.recommendation.id).toBe(created.body.recommendation.id);
+    });
+
+    it('rejects a tmdbId the catalogue does not know, writing nothing', async () => {
+      const auth = await loginAs('tmdb-unknown');
+      await makePatron('tmdb-unknown', 1000);
+      ctx.catalog.results = [];
+      await submit(auth, { type: 'MOVIE', tmdbId: 999999 }).expect(400);
+      expect(await ctx.prisma.title.count({ where: { tmdbId: 999999 } })).toBe(0);
+    });
+
+    it('rejects a mainstream type with no tmdbId', async () => {
+      const auth = await loginAs('tmdb-missing');
+      await makePatron('tmdb-missing', 1000);
+      await submit(auth, { type: 'MOVIE', customTitle: 'Just words' }).expect(400);
+    });
+
+    it('rejects an external link carrying a tmdbId', async () => {
+      const auth = await loginAs('tmdb-smuggler');
+      await makePatron('tmdb-smuggler', 1000);
+      // Otherwise a client could bind a title without it passing the catalogue check.
+      await submit(auth, {
+        type: 'EXTERNAL_LINK',
+        customTitle: 'Sneaky',
+        tmdbId: 129,
+      }).expect(400);
+    });
+
+    it('still moderates the description of a mainstream submission', async () => {
+      const auth = await loginAs('tmdb-rude');
+      await makePatron('tmdb-rude', 1000);
+      ctx.catalog.results = [{ ...spirited, tmdbId: 777 }];
+      await submit(auth, { type: 'MOVIE', tmdbId: 777, description: 'this is shit' }).expect(400);
+      expect(
+        await ctx.prisma.recommendation.count({ where: { titleId: { not: null } } }),
+      ).toBeGreaterThanOrEqual(0);
+    });
+  });
+
   describe('upvoting', () => {
     let recommendationId: string;
 

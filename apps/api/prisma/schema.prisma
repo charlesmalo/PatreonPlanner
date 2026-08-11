@@ -20,6 +20,18 @@ enum ViewVisibility {
   SUBSCRIBERS_ONLY
 }
 
+enum MediaType {
+  MOVIE
+  TV
+}
+
+enum AliasKind {
+  OFFICIAL
+  ROMAJI
+  NATIVE
+  ALTERNATIVE
+}
+
 enum RecommendationType {
   MOVIE
   SHOW
@@ -176,9 +188,11 @@ model Recommendation {
   submittedByUserId String               @db.Uuid
   type              RecommendationType
   customTitle       String
-  // Lowercased, punctuation-stripped form used for de-duplication, so "The Matrix!" and
-  // "the matrix" resolve to the same board entry.
+  // Lowercased, punctuation-stripped form used for de-duplication of EXTERNAL_LINK entries.
+  // TMDB-bound entries de-duplicate on titleId instead — see the partial unique indexes.
   normalizedTitle   String
+  // Set when the entry is bound to a canonical catalogue title.
+  titleId           String?              @db.Uuid
   description       String?
   notes             String?
   status            RecommendationStatus @default(PENDING)
@@ -189,6 +203,7 @@ model Recommendation {
 
   creator     Creator              @relation(fields: [creatorId], references: [id], onDelete: Cascade)
   submittedBy User                 @relation(fields: [submittedByUserId], references: [id], onDelete: Cascade)
+  title       Title?               @relation(fields: [titleId], references: [id])
   links       RecommendationLink[]
   upvotes     Upvote[]
 
@@ -226,4 +241,36 @@ model Upvote {
   // Design §5: one upvote per person per entry.
   @@unique([recommendationId, userId])
   @@index([userId])
+}
+
+model Title {
+  id         String    @id @default(uuid()) @db.Uuid
+  tmdbId     Int
+  mediaType  MediaType
+  name       String
+  year       Int?
+  posterPath String?
+  overview   String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  aliases         TitleAlias[]
+  recommendations Recommendation[]
+
+  // TMDB ids are only unique within a media type: film 123 and series 123 are different works.
+  @@unique([tmdbId, mediaType])
+}
+
+model TitleAlias {
+  id        String    @id @default(uuid()) @db.Uuid
+  titleId   String    @db.Uuid
+  language  String
+  kind      AliasKind
+  text      String
+  createdAt DateTime  @default(now())
+
+  title Title @relation(fields: [titleId], references: [id], onDelete: Cascade)
+
+  @@unique([titleId, language, kind, text])
+  @@index([titleId])
 }

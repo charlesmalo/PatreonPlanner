@@ -1,5 +1,8 @@
 import type { Recommendation } from '../api/types';
 
+// Built here rather than stored, so the image size can change without a migration.
+const POSTER_BASE = 'https://image.tmdb.org/t/p/w92';
+
 /**
  * The API restricts link URLs to http(s) at submit time. This repeats the check at the one place
  * attacker input becomes an attribute, so a future API regression is not immediately exploitable
@@ -39,9 +42,28 @@ export function RecommendationCard({
         canUpvote={canUpvote}
         onCount={onCount}
       />
+      {recommendation.title?.posterPath ? (
+        <img
+          src={`${POSTER_BASE}${recommendation.title.posterPath}`}
+          // Explicit dimensions and lazy loading: a board is a long list of images, and without
+          // them each one shifts the layout as it arrives.
+          width={46}
+          height={69}
+          loading="lazy"
+          alt={`Poster for ${recommendation.title.name}`}
+          className="h-[69px] w-[46px] shrink-0 rounded object-cover"
+        />
+      ) : null}
       <div className="min-w-0 flex-1">
         {/* Rendered as text, never as HTML: every field here is submitter-controlled. */}
-        <h3 className="font-medium break-words">{recommendation.customTitle}</h3>
+        <h3 className="font-medium break-words">
+          {recommendation.customTitle}
+          {recommendation.title?.year ? (
+            <span className="ml-2 font-normal text-slate-500 dark:text-slate-400">
+              ({recommendation.title.year})
+            </span>
+          ) : null}
+        </h3>
         {recommendation.description ? (
           <p className="mt-1 whitespace-pre-line break-words text-sm text-slate-600 dark:text-slate-300">
             {recommendation.description}

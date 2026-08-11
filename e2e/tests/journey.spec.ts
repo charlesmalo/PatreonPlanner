@@ -20,9 +20,13 @@ test.beforeEach(() => {
   resetRateLimits();
 });
 
-async function signIn(page: import('@playwright/test').Page, patronCents?: number) {
+async function signIn(
+  page: import('@playwright/test').Page,
+  patronCents?: number,
+  patreonUserId = 'patreon-user-e2e',
+) {
   await setPatreonIdentity({
-    id: 'patreon-user-e2e',
+    id: patreonUserId,
     fullName: 'Ada Lovelace',
     memberships: patronCents
       ? [
@@ -73,7 +77,7 @@ test('a patron can sign in, suggest, upvote and sign out', async ({ page }) => {
   const form = page.getByRole('heading', { name: /suggest something/i });
   await expect(form).toBeVisible();
 
-  await page.getByLabel('Title').fill('Spirited Away');
+  await page.getByLabel(/catalogue does not have/i).fill('Spirited Away');
   await page.getByLabel(/why\?/i).fill('A classic worth revisiting.');
   await page.getByRole('button', { name: 'Suggest', exact: true }).click();
   await expect(page.getByText(/pending review/i)).toBeVisible();
@@ -110,11 +114,11 @@ test('a duplicate suggestion is offered for upvote rather than added twice', asy
   await signIn(page, 500);
   await page.goto(`/c/${CREATOR.slug}`);
 
-  await page.getByLabel('Title').fill('Akira');
+  await page.getByLabel(/catalogue does not have/i).fill('Akira');
   await page.getByRole('button', { name: 'Suggest', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Akira' })).toBeVisible();
 
-  await page.getByLabel('Title').fill('akira!');
+  await page.getByLabel(/catalogue does not have/i).fill('akira!');
   await page.getByRole('button', { name: 'Suggest', exact: true }).click();
   await expect(page.getByText(/already on the board/i)).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Akira' })).toHaveCount(1);
@@ -125,21 +129,66 @@ test('a non-Latin title survives the round trip', async ({ page }) => {
   await page.goto(`/c/${CREATOR.slug}`);
 
   // The de-duplication key used to collapse every non-Latin title to the same value.
-  await page.getByLabel('Title').fill('君の名は。');
+  await page.getByLabel(/catalogue does not have/i).fill('君の名は。');
   await page.getByRole('button', { name: 'Suggest', exact: true }).click();
   await expect(page.getByRole('heading', { name: '君の名は。' })).toBeVisible();
 
-  await page.getByLabel('Title').fill('기생충');
+  await page.getByLabel(/catalogue does not have/i).fill('기생충');
   await page.getByRole('button', { name: 'Suggest', exact: true }).click();
   await expect(page.getByRole('heading', { name: '기생충' })).toBeVisible();
   await expect(page.getByText(/already on the board/i)).toBeHidden();
+});
+
+test('a patron can search the catalogue and suggest a canonical title', async ({ page }) => {
+  await signIn(page, 500);
+  await page.goto(`/c/${CREATOR.slug}`);
+
+  await page.getByLabel(/search films and shows/i).fill('spirited');
+  await page.getByRole('button', { name: /spirited away \(2001\)/i }).click();
+  await page.getByRole('button', { name: 'Suggest', exact: true }).click();
+
+  // The name and year come from the catalogue, not from anything typed.
+  await expect(page.getByRole('heading', { name: /Spirited Away/ })).toBeVisible();
+  await expect(page.getByText('(2001)')).toBeVisible();
+});
+
+test('a second patron suggesting the same title is told it is already there', async ({ page }) => {
+  await signIn(page, 500);
+  await page.goto(`/c/${CREATOR.slug}`);
+  await page.getByLabel(/search films and shows/i).fill('totoro');
+  await page.getByRole('button', { name: /totoro \(1988\)/i }).click();
+  await page.getByRole('button', { name: 'Suggest', exact: true }).click();
+  await expect(page.getByRole('heading', { name: /Totoro/ })).toBeVisible();
+
+  // A different person, the same canonical title: de-duplicated on titleId, not on spelling.
+  await setPatreonIdentity({
+    id: 'patreon-user-e2e-2',
+    fullName: 'Grace Hopper',
+    memberships: [
+      {
+        campaignId: CREATOR.campaignId,
+        amountCents: 500,
+        isActivePatron: true,
+        tierIds: ['tier-e2e'],
+      },
+    ],
+  });
+  await page.context().clearCookies();
+  await signIn(page, 500);
+  await page.goto(`/c/${CREATOR.slug}`);
+  await page.getByLabel(/search films and shows/i).fill('totoro');
+  await page.getByRole('button', { name: /totoro/i }).click();
+  await page.getByRole('button', { name: 'Suggest', exact: true }).click();
+
+  await expect(page.getByText(/already on the board/i)).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Totoro/ })).toHaveCount(1);
 });
 
 test('a submitted title containing markup is shown as text', async ({ page }) => {
   await signIn(page, 500);
   await page.goto(`/c/${CREATOR.slug}`);
 
-  await page.getByLabel('Title').fill('<img src=x onerror=alert(1)>');
+  await page.getByLabel(/catalogue does not have/i).fill('<img src=x onerror=alert(1)>');
   await page.getByRole('button', { name: 'Suggest', exact: true }).click();
 
   await expect(page.getByRole('heading', { name: '<img src=x onerror=alert(1)>' })).toBeVisible();
