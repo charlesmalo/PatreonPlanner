@@ -20,6 +20,23 @@ enum ViewVisibility {
   SUBSCRIBERS_ONLY
 }
 
+enum RecommendationType {
+  MOVIE
+  SHOW
+  FRANCHISE
+  WATCH_ORDER
+  EXTERNAL_LINK
+}
+
+enum RecommendationStatus {
+  PENDING
+  ACCEPTED
+  ACTIVE
+  COMPLETED
+  REJECTED
+  DELETED
+}
+
 model User {
   id                     String    @id @default(uuid()) @db.Uuid
   patreonUserId          String    @unique
@@ -35,10 +52,12 @@ model User {
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
-  ownedCreators Creator[]      @relation("CreatorOwner")
-  memberships   Membership[]
-  staffRoles    CreatorStaff[] @relation("StaffMember")
-  staffAssigned CreatorStaff[] @relation("StaffAssigner")
+  ownedCreators   Creator[]        @relation("CreatorOwner")
+  memberships     Membership[]
+  staffRoles      CreatorStaff[]   @relation("StaffMember")
+  staffAssigned   CreatorStaff[]   @relation("StaffAssigner")
+  recommendations Recommendation[]
+  upvotes         Upvote[]
 }
 
 model Creator {
@@ -58,11 +77,12 @@ model Creator {
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
-  owner       User           @relation("CreatorOwner", fields: [ownerUserId], references: [id])
-  tiers       Tier[]
-  memberships Membership[]
-  staff       CreatorStaff[]
-  policy      CreatorPolicy?
+  owner           User             @relation("CreatorOwner", fields: [ownerUserId], references: [id])
+  tiers           Tier[]
+  memberships     Membership[]
+  staff           CreatorStaff[]
+  policy          CreatorPolicy?
+  recommendations Recommendation[]
 
   // Postgres does not index foreign keys automatically, and the cascade from Creator scans them.
   @@index([ownerUserId])
@@ -148,4 +168,58 @@ model CreatorPolicy {
 
   @@index([submitMinTierId])
   @@index([upvoteMinTierId])
+}
+
+model Recommendation {
+  id                String               @id @default(uuid()) @db.Uuid
+  creatorId         String               @db.Uuid
+  submittedByUserId String               @db.Uuid
+  type              RecommendationType
+  customTitle       String
+  // Lowercased, punctuation-stripped form used for de-duplication, so "The Matrix!" and
+  // "the matrix" resolve to the same board entry.
+  normalizedTitle   String
+  description       String?
+  notes             String?
+  status            RecommendationStatus @default(PENDING)
+  // Denormalized so the board does not count rows per entry on every read (design §5).
+  upvoteCount       Int                  @default(0)
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  creator     Creator              @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  submittedBy User                 @relation(fields: [submittedByUserId], references: [id], onDelete: Cascade)
+  links       RecommendationLink[]
+  upvotes     Upvote[]
+
+  // Serves the board's ordering and the keyset cursor.
+  @@index([creatorId, status, upvoteCount])
+  @@index([creatorId, normalizedTitle])
+  @@index([submittedByUserId])
+}
+
+model RecommendationLink {
+  id               String   @id @default(uuid()) @db.Uuid
+  recommendationId String   @db.Uuid
+  url              String
+  label            String?
+  createdAt        DateTime @default(now())
+
+  recommendation Recommendation @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
+
+  @@index([recommendationId])
+}
+
+model Upvote {
+  id               String   @id @default(uuid()) @db.Uuid
+  recommendationId String   @db.Uuid
+  userId           String   @db.Uuid
+  createdAt        DateTime @default(now())
+
+  recommendation Recommendation @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Design §5: one upvote per person per entry.
+  @@unique([recommendationId, userId])
+  @@index([userId])
 }

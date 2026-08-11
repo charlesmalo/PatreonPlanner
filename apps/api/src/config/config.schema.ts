@@ -28,6 +28,7 @@ export const configSchema = z.object({
     .default(60 * 60 * 24 * 14),
   WEB_ORIGIN: z.string().url().default('http://localhost:5173'),
 
+  SUBMIT_LIMIT_PER_HOUR: z.coerce.number().int().positive().default(1),
   MEMBERSHIP_TTL_HOURS: z.coerce.number().int().positive().default(24),
   // Disabled in tests, where a scheduler firing mid-assertion is pure flake.
   JOBS_ENABLED: z
