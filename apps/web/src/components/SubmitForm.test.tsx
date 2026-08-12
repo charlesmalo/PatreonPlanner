@@ -131,3 +131,137 @@ describe('SubmitForm', () => {
     expect(await screen.findByText(expected)).toBeInTheDocument();
   });
 });
+
+describe('SubmitForm content classes', () => {
+  const originalFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  function renderForm(onCreated = vi.fn()) {
+    render(<SubmitForm slug="ada-writes" onCreated={onCreated} />);
+  }
+
+  it('submits a picked collection as a franchise', async () => {
+    // The catalogue now returns collections; mapping mediaType straight to MOVIE would post a
+    // film id as a film and bind the wrong row.
+    const fetchMock = fakeApi({
+      'GET /api/v1/creators/ada-writes/catalog/search': {
+        results: [
+          {
+            tmdbId: 10,
+            mediaType: 'COLLECTION',
+            name: 'Star Wars Collection',
+            year: null,
+            posterPath: null,
+            overview: null,
+          },
+        ],
+      },
+      'POST /api/v1/creators/ada-writes/recommendations': {
+        duplicate: false,
+        recommendation: recommendation(),
+      },
+    });
+    global.fetch = fetchMock;
+    renderForm();
+    await userEvent.type(screen.getByLabelText(/search films and shows/i), 'star wars');
+    await userEvent.click(await screen.findByRole('button', { name: /star wars collection/i }));
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest' }));
+
+    const posted = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST');
+    expect(JSON.parse(String(posted?.[1]?.body))).toMatchObject({
+      type: 'FRANCHISE',
+      tmdbId: 10,
+    });
+  });
+
+  it('submits a watch order with its steps in order', async () => {
+    const fetchMock = fakeApi({
+      'POST /api/v1/creators/ada-writes/recommendations': {
+        duplicate: false,
+        recommendation: recommendation(),
+      },
+    });
+    global.fetch = fetchMock;
+    renderForm();
+
+    await userEvent.click(screen.getByRole('radio', { name: /watch order/i }));
+    await userEvent.type(screen.getByLabelText(/what to call it/i), 'Chronological Star Wars');
+    await userEvent.click(screen.getByRole('button', { name: /add a step/i }));
+    await userEvent.type(screen.getByLabelText('Step 1 title'), 'The Phantom Menace');
+    await userEvent.click(screen.getByRole('button', { name: /add a step/i }));
+    await userEvent.type(screen.getByLabelText('Step 2 title'), 'Attack of the Clones');
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest' }));
+
+    const posted = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST');
+    expect(JSON.parse(String(posted?.[1]?.body))).toEqual({
+      type: 'WATCH_ORDER',
+      customTitle: 'Chronological Star Wars',
+      items: [{ customTitle: 'The Phantom Menace' }, { customTitle: 'Attack of the Clones' }],
+    });
+  });
+
+  it('blocks a watch order with no steps without a request', async () => {
+    const fetchMock = fakeApi({});
+    global.fetch = fetchMock;
+    renderForm();
+    await userEvent.click(screen.getByRole('radio', { name: /watch order/i }));
+    await userEvent.type(screen.getByLabelText(/what to call it/i), 'Empty');
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent(/at least one step/i);
+    expect(fetchMock.mock.calls.filter(([, i]) => i?.method === 'POST')).toHaveLength(0);
+  });
+
+  it('drops a blank step rather than sending it', async () => {
+    const fetchMock = fakeApi({
+      'POST /api/v1/creators/ada-writes/recommendations': {
+        duplicate: false,
+        recommendation: recommendation(),
+      },
+    });
+    global.fetch = fetchMock;
+    renderForm();
+    await userEvent.click(screen.getByRole('radio', { name: /watch order/i }));
+    await userEvent.type(screen.getByLabelText(/what to call it/i), 'Order');
+    await userEvent.click(screen.getByRole('button', { name: /add a step/i }));
+    await userEvent.type(screen.getByLabelText('Step 1 title'), 'One');
+    // A second, untouched step is the natural result of clicking "Add a step" once too often.
+    await userEvent.click(screen.getByRole('button', { name: /add a step/i }));
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest' }));
+
+    const posted = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST');
+    expect(JSON.parse(String(posted?.[1]?.body)).items).toEqual([{ customTitle: 'One' }]);
+  });
+
+  it('hides the catalogue search and the link field in watch-order mode', async () => {
+    // The search picks a single work, and a watch order has no single work; the link field is
+    // never sent for one, so leaving it visible silently drops whatever is typed there.
+    renderForm();
+    expect(screen.getByLabelText(/search films and shows/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('radio', { name: /watch order/i }));
+    // Unmounted rather than class-hidden: jsdom applies no stylesheet, so a `hidden` class here
+    // would make the assertion meaningless.
+    expect(screen.queryByLabelText(/search films and shows/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/link/i)).not.toBeInTheDocument();
+  });
+
+  it('refuses more than fifty steps without a request', async () => {
+    const fetchMock = fakeApi({});
+    global.fetch = fetchMock;
+    renderForm();
+    await userEvent.click(screen.getByRole('radio', { name: /watch order/i }));
+    await userEvent.type(screen.getByLabelText(/what to call it/i), 'Long');
+    // Faster than clicking "Add a step" fifty-one times, and the assertion is about the cap.
+    for (let i = 0; i < 51; i += 1) {
+      await userEvent.click(screen.getByRole('button', { name: /add a step/i }));
+    }
+    const inputs = screen.getAllByPlaceholderText('What to watch');
+    for (const input of inputs) await userEvent.type(input, 'x');
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent(/fifty steps/i);
+    expect(fetchMock.mock.calls.filter(([, i]) => i?.method === 'POST')).toHaveLength(0);
+  }, 30_000);
+});

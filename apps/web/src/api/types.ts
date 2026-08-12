@@ -18,8 +18,10 @@ export interface RecommendationLink {
 }
 
 export interface TitleSummary {
+  /** The catalogue row's id — what the availability endpoint keys on. */
+  id: string;
   tmdbId: number;
-  mediaType: 'MOVIE' | 'TV';
+  mediaType: 'MOVIE' | 'TV' | 'COLLECTION';
   name: string;
   year: number | null;
   posterPath: string | null;
@@ -27,7 +29,7 @@ export interface TitleSummary {
 
 export interface CatalogResult {
   tmdbId: number;
-  mediaType: 'MOVIE' | 'TV';
+  mediaType: 'MOVIE' | 'TV' | 'COLLECTION';
   name: string;
   year: number | null;
   posterPath: string | null;
@@ -50,6 +52,13 @@ export interface Availability {
   offers: AvailabilityOffer[];
 }
 
+export interface WatchOrderItem {
+  position: number;
+  customTitle: string | null;
+  note: string | null;
+  title: TitleSummary | null;
+}
+
 export interface Recommendation {
   id: string;
   type: string;
@@ -64,6 +73,8 @@ export interface Recommendation {
   createdAt: string;
   /** Null for an external link, and until the first background refresh lands. */
   availability: Availability | null;
+  /** Empty for every type but WATCH_ORDER. */
+  watchOrderItems: WatchOrderItem[];
   links: RecommendationLink[];
   submittedBy: { id: string; fullName: string | null; avatarUrl: string | null };
 }
@@ -113,4 +124,6 @@ export interface ReviewQueueItem {
   submittedBy: { id: string; fullName: string | null; avatarUrl: string | null };
   openFlagCount: number;
   flags: FlagSummary[];
+  /** A watch order's text is mostly in its steps; a queue without them reviews only a title. */
+  watchOrderItems: WatchOrderItem[];
 }

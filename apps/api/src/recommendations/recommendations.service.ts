@@ -6,7 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, RecommendationStatus } from '@prisma/client';
+import { MediaType, Prisma, RecommendationStatus } from '@prisma/client';
 import { AvailabilityService, StoredAvailability } from '../availability/availability.service';
 import { CatalogService } from '../catalog/catalog.service';
 import { ConfigService } from '../config/config.module';
@@ -18,6 +18,13 @@ import { PATRON_VISIBLE_STATUSES } from '../moderation/transitions';
 import { normalizeTitle } from './normalize-title';
 
 const MAX_PAGE = 50;
+
+/** Which canonical media type each binding content class resolves against. */
+const MEDIA_TYPES: Record<'MOVIE' | 'SHOW' | 'FRANCHISE', MediaType> = {
+  MOVIE: 'MOVIE',
+  SHOW: 'TV',
+  FRANCHISE: 'COLLECTION',
+};
 // Not writable. DELETED is a soft delete and REJECTED a moderation outcome; neither may be
 // upvoted, whatever the read model shows a moderator.
 const HIDDEN_STATUSES: RecommendationStatus[] = ['DELETED', 'REJECTED'];
@@ -89,6 +96,24 @@ const RECOMMENDATION_FIELDS = {
     select: { id: true, tmdbId: true, mediaType: true, name: true, year: true, posterPath: true },
   },
   links: { select: { url: true, label: true } },
+  watchOrderItems: {
+    select: {
+      position: true,
+      customTitle: true,
+      note: true,
+      title: {
+        select: {
+          id: true,
+          tmdbId: true,
+          mediaType: true,
+          name: true,
+          year: true,
+          posterPath: true,
+        },
+      },
+    },
+    orderBy: { position: 'asc' },
+  },
   submittedBy: { select: { id: true, fullName: true, avatarUrl: true } },
 } satisfies Prisma.RecommendationSelect;
 
@@ -138,6 +163,8 @@ export class RecommendationsService {
       dto.customTitle,
       dto.description,
       ...(dto.links?.flatMap((link) => [link.label, link.url]) ?? []),
+      // Item text is exactly where a submitter would route around a title-only check.
+      ...(dto.items?.flatMap((item) => [item.customTitle, item.note]) ?? []),
     ]);
     if (moderation.verdict === 'BLOCK') {
       // Generic to the caller, specific in the log: design §9 wants no probing of the rules.
@@ -148,6 +175,11 @@ export class RecommendationsService {
     // Resolved after moderation, for the same reason de-dupe is: a blocked submission must not
     // be able to probe the catalogue or spend its quota.
     const title = await this.resolveTitle(dto);
+    // Resolved here rather than inside create(), for two reasons. A duplicate must not skip item
+    // validation — the same body was a 400 with a fresh name and a 200 with a taken one. And the
+    // Title upserts these do must sit outside the P2002 catch below, which reads any unique
+    // violation as "someone won the de-dupe race".
+    const items = await this.resolveItems(dto);
 
     // De-dupe after moderation, so a blocked resubmission cannot be used to confirm what
     // already exists on a board the sender cannot read.
@@ -161,7 +193,15 @@ export class RecommendationsService {
     const existing = await this.prisma.recommendation.findFirst({
       where: title
         ? { creatorId, titleId: title.id, type: dto.type, status: { notIn: HIDDEN_STATUSES } }
-        : { creatorId, titleId: null, normalizedTitle, status: { notIn: HIDDEN_STATUSES } },
+        : {
+            creatorId,
+            titleId: null,
+            normalizedTitle,
+            // Scoped by type, matching the partial index: a watch order and an external link
+            // that happen to share a name are different suggestions.
+            type: dto.type,
+            status: { notIn: HIDDEN_STATUSES },
+          },
       select: RECOMMENDATION_FIELDS,
     });
     // Design §5: a resubmit returns the existing entry and invites an upvote rather than
@@ -181,19 +221,23 @@ export class RecommendationsService {
         displayTitle,
         normalizedTitle,
         title?.id ?? null,
+        items,
       );
     } catch (error) {
       // Two patrons submitting the same title concurrently both miss the read above; the unique
       // index is what actually enforces de-duplication, and the loser resolves to the winner's
       // row rather than erroring.
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        await this.refund(perCreatorKey, globalKey);
-        const winner = await this.prisma.recommendation.findFirstOrThrow({
+        const winner = await this.prisma.recommendation.findFirst({
           where: title
             ? { creatorId, titleId: title.id, type: dto.type }
-            : { creatorId, titleId: null, normalizedTitle },
+            : { creatorId, titleId: null, normalizedTitle, type: dto.type },
           select: RECOMMENDATION_FIELDS,
         });
+        // No winner means the violation came from somewhere else — a Title upsert, say — and
+        // reporting it as a duplicate would refund the limit and lose the submission.
+        if (!winner) throw error;
+        await this.refund(perCreatorKey, globalKey);
         return { duplicate: true as const, recommendation: await this.withUpvoted(winner, userId) };
       }
       throw error;
@@ -219,15 +263,26 @@ export class RecommendationsService {
    * links, which have no canonical identity.
    */
   private async resolveTitle(dto: SubmitRecommendationDto) {
-    if (dto.type === 'EXTERNAL_LINK') {
+    // Items belong to a watch order and nothing else; accepting them elsewhere would store rows
+    // no read model ever surfaces.
+    if (dto.type !== 'WATCH_ORDER' && dto.items !== undefined) {
+      throw new BadRequestException('Only a watch order can carry items');
+    }
+    if (dto.type === 'EXTERNAL_LINK' || dto.type === 'WATCH_ORDER') {
       // Whitelisting keeps declared properties, so without this a client could attach a binding
       // that never passed the catalogue check.
       if (dto.tmdbId !== undefined) {
-        throw new BadRequestException('An external link cannot carry a catalogue id');
+        throw new BadRequestException('This type cannot carry a catalogue id');
       }
       return null;
     }
-    const mediaType = dto.type === 'SHOW' ? 'TV' : 'MOVIE';
+    // The canonical name wins, so a supplied one is never used — and silently ignoring it lets a
+    // submitter believe they named the entry. Symmetrical with the id check above.
+    if (dto.customTitle !== undefined) {
+      throw new BadRequestException('A catalogue-bound entry takes its title from the catalogue');
+    }
+    // A franchise is a TMDB collection: another canonical identity, so it reuses Title wholesale.
+    const mediaType = MEDIA_TYPES[dto.type];
     const result = await this.catalog.fetchTitle(dto.tmdbId as number, mediaType);
     // An id the catalogue does not know is a client mistake; writing it would create an entry
     // nothing can ever resolve.
@@ -256,6 +311,7 @@ export class RecommendationsService {
     displayTitle: string,
     normalizedTitle: string,
     titleId: string | null,
+    items: Awaited<ReturnType<RecommendationsService['resolveItems']>>,
   ) {
     const recommendation = await this.prisma.recommendation.create({
       data: {
@@ -269,11 +325,75 @@ export class RecommendationsService {
         links: dto.links
           ? { create: dto.links.map((l) => ({ url: l.url, label: l.label })) }
           : undefined,
+        // Nested create, so the entry and its steps land in one statement — a watch order with
+        // no steps is not a thing that should ever be readable.
+        watchOrderItems: items.length > 0 ? { create: items } : undefined,
       },
       select: RECOMMENDATION_FIELDS,
     });
     // Nothing can have upvoted a recommendation that did not exist a moment ago.
     return { duplicate: false as const, recommendation: { ...recommendation, hasUpvoted: false } };
+  }
+
+  /**
+   * Numbers the steps 0..n-1 from the order they arrived in. A client-supplied position is not
+   * trusted: a duplicated or sparse one renders an order nobody can read, and the unique index
+   * would reject it anyway.
+   */
+  private async resolveItems(dto: SubmitRecommendationDto) {
+    if (dto.type !== 'WATCH_ORDER' || !dto.items) return [];
+
+    const resolved: Array<{
+      position: number;
+      titleId?: string;
+      customTitle?: string;
+      note: string | null;
+    }> = [];
+
+    // Sequential, not Promise.all: fifty steps meant fifty simultaneous TMDB requests and fifty
+    // concurrent upserts, which trips the upstream rate limit and exhausts the connection pool —
+    // and a 429 surfaced to the patron as "Unknown title", blaming them for our fan-out.
+    for (const [position, item] of dto.items.entries()) {
+      const bound = item.tmdbId !== undefined;
+      const titled = (item.customTitle ?? '').trim().length > 0;
+      // Exactly one identity: neither leaves nothing to render, both is ambiguous about which
+      // name is authoritative. The database check constraint enforces the same rule.
+      if (bound === titled) {
+        throw new BadRequestException('Each step needs either a catalogue id or a title');
+      }
+      if (!bound) {
+        resolved.push({
+          position,
+          customTitle: (item.customTitle as string).trim(),
+          note: item.note?.trim() || null,
+        });
+        continue;
+      }
+      // Required alongside tmdbId: TMDB ids are unique only within a media type, so defaulting
+      // it silently bound film 1399 for a caller who meant series 1399.
+      if (!item.mediaType) {
+        throw new BadRequestException('A catalogue step must say whether it is a film or a show');
+      }
+
+      const mediaType: MediaType = item.mediaType === 'SHOW' ? 'TV' : 'MOVIE';
+      const result = await this.catalog.fetchTitle(item.tmdbId as number, mediaType);
+      if (!result) throw new BadRequestException('Unknown title in the watch order');
+      const title = await this.prisma.title.upsert({
+        where: { tmdbId_mediaType: { tmdbId: result.tmdbId, mediaType } },
+        create: {
+          tmdbId: result.tmdbId,
+          mediaType,
+          name: result.name,
+          year: result.year,
+          posterPath: result.posterPath,
+          overview: result.overview,
+        },
+        update: { name: result.name, year: result.year, posterPath: result.posterPath },
+        select: { id: true },
+      });
+      resolved.push({ position, titleId: title.id, note: item.note?.trim() || null });
+    }
+    return resolved;
   }
 
   async toggleUpvote(creatorId: string, recommendationId: string, userId: string) {

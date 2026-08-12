@@ -235,6 +235,17 @@ describe('AvailabilityService (integration)', () => {
     expect(provider.calls).toBe(0);
   });
 
+  it('never asks upstream for a collection, and stores nothing for one', async () => {
+    // TMDB has no watch-providers endpoint for a collection, and ids are unique only within a
+    // media type — so asking anyway returns a different work's offers under the franchise's name.
+    const collection = await prisma.title.create({
+      data: { tmdbId: 10, mediaType: 'COLLECTION', name: 'Star Wars Collection' },
+    });
+    expect(await service.forTitle(collection.id, 'GB')).toBeNull();
+    expect(provider.calls).toBe(0);
+    expect(await prisma.streamingAvailability.count({ where: { titleId: collection.id } })).toBe(0);
+  });
+
   it('rejects a malformed region rather than storing it', async () => {
     // The column is VARCHAR(2); a longer value would be a database error at write time, and a
     // lowercase one would silently miss every row written by the job.

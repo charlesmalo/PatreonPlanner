@@ -47,6 +47,10 @@ export class TmdbAvailabilityProvider implements AvailabilityProvider {
     mediaType: MediaType,
     region: string,
   ): Promise<AvailabilitySnapshot | null> {
+    // TMDB has no watch-providers endpoint for a collection, and the ids are only unique within
+    // a media type — so falling through to /movie/{id} does not fail, it returns a *different
+    // work's* offers and attributes them to the franchise. Skipped, not guessed.
+    if (mediaType === 'COLLECTION') return null;
     const path = mediaType === 'TV' ? 'tv' : 'movie';
     let body: { results?: Record<string, TmdbRegionEntry> };
     try {

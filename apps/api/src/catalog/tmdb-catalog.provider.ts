@@ -4,6 +4,10 @@ import { ConfigService } from '../config/config.module';
 import { CatalogNotConfiguredError, CatalogProvider } from './catalog.provider';
 import { CatalogResult } from './catalog.types';
 
+class TitleNotFound extends Error {}
+
+const PATHS: Record<MediaType, string> = { MOVIE: 'movie', TV: 'tv', COLLECTION: 'collection' };
+
 interface TmdbItem {
   id: number;
   media_type?: string;
@@ -27,27 +31,46 @@ export class TmdbCatalogProvider implements CatalogProvider {
     return Boolean(this.config.get('TMDB_API_KEY'));
   }
 
+  /**
+   * Two upstream calls: `search/multi` does not return collections, so franchises need their own.
+   * One failing degrades the autocomplete rather than emptying it — but both failing throws,
+   * because "nothing found" and "we could not ask" are different answers and the second must not
+   * render as an empty list.
+   */
   async search(query: string): Promise<CatalogResult[]> {
-    const body = await this.get<{ results?: TmdbItem[] }>(
-      `/search/multi?query=${encodeURIComponent(query)}&include_adult=false`,
-    );
-    return (
-      (body.results ?? [])
-        // `person` results share the shape but are not works; keeping them would offer a director
-        // as something to watch.
-        .filter((item) => item.media_type === 'movie' || item.media_type === 'tv')
-        .map((item) => this.toResult(item, item.media_type === 'tv' ? 'TV' : 'MOVIE'))
-    );
+    const encoded = encodeURIComponent(query);
+    const [multi, collections] = await Promise.allSettled([
+      this.get<{ results?: TmdbItem[] }>(`/search/multi?query=${encoded}&include_adult=false`),
+      this.get<{ results?: TmdbItem[] }>(`/search/collection?query=${encoded}&include_adult=false`),
+    ]);
+    if (multi.status === 'rejected' && collections.status === 'rejected') throw multi.reason;
+
+    const works =
+      multi.status === 'fulfilled'
+        ? (multi.value.results ?? [])
+            // `person` results share the shape but are not works; keeping them would offer a
+            // director as something to watch.
+            .filter((item) => item.media_type === 'movie' || item.media_type === 'tv')
+            .map((item) => this.toResult(item, item.media_type === 'tv' ? 'TV' : 'MOVIE'))
+        : [];
+    const groups =
+      collections.status === 'fulfilled'
+        ? (collections.value.results ?? []).map((item) => this.toResult(item, 'COLLECTION'))
+        : [];
+
+    return [...works, ...groups];
   }
 
   async fetchTitle(tmdbId: number, mediaType: MediaType): Promise<CatalogResult | null> {
-    const path = mediaType === 'TV' ? 'tv' : 'movie';
+    const path = PATHS[mediaType];
     try {
       const item = await this.get<TmdbItem>(`/${path}/${tmdbId}`);
       return this.toResult(item, mediaType);
-    } catch {
-      // An id TMDB does not know is a client mistake, not an outage.
-      return null;
+    } catch (error) {
+      // Only a 404 means "no such title". Swallowing everything told a patron their perfectly
+      // valid watch order contained an "Unknown title" when TMDB had merely rate-limited us.
+      if (error instanceof TitleNotFound) return null;
+      throw error;
     }
   }
 
@@ -59,6 +82,7 @@ export class TmdbCatalogProvider implements CatalogProvider {
       headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' },
     });
     if (!response.ok) {
+      if (response.status === 404) throw new TitleNotFound();
       // Status only: the body can echo the query and, on some errors, the key.
       this.logger.warn(`TMDB request failed with status ${response.status}`);
       throw new Error('Catalogue request failed');
@@ -67,7 +91,13 @@ export class TmdbCatalogProvider implements CatalogProvider {
   }
 
   private toResult(item: TmdbItem, mediaType: MediaType): CatalogResult {
-    const date = mediaType === 'TV' ? item.first_air_date : item.release_date;
+    // A collection spans years; picking one from its parts would be a guess, so it has none.
+    const date =
+      mediaType === 'COLLECTION'
+        ? undefined
+        : mediaType === 'TV'
+          ? item.first_air_date
+          : item.release_date;
     const year = Number.parseInt((date ?? '').slice(0, 4), 10);
     return {
       tmdbId: item.id,
