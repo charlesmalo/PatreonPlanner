@@ -96,10 +96,21 @@ export class AvailabilityService {
     return result;
   }
 
-  /** Asks upstream and writes the answer. Used by the refresh job and by a cold single read. */
-  async refresh(titleId: string, region: string): Promise<void> {
+  /** True when a provider is configured at all. The refresh job skips its whole tick without one. */
+  isConfigured(): boolean {
+    return this.provider.isConfigured();
+  }
+
+  /**
+   * Asks upstream and writes the answer. Used by the refresh job and by a cold single read.
+   * Returns whether an answer was actually stored — errors are swallowed here so a background
+   * refresh cannot crash a request, which means the boolean is the only way a caller learns the
+   * lookup failed. Without it the job counted every attempt as a success.
+   */
+  async refresh(titleId: string, region: string): Promise<boolean> {
     this.assertRegion(region);
-    await this.fetchAndStore(titleId, region);
+    if (!this.provider.isConfigured()) return false;
+    return (await this.fetchAndStore(titleId, region)) !== null;
   }
 
   private async fetchAndStore(titleId: string, region: string): Promise<StoredAvailability | null> {
@@ -139,6 +150,7 @@ export class AvailabilityService {
 
   private queueRefresh(titleId: string, region: string): void {
     const task = this.refresh(titleId, region)
+      .then(() => undefined)
       .catch(() => undefined)
       .finally(() => {
         this.refreshes.delete(task);
