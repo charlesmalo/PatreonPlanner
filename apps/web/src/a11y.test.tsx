@@ -40,6 +40,8 @@ describe('accessibility basics', () => {
           slug="s"
           recommendation={recommendation()}
           canUpvote
+          canModerate={false}
+          onStatusChanged={vi.fn()}
           onCount={vi.fn()}
         />
       </ul>,
@@ -56,6 +58,8 @@ describe('accessibility basics', () => {
           slug="s"
           recommendation={recommendation({ upvoteCount: 7 })}
           canUpvote
+          canModerate={false}
+          onStatusChanged={vi.fn()}
           onCount={vi.fn()}
         />
       </ul>,
@@ -73,6 +77,8 @@ describe('accessibility basics', () => {
           slug="s"
           recommendation={recommendation()}
           canUpvote
+          canModerate={false}
+          onStatusChanged={vi.fn()}
           onCount={vi.fn()}
         />
       </ul>,
@@ -91,6 +97,8 @@ describe('accessibility basics', () => {
           slug="s"
           recommendation={recommendation()}
           canUpvote
+          canModerate={false}
+          onStatusChanged={vi.fn()}
           onCount={vi.fn()}
         />
       </ul>,

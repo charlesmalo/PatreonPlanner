@@ -132,3 +132,87 @@ describe('CreatorBoard', () => {
     expect(await screen.findByRole('heading', { name: /suggest something/i })).toBeInTheDocument();
   });
 });
+
+describe('CreatorBoard columns', () => {
+  const originalFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  const moderator = { view: true, upvote: true, submit: true, moderate: true };
+
+  function boardWith(items: unknown[], capabilities: unknown = viewOnly) {
+    global.fetch = fakeApi({
+      'GET /api/v1/creators/ada-writes': creator,
+      'GET /api/v1/creators/ada-writes/capabilities': capabilities,
+      'GET /api/v1/creators/ada-writes/recommendations': { items, nextCursor: null },
+    });
+  }
+
+  it('groups entries under the lifecycle columns', async () => {
+    boardWith([
+      recommendation({ id: 'a', customTitle: 'Pending One', status: 'PENDING' }),
+      recommendation({ id: 'b', customTitle: 'Accepted One', status: 'ACCEPTED' }),
+      recommendation({ id: 'c', customTitle: 'Playing One', status: 'ACTIVE' }),
+      recommendation({ id: 'd', customTitle: 'Done One', status: 'COMPLETED' }),
+    ]);
+    renderBoard();
+
+    expect(await screen.findByRole('heading', { name: 'Suggestions' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Accepted' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Now Playing' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Completed' })).toBeInTheDocument();
+  });
+
+  it('does not render a heading for an empty column', async () => {
+    boardWith([recommendation({ id: 'a', status: 'PENDING' })]);
+    renderBoard();
+    expect(await screen.findByRole('heading', { name: 'Suggestions' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Now Playing' })).not.toBeInTheDocument();
+  });
+
+  it('offers moderator controls only when the viewer moderates', async () => {
+    boardWith([recommendation({ id: 'a', status: 'PENDING' })], moderator);
+    renderBoard();
+    expect(
+      await screen.findByRole('button', { name: /move “Spirited Away”/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /review queue/i })).toBeInTheDocument();
+  });
+
+  it('hides moderator controls from a patron', async () => {
+    boardWith([recommendation({ id: 'a', status: 'PENDING' })], allCapabilities);
+    renderBoard();
+    await screen.findByText('Spirited Away');
+    expect(screen.queryByRole('button', { name: /move “/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /review queue/i })).not.toBeInTheDocument();
+  });
+
+  it('moves a card to its new column when a moderator changes the status', async () => {
+    global.fetch = fakeApi({
+      'GET /api/v1/creators/ada-writes': creator,
+      'GET /api/v1/creators/ada-writes/capabilities': moderator,
+      'GET /api/v1/creators/ada-writes/recommendations': {
+        items: [recommendation({ id: 'a', status: 'PENDING' })],
+        nextCursor: null,
+      },
+      'POST /api/v1/creators/ada-writes/recommendations/a/status': { id: 'a', status: 'ACCEPTED' },
+    });
+    renderBoard();
+    await userEvent.click(await screen.findByRole('button', { name: /move “Spirited Away”/i }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Accepted' }));
+
+    expect(await screen.findByRole('heading', { name: 'Accepted' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Suggestions' })).not.toBeInTheDocument();
+  });
+
+  // Shown to everyone rather than gated on a session the board does not fetch: FlagButton
+  // answers a 401 with "sign in to report", which is more useful than a missing control.
+  it('offers a report control on every card', async () => {
+    boardWith([recommendation({ id: 'a', status: 'PENDING' })], allCapabilities);
+    renderBoard();
+    expect(
+      await screen.findByRole('button', { name: /report “Spirited Away”/i }),
+    ).toBeInTheDocument();
+  });
+});

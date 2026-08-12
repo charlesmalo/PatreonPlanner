@@ -16,20 +16,26 @@ function isSafeHttpUrl(value: string): boolean {
     return false;
   }
 }
+import { FlagButton } from './FlagButton';
+import { StatusControl } from './StatusControl';
 import { UpvoteButton } from './UpvoteButton';
 
 interface RecommendationCardProps {
   slug: string;
   recommendation: Recommendation;
   canUpvote: boolean;
+  canModerate: boolean;
   onCount: (id: string, count: number, upvoted?: boolean) => void;
+  onStatusChanged: (id: string, status: string) => void;
 }
 
 export function RecommendationCard({
   slug,
   recommendation,
   canUpvote,
+  canModerate,
   onCount,
+  onStatusChanged,
 }: RecommendationCardProps) {
   return (
     <li className="flex gap-4 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
@@ -92,6 +98,24 @@ export function RecommendationCard({
         <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
           Suggested by {recommendation.submittedBy.fullName ?? 'a patron'}
         </p>
+        <div className="mt-2 flex flex-wrap items-start gap-3">
+          {/* Offered to every reader: the API answers an anonymous report with a 401, and
+              FlagButton turns that into "sign in to report" — more useful than no control. */}
+          <FlagButton
+            slug={slug}
+            recommendationId={recommendation.id}
+            title={recommendation.customTitle}
+          />
+          {canModerate ? (
+            <StatusControl
+              slug={slug}
+              recommendationId={recommendation.id}
+              title={recommendation.customTitle}
+              status={recommendation.status}
+              onChanged={onStatusChanged}
+            />
+          ) : null}
+        </div>
       </div>
     </li>
   );

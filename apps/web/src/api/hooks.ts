@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError, api } from './client';
-import type { Board, Capabilities, CreatorProfile, SessionUser } from './types';
+import type { Board, Capabilities, CreatorProfile, ReviewQueueItem, SessionUser } from './types';
 
 const NO_CAPABILITIES: Capabilities = {
   view: false,
@@ -82,6 +82,57 @@ export function useCreator(slug: string) {
   return { creator, capabilities, error, loading };
 }
 
+export function useReviewQueue(slug: string) {
+  const [items, setItems] = useState<ReviewQueueItem[]>([]);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const path = `/creators/${encodeURIComponent(slug)}/review-queue`;
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    api
+      .get<{ items: ReviewQueueItem[] }>(path)
+      .then((queue) => {
+        if (!cancelled) setItems(queue.items);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof ApiError ? err : new ApiError(0));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [path]);
+
+  /** Applies a moderator's own change locally rather than refetching the whole queue. */
+  const update = useCallback((id: string, changes: Partial<ReviewQueueItem>) => {
+    setItems((current) => current.map((i) => (i.id === id ? { ...i, ...changes } : i)));
+  }, []);
+
+  const dropFlag = useCallback((recommendationId: string, flagId: string) => {
+    setItems((current) =>
+      current.map((item) =>
+        item.id === recommendationId
+          ? {
+              ...item,
+              flags: item.flags.filter((f) => f.id !== flagId),
+              // Recomputed from the list rather than decremented, so a double click cannot drive
+              // the count below what is actually shown.
+              openFlagCount: item.flags.filter((f) => f.id !== flagId).length,
+            }
+          : item,
+      ),
+    );
+  }, []);
+
+  return { items, loading, error, update, dropFlag };
+}
+
 export function useBoard(slug: string, enabled: boolean) {
   const [items, setItems] = useState<Board['items']>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -152,6 +203,10 @@ export function useBoard(slug: string, enabled: boolean) {
     );
   }, []);
 
+  const applyStatus = useCallback((id: string, status: string) => {
+    setItems((current) => current.map((i) => (i.id === id ? { ...i, status } : i)));
+  }, []);
+
   const prepend = useCallback((item: Board['items'][number]) => {
     setItems((current) => [item, ...current.filter((i) => i.id !== item.id)]);
   }, []);
@@ -167,6 +222,7 @@ export function useBoard(slug: string, enabled: boolean) {
     hasMore: cursor !== null,
     loadMore,
     applyUpvote,
+    applyStatus,
     prepend,
   };
 }
