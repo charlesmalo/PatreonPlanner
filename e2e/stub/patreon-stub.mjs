@@ -133,6 +133,24 @@ const server = createServer(async (req, res) => {
     });
   }
 
+  const providers = url.pathname.match(/^\/3\/(movie|tv)\/(\d+)\/watch\/providers$/);
+  if (providers) {
+    const wanted = providers[1] === 'tv' ? 'tv' : 'movie';
+    const item = catalog.find((c) => c.id === Number(providers[2]) && c.media_type === wanted);
+    if (!item) return json(res, { error: 'not found' }, 404);
+    return json(res, {
+      id: item.id,
+      results: {
+        US: {
+          link: `https://example.invalid/watch/${item.id}`,
+          flatrate: [
+            { provider_id: 8, provider_name: 'Netflix', logo_path: '/n.jpg', display_priority: 1 },
+          ],
+        },
+      },
+    });
+  }
+
   const detail = url.pathname.match(/^\/3\/(movie|tv)\/(\d+)$/);
   if (detail) {
     const wanted = detail[1] === 'tv' ? 'tv' : 'movie';

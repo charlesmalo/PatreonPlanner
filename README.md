@@ -75,6 +75,22 @@ nothing.
 State-changing requests need the `pp_csrf` cookie echoed in an `x-csrf-token` header. The token is
 signed and bound to the session, and is re-minted automatically on any safe request.
 
+## Where to watch
+
+Catalogue-bound entries carry streaming availability from TMDB's watch-provider data, stored per
+`(title, region)` in `StreamingAvailability`.
+
+- `AVAILABILITY_REGION_DEFAULT` (ISO-3166-1 alpha-2, default `US`) is the region the board renders.
+- `AVAILABILITY_TTL_HOURS` (default 24) is how long a stored row is served before it is re-asked.
+- Without `TMDB_API_KEY` the whole feature degrades to no badges. The board still renders.
+
+Reads are **stale-while-revalidate**: a board read returns what is stored and queues a refresh for
+anything missing or expired, so a cold board renders without badges and has them on the next read.
+A background job refreshes the oldest rows on the same tick as the membership sync.
+
+**Attribution.** TMDB sources this data from JustWatch and their terms require naming them wherever
+it appears. `AvailabilityBadges` renders that line; do not remove it.
+
 ## Submission lifecycle
 
 ```
