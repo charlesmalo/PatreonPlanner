@@ -35,8 +35,9 @@ describe('Submission lifecycle (integration)', () => {
     otherCreatorId = other.id;
 
     staff = await loginAs('lc-staff');
-    staffUserId = (await ctx.prisma.user.findUniqueOrThrow({ where: { patreonUserId: 'lc-staff' } }))
-      .id;
+    staffUserId = (
+      await ctx.prisma.user.findUniqueOrThrow({ where: { patreonUserId: 'lc-staff' } })
+    ).id;
     await ctx.prisma.creatorStaff.create({
       data: { creatorId, userId: staffUserId, role: 'MOD' },
     });
@@ -124,9 +125,9 @@ describe('Submission lifecycle (integration)', () => {
   it('refuses an illegal transition with 409 and writes no audit row', async () => {
     const rec = await makeEntry();
     await changeStatus(staff, rec.id, { status: 'COMPLETED' }).expect(409);
-    expect(
-      await ctx.prisma.moderationAction.count({ where: { recommendationId: rec.id } }),
-    ).toBe(0);
+    expect(await ctx.prisma.moderationAction.count({ where: { recommendationId: rec.id } })).toBe(
+      0,
+    );
     const after = await ctx.prisma.recommendation.findUniqueOrThrow({ where: { id: rec.id } });
     expect(after.status).toBe('PENDING');
   });
