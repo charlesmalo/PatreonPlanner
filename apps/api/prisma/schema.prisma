@@ -23,6 +23,9 @@ enum ViewVisibility {
 enum MediaType {
   MOVIE
   TV
+  // A TMDB collection is another kind of canonical identity, so a franchise is a Title like any
+  // other and reuses de-duplication, the catalogue cache and the board projection unchanged.
+  COLLECTION
 }
 
 enum AliasKind {
@@ -239,7 +242,8 @@ model Recommendation {
   creator     Creator              @relation(fields: [creatorId], references: [id], onDelete: Cascade)
   submittedBy User                 @relation(fields: [submittedByUserId], references: [id], onDelete: Cascade)
   title       Title?               @relation(fields: [titleId], references: [id])
-  links       RecommendationLink[]
+  links           RecommendationLink[]
+  watchOrderItems WatchOrderItem[]
   upvotes     Upvote[]
   flags       Flag[]
   actions     ModerationAction[]
@@ -267,6 +271,27 @@ model RecommendationLink {
   recommendation Recommendation @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
 
   @@index([recommendationId])
+}
+
+model WatchOrderItem {
+  id               String   @id @default(uuid()) @db.Uuid
+  recommendationId String   @db.Uuid
+  // Normalised to 0..n-1 on write. A client-supplied position is not trusted: a duplicated or
+  // sparse one renders an order nobody can read.
+  position         Int
+  // Bound to the catalogue when TMDB knows the entry, free text when it does not — "and then the
+  // fan edit" has to be expressible. Exactly one of the two is set.
+  titleId          String?  @db.Uuid
+  customTitle      String?
+  note             String?
+  createdAt        DateTime @default(now())
+
+  recommendation Recommendation @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
+  title          Title?         @relation(fields: [titleId], references: [id])
+
+  @@unique([recommendationId, position])
+  @@index([recommendationId])
+  @@index([titleId])
 }
 
 model Upvote {
@@ -342,6 +367,7 @@ model Title {
   aliases         TitleAlias[]
   recommendations Recommendation[]
   availability    StreamingAvailability[]
+  watchOrderItems WatchOrderItem[]
 
   // TMDB ids are only unique within a media type: film 123 and series 123 are different works.
   @@unique([tmdbId, mediaType])
