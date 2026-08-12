@@ -29,6 +29,8 @@ interface RecommendationCardProps {
   canModerate: boolean;
   onCount: (id: string, count: number, upvoted?: boolean) => void;
   onStatusChanged: (id: string, status: string) => void;
+  /** Entries this one contains — a season under its show, a film under its franchise. */
+  children?: React.ReactNode[];
 }
 
 export function RecommendationCard({
@@ -38,6 +40,7 @@ export function RecommendationCard({
   canModerate,
   onCount,
   onStatusChanged,
+  children,
 }: RecommendationCardProps) {
   return (
     <li className="flex gap-4 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
@@ -102,9 +105,27 @@ export function RecommendationCard({
           availability={recommendation.availability}
           title={recommendation.customTitle}
         />
+        {recommendation.themes.length > 0 ? (
+          <ul className="mt-2 flex flex-wrap gap-1.5">
+            {recommendation.themes.map((theme) => (
+              <li
+                key={theme.id}
+                className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] dark:bg-slate-800"
+              >
+                {/* Text, never markup: theme names are creator-editable. */}
+                {theme.name}
+              </li>
+            ))}
+          </ul>
+        ) : null}
         <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
           Suggested by {recommendation.submittedBy.fullName ?? 'a patron'}
         </p>
+        {children && children.length > 0 ? (
+          <ul className="mt-3 space-y-2 border-l border-slate-200 pl-3 dark:border-slate-700">
+            {children}
+          </ul>
+        ) : null}
         <div className="mt-2 flex flex-wrap items-start gap-3">
           {/* Offered to every reader: the API answers an anonymous report with a 401, and
               FlagButton turns that into "sign in to report" — more useful than no control. */}

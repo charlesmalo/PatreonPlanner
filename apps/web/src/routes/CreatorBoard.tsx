@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { useBoard, useCreator } from '../api/hooks';
+import { useBoard, useCreator, useThemes } from '../api/hooks';
 import type { Recommendation } from '../api/types';
 import { RecommendationCard } from '../components/RecommendationCard';
 import { SubmitForm } from '../components/SubmitForm';
+import { ThemeFilter } from '../components/ThemeFilter';
 
 /**
  * Design §7's patron board: Suggestions, Accepted, Now Playing, Completed. Rejected and Deleted
@@ -19,7 +21,9 @@ const COLUMNS: Array<[string, string]> = [
 export function CreatorBoard() {
   const { slug = '' } = useParams();
   const { creator, capabilities, error, loading } = useCreator(slug);
-  const board = useBoard(slug, !loading && !error);
+  const [theme, setTheme] = useState<string | null>(null);
+  const themes = useThemes(slug, !loading && !error);
+  const board = useBoard(slug, !loading && !error, theme);
 
   if (loading) {
     return <p role="status">Loading board…</p>;
@@ -29,12 +33,18 @@ export function CreatorBoard() {
     return <BoardError status={error.status} />;
   }
 
-  const columns = COLUMNS.map(
-    ([status, label]) =>
-      [status, label, board.items.filter((item) => item.status === status)] as const,
+  // Children are rendered inside their parent, so they must not also appear at the top level.
+  // Only within the same column: columns are the lifecycle, and nesting a pending entry inside
+  // an accepted one would move it out of the column its status says it belongs to.
+  const columns = COLUMNS.map(([status, label]) => {
+    const inColumn = board.items.filter((item) => item.status === status);
+    const ids = new Set(inColumn.map((item) => item.id));
+    const roots = inColumn.filter((item) => !item.parentId || !ids.has(item.parentId));
+    const childrenOf = (id: string) => inColumn.filter((item) => item.parentId === id);
+    return [status, label, roots, childrenOf] as const;
     // An empty column renders nothing at all: four headings over three empty lists reads as a
     // broken page rather than an empty one.
-  ).filter(([, , items]) => items.length > 0);
+  }).filter(([, , roots]) => roots.length > 0);
 
   return (
     <section>
@@ -49,6 +59,8 @@ export function CreatorBoard() {
           </Link>
         ) : null}
       </div>
+
+      <ThemeFilter themes={themes} selected={theme} onSelect={setTheme} />
 
       {capabilities.submit ? (
         <div className="mt-6">
@@ -76,11 +88,11 @@ export function CreatorBoard() {
         </>
       ) : (
         <>
-          {columns.map(([status, label, items]) => (
+          {columns.map(([status, label, roots, childrenOf]) => (
             <div key={status}>
               <h2 className="mt-8 text-lg font-medium">{label}</h2>
               <ul className="mt-3 space-y-3">
-                {items.map((item) => (
+                {roots.map((item) => (
                   <RecommendationCard
                     key={item.id}
                     slug={slug}
@@ -89,6 +101,19 @@ export function CreatorBoard() {
                     canModerate={capabilities.moderate}
                     onCount={board.applyUpvote}
                     onStatusChanged={board.applyStatus}
+                    // Nested markup rather than a margin, so the containment is there for a
+                    // screen reader as well as for the eye.
+                    children={childrenOf(item.id).map((child) => (
+                      <RecommendationCard
+                        key={child.id}
+                        slug={slug}
+                        recommendation={child}
+                        canUpvote={capabilities.upvote}
+                        canModerate={capabilities.moderate}
+                        onCount={board.applyUpvote}
+                        onStatusChanged={board.applyStatus}
+                      />
+                    ))}
                   />
                 ))}
               </ul>

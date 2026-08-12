@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError, api } from './client';
-import type { Board, Capabilities, CreatorProfile, ReviewQueueItem, SessionUser } from './types';
+import type {
+  Board,
+  Capabilities,
+  CreatorProfile,
+  ReviewQueueItem,
+  SessionUser,
+  ThemeSummary,
+} from './types';
 
 const NO_CAPABILITIES: Capabilities = {
   view: false,
@@ -172,7 +179,27 @@ export function useReviewQueue(slug: string) {
   };
 }
 
-export function useBoard(slug: string, enabled: boolean) {
+export function useThemes(slug: string, enabled: boolean) {
+  const [themes, setThemes] = useState<ThemeSummary[]>([]);
+  const path = `/creators/${encodeURIComponent(slug)}/themes`;
+
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    api
+      .get<{ items: ThemeSummary[] }>(path)
+      // Themes are a way to narrow the board, not a reason to fail rendering it.
+      .then((body) => !cancelled && setThemes(body.items))
+      .catch(() => !cancelled && setThemes([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [path, enabled]);
+
+  return themes;
+}
+
+export function useBoard(slug: string, enabled: boolean, themeId?: string | null) {
   const [items, setItems] = useState<Board['items']>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   // Which path the state above belongs to. Without it, navigating between creators rendered the
@@ -183,7 +210,11 @@ export function useBoard(slug: string, enabled: boolean) {
   const [error, setError] = useState<ApiError | null>(null);
   const [moreError, setMoreError] = useState<string | null>(null);
 
-  const path = `/creators/${encodeURIComponent(slug)}/recommendations`;
+  // The theme is part of the path, so switching it refetches and resets paging — the cursor
+  // from an unfiltered page means nothing in a filtered one.
+  const path = `/creators/${encodeURIComponent(slug)}/recommendations${
+    themeId ? `?theme=${encodeURIComponent(themeId)}` : ''
+  }`;
 
   useEffect(() => {
     if (!enabled) return;
@@ -213,7 +244,9 @@ export function useBoard(slug: string, enabled: boolean) {
     setMoreError(null);
     const requestedPath = path;
     try {
-      const board = await api.get<Board>(`${path}?cursor=${encodeURIComponent(cursor)}`);
+      const board = await api.get<Board>(
+        `${path}${path.includes('?') ? '&' : '?'}cursor=${encodeURIComponent(cursor)}`,
+      );
       // Dropped if the viewer navigated away mid-request: otherwise creator A's second page
       // lands on creator B's board.
       if (requestedPath !== path) return;
