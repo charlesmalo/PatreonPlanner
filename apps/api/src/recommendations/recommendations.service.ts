@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, RecommendationStatus } from '@prisma/client';
+import { AvailabilityService } from '../availability/availability.service';
 import { CatalogService } from '../catalog/catalog.service';
 import { ConfigService } from '../config/config.module';
 import { RateLimitService } from '../limits/rate-limit.service';
@@ -99,6 +100,7 @@ export class RecommendationsService {
     private readonly moderation: ModerationService,
     private readonly config: ConfigService,
     private readonly catalog: CatalogService,
+    private readonly availability: AvailabilityService,
   ) {}
 
   /**
@@ -364,6 +366,9 @@ export class RecommendationsService {
         ...RECOMMENDATION_FIELDS,
         upvoteCount: true,
         createdAt: true,
+        // Selected for the availability join, then dropped from the response: the internal id of
+        // a catalogue row is not something a board client has any use for.
+        titleId: true,
         // Whether *this* viewer upvoted. Without it a client cannot render the control's state
         // truthfully, and an optimistic toggle guesses the direction wrong.
         ...(viewerUserId
@@ -374,16 +379,27 @@ export class RecommendationsService {
       id: string;
       upvoteCount: number;
       createdAt: Date;
+      titleId: string | null;
       upvotes?: Array<{ id: string }>;
     }>;
 
     const hasMore = items.length > take;
     const page = hasMore ? items.slice(0, take) : items;
     const last = page[page.length - 1];
+
+    // One query for the whole page, not one per card: twenty entries would otherwise mean twenty
+    // round trips. Never blocks on the upstream — a cold board renders without badges and the
+    // refresh it queues lands before the next read.
+    const region = this.config.get('AVAILABILITY_REGION_DEFAULT');
+    const titleIds = page.flatMap((item) => (item.titleId ? [item.titleId] : []));
+    const availability = await this.availability.forTitles(titleIds, region);
+
     return {
-      items: page.map(({ upvotes, ...item }) => ({
+      items: page.map(({ upvotes, titleId, ...item }) => ({
         ...item,
         hasUpvoted: (upvotes ?? []).length > 0,
+        // Null for an external link, which has no canonical identity to look up.
+        availability: (titleId && availability.get(titleId)) || null,
       })),
       nextCursor: hasMore && last ? encodeCursor(last) : null,
     };
