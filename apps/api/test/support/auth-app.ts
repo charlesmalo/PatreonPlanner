@@ -8,6 +8,9 @@ import { configureApp } from '../../src/app.setup';
 import { PATREON_CLIENT } from '../../src/patreon/patreon.client';
 import { startDatabase } from './database';
 import { CATALOG_PROVIDER } from '../../src/catalog/catalog.provider';
+import { AVAILABILITY_PROVIDER } from '../../src/availability/availability.provider';
+import { AvailabilityService } from '../../src/availability/availability.service';
+import { FakeAvailabilityProvider } from './fake-availability.provider';
 import { FakeCatalogProvider } from './fake-catalog.provider';
 import { FakePatreonClient } from './fake-patreon.client';
 import { applyTestConfigDefaults } from './env';
@@ -28,6 +31,9 @@ export interface AuthTestContext {
   prisma: PrismaClient;
   patreon: FakePatreonClient;
   catalog: FakeCatalogProvider;
+  availability: FakeAvailabilityProvider;
+  /** For awaiting the background refreshes a board read queues. */
+  availabilityService: AvailabilityService;
   teardown: () => Promise<void>;
 }
 
@@ -45,11 +51,14 @@ export async function startAuthApp(): Promise<AuthTestContext> {
 
   const patreon = new FakePatreonClient();
   const catalog = new FakeCatalogProvider();
+  const availability = new FakeAvailabilityProvider();
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(PATREON_CLIENT)
     .useValue(patreon)
     .overrideProvider(CATALOG_PROVIDER)
     .useValue(catalog)
+    .overrideProvider(AVAILABILITY_PROVIDER)
+    .useValue(availability)
     .compile();
 
   const app = moduleRef.createNestApplication({ rawBody: true });
@@ -66,6 +75,8 @@ export async function startAuthApp(): Promise<AuthTestContext> {
     prisma,
     patreon,
     catalog,
+    availability,
+    availabilityService: app.get(AvailabilityService),
     teardown: async () => {
       await prisma.$disconnect();
       await app.close();

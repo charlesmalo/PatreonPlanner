@@ -8,7 +8,7 @@ const POSTER_BASE = 'https://image.tmdb.org/t/p/w92';
  * attacker input becomes an attribute, so a future API regression is not immediately exploitable
  * — React only warns on a javascript: href, it does not block it.
  */
-function isSafeHttpUrl(value: string): boolean {
+export function isSafeHttpUrl(value: string): boolean {
   try {
     const parsed = new URL(value);
     return parsed.protocol === 'http:' || parsed.protocol === 'https:';
@@ -16,6 +16,7 @@ function isSafeHttpUrl(value: string): boolean {
     return false;
   }
 }
+import { AvailabilityBadges } from './AvailabilityBadges';
 import { FlagButton } from './FlagButton';
 import { StatusControl } from './StatusControl';
 import { UpvoteButton } from './UpvoteButton';
@@ -95,6 +96,10 @@ export function RecommendationCard({
               ))}
           </ul>
         ) : null}
+        <AvailabilityBadges
+          availability={recommendation.availability}
+          title={recommendation.customTitle}
+        />
         <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
           Suggested by {recommendation.submittedBy.fullName ?? 'a patron'}
         </p>

@@ -33,6 +33,7 @@ export function recommendation(overrides: Partial<Recommendation> = {}): Recomme
     hasUpvoted: false,
     title: null,
     createdAt: new Date().toISOString(),
+    availability: null,
     links: [],
     submittedBy: { id: 'user-1', fullName: 'Grace', avatarUrl: null },
     ...overrides,

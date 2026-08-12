@@ -272,3 +272,22 @@ test('hidePendingFromPublic hides other patrons pending entries but not your own
   await expect(page.getByRole('heading', { name: 'My Neighbour Totoro' })).toBeVisible();
   await expect(page.getByText('Kikis Delivery Service')).toHaveCount(0);
 });
+
+test('a catalogue title shows where to watch it', async ({ page }) => {
+  await signIn(page, 500);
+  await page.goto(`/c/${CREATOR.slug}`);
+  await page.getByLabel(/search films and shows/i).fill('spirited');
+  await page.getByRole('button', { name: /spirited away \(2001\)/i }).click();
+  await page.getByRole('button', { name: 'Suggest', exact: true }).click();
+  await expect(page.getByRole('heading', { name: /Spirited Away/ })).toBeVisible();
+
+  // The board never blocks on the availability provider: the first render carries no badge and
+  // the refresh it queued arrives behind it. Reload until it lands rather than assuming one
+  // reload is late enough — that assumption passed alone and failed in the full suite.
+  await expect(async () => {
+    await page.reload();
+    await expect(page.getByText('Netflix')).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 15_000 });
+  // TMDB's terms require the attribution wherever this data is shown.
+  await expect(page.getByText(/availability data by justwatch/i)).toBeVisible();
+});

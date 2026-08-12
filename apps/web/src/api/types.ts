@@ -34,6 +34,22 @@ export interface CatalogResult {
   overview: string | null;
 }
 
+export interface AvailabilityOffer {
+  providerId: number;
+  providerName: string;
+  logoPath: string | null;
+  kind: 'FLATRATE' | 'FREE' | 'ADS' | 'RENT' | 'BUY';
+  displayPriority: number;
+}
+
+export interface Availability {
+  /** ISO-3166-1 alpha-2. Availability without its region answers the wrong question. */
+  region: string;
+  /** The upstream's watch page; null when it gives none. */
+  link: string | null;
+  offers: AvailabilityOffer[];
+}
+
 export interface Recommendation {
   id: string;
   type: string;
@@ -46,6 +62,8 @@ export interface Recommendation {
   /** Present when the entry is bound to a catalogue title. */
   title: TitleSummary | null;
   createdAt: string;
+  /** Null for an external link, and until the first background refresh lands. */
+  availability: Availability | null;
   links: RecommendationLink[];
   submittedBy: { id: string; fullName: string | null; avatarUrl: string | null };
 }

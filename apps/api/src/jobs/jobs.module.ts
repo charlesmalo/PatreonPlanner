@@ -1,13 +1,17 @@
 import { Global, Logger, Module, OnApplicationShutdown, OnModuleInit } from '@nestjs/common';
 import { Queue, Worker } from 'bullmq';
 import { ConfigService } from '../config/config.module';
+import { AvailabilityRefreshJob } from './availability-refresh.job';
 import { MembershipRefreshJob } from './membership-refresh.job';
 
 const QUEUE = 'membership-refresh';
 const EVERY_MS = 15 * 60 * 1000;
 
 @Global()
-@Module({ providers: [MembershipRefreshJob], exports: [MembershipRefreshJob] })
+@Module({
+  providers: [MembershipRefreshJob, AvailabilityRefreshJob],
+  exports: [MembershipRefreshJob, AvailabilityRefreshJob],
+})
 export class JobsModule implements OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger(JobsModule.name);
   private queue?: Queue;
@@ -16,6 +20,7 @@ export class JobsModule implements OnModuleInit, OnApplicationShutdown {
   constructor(
     private readonly config: ConfigService,
     private readonly job: MembershipRefreshJob,
+    private readonly availabilityJob: AvailabilityRefreshJob,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -30,6 +35,9 @@ export class JobsModule implements OnModuleInit, OnApplicationShutdown {
       async () => {
         await this.job.runOnce();
         await this.job.resyncTiers();
+        // Same tick rather than its own queue: both are bounded, both are idempotent, and a
+        // second repeatable job is a second thing to get wrong for no gain at this scale.
+        await this.availabilityJob.runOnce();
       },
       { connection },
     );
