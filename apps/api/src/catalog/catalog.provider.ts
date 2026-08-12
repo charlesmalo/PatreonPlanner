@@ -1,5 +1,5 @@
 import { MediaType } from '@prisma/client';
-import { CatalogResult } from './catalog.types';
+import { CatalogResult, TitleStructure } from './catalog.types';
 
 export const CATALOG_PROVIDER = Symbol('CATALOG_PROVIDER');
 
@@ -9,6 +9,12 @@ export interface CatalogProvider {
   isConfigured(): boolean;
   search(query: string): Promise<CatalogResult[]>;
   fetchTitle(tmdbId: number, mediaType: MediaType): Promise<CatalogResult | null>;
+  /**
+   * The title's place in the catalogue: collection membership, members, similar titles and
+   * labels. Sub-calls degrade individually — relations are garnish, and one failing endpoint
+   * must not deny a title its collection — but a failure to read the title itself throws.
+   */
+  fetchStructure(tmdbId: number, mediaType: MediaType): Promise<TitleStructure>;
 }
 
 export class CatalogNotConfiguredError extends Error {

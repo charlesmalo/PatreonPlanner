@@ -2,6 +2,7 @@ import { Global, Logger, Module, OnApplicationShutdown, OnModuleInit } from '@ne
 import { Queue, Worker } from 'bullmq';
 import { ConfigService } from '../config/config.module';
 import { AvailabilityRefreshJob } from './availability-refresh.job';
+import { EnrichTitleJob } from './enrich-title.job';
 import { MembershipRefreshJob } from './membership-refresh.job';
 
 const QUEUE = 'membership-refresh';
@@ -9,8 +10,8 @@ const EVERY_MS = 15 * 60 * 1000;
 
 @Global()
 @Module({
-  providers: [MembershipRefreshJob, AvailabilityRefreshJob],
-  exports: [MembershipRefreshJob, AvailabilityRefreshJob],
+  providers: [MembershipRefreshJob, AvailabilityRefreshJob, EnrichTitleJob],
+  exports: [MembershipRefreshJob, AvailabilityRefreshJob, EnrichTitleJob],
 })
 export class JobsModule implements OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger(JobsModule.name);
@@ -21,6 +22,7 @@ export class JobsModule implements OnModuleInit, OnApplicationShutdown {
     private readonly config: ConfigService,
     private readonly job: MembershipRefreshJob,
     private readonly availabilityJob: AvailabilityRefreshJob,
+    private readonly enrichJob: EnrichTitleJob,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -38,6 +40,7 @@ export class JobsModule implements OnModuleInit, OnApplicationShutdown {
         // Same tick rather than its own queue: both are bounded, both are idempotent, and a
         // second repeatable job is a second thing to get wrong for no gain at this scale.
         await this.availabilityJob.runOnce();
+        await this.enrichJob.runOnce();
       },
       { connection },
     );

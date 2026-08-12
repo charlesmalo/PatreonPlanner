@@ -52,6 +52,14 @@ enum RecommendationStatus {
   DELETED
 }
 
+enum RelationKind {
+  SEASON_OF
+  SEQUEL
+  PREQUEL
+  SAME_FRANCHISE
+  RELATED
+}
+
 enum OfferKind {
   FLATRATE
   FREE
@@ -133,6 +141,7 @@ model Creator {
   staff           CreatorStaff[]
   policy          CreatorPolicy?
   recommendations Recommendation[]
+  themes          Theme[]
 
   // Postgres does not index foreign keys automatically, and the cascade from Creator scans them.
   @@index([ownerUserId])
@@ -364,10 +373,16 @@ model Title {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
+  // When the relation/theme builder last *attempted* this title. Ordering on it stops a
+  // permanently failing title from occupying the batch forever.
+  enrichedAt      DateTime?
   aliases         TitleAlias[]
   recommendations Recommendation[]
   availability    StreamingAvailability[]
   watchOrderItems WatchOrderItem[]
+  relationsFrom   TitleRelation[]        @relation("RelationFrom")
+  relationsTo     TitleRelation[]        @relation("RelationTo")
+  themes          TitleTheme[]
 
   // TMDB ids are only unique within a media type: film 123 and series 123 are different works.
   @@unique([tmdbId, mediaType])
@@ -395,6 +410,58 @@ model StreamingAvailability {
   @@unique([titleId, region])
   // The refresh job walks the oldest first, across every title and region.
   @@index([fetchedAt])
+}
+
+model TitleRelation {
+  id        String       @id @default(uuid()) @db.Uuid
+  // Direction matters: from the member to the container for SEASON_OF and SAME_FRANCHISE.
+  // Storing both ways would double the rows and let them disagree.
+  fromId    String       @db.Uuid
+  toId      String       @db.Uuid
+  kind      RelationKind
+  // TMDB's own ordering within a collection or season list, for rendering.
+  ordinal   Int?
+  createdAt DateTime     @default(now())
+
+  from Title @relation("RelationFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  to   Title @relation("RelationTo", fields: [toId], references: [id], onDelete: Cascade)
+
+  // Idempotent by construction: re-running the builder cannot multiply rows.
+  @@unique([fromId, toId, kind])
+  @@index([fromId])
+  @@index([toId])
+}
+
+model Theme {
+  id        String   @id @default(uuid()) @db.Uuid
+  creatorId String   @db.Uuid
+  // What the creator calls it. Seeded from TMDB, then theirs to rename.
+  name      String
+  // Lowercased name for uniqueness: two themes differing only in case are one theme.
+  slug      String
+  // The TMDB label this was seeded from, so re-seeding matches the source rather than the
+  // display name — otherwise every re-seed would resurrect a theme the creator renamed.
+  sourceKey String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  creator Creator      @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  titles  TitleTheme[]
+
+  @@unique([creatorId, slug])
+  @@unique([creatorId, sourceKey])
+  @@index([creatorId])
+}
+
+model TitleTheme {
+  titleId String @db.Uuid
+  themeId String @db.Uuid
+
+  title Title @relation(fields: [titleId], references: [id], onDelete: Cascade)
+  theme Theme @relation(fields: [themeId], references: [id], onDelete: Cascade)
+
+  @@id([titleId, themeId])
+  @@index([themeId])
 }
 
 model TitleAlias {
