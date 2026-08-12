@@ -72,3 +72,27 @@ export interface UpvoteResult {
   upvoted: boolean;
   upvoteCount: number;
 }
+
+export interface FlagSummary {
+  id: string;
+  reason: string;
+  note: string | null;
+  createdAt: string;
+  flaggedBy: { id: string; fullName: string | null };
+}
+
+/**
+ * The review queue's own shape. It exposes the submitter and the open flags, neither of which
+ * the patron board's read model returns — the two are deliberately different projections.
+ */
+export interface ReviewQueueItem {
+  id: string;
+  customTitle: string;
+  description: string | null;
+  status: string;
+  upvoteCount: number;
+  createdAt: string;
+  submittedBy: { id: string; fullName: string | null; avatarUrl: string | null };
+  openFlagCount: number;
+  flags: FlagSummary[];
+}

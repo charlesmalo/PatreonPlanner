@@ -49,6 +49,30 @@ enum RecommendationStatus {
   DELETED
 }
 
+enum FlagStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
+enum FlagReason {
+  SPAM
+  HARASSMENT
+  SEXUAL_CONTENT
+  OFF_TOPIC
+  DUPLICATE
+  OTHER
+}
+
+enum ModerationActionType {
+  EDIT
+  DELETE
+  RESTORE
+  STATUS_CHANGE
+  FLAG_RESOLVED
+  FLAG_DISMISSED
+}
+
 model User {
   id                     String    @id @default(uuid()) @db.Uuid
   patreonUserId          String    @unique
@@ -70,6 +94,9 @@ model User {
   staffAssigned   CreatorStaff[]   @relation("StaffAssigner")
   recommendations Recommendation[]
   upvotes         Upvote[]
+  flagsRaised     Flag[]             @relation("FlagAuthor")
+  flagsResolved   Flag[]             @relation("FlagResolver")
+  moderationActs  ModerationAction[] @relation("ModerationActor")
 }
 
 model Creator {
@@ -206,6 +233,8 @@ model Recommendation {
   title       Title?               @relation(fields: [titleId], references: [id])
   links       RecommendationLink[]
   upvotes     Upvote[]
+  flags       Flag[]
+  actions     ModerationAction[]
 
   // De-duplication is enforced here, not by the read-then-write check: two concurrent
   // submissions of the same title both miss that read.
@@ -214,6 +243,9 @@ model Recommendation {
   // cannot be walked in sort order — the board fell back to sorting the creator's whole table.
   // This one matches the ORDER BY exactly.
   @@index([creatorId, upvoteCount(sort: Desc), createdAt(sort: Desc), id(sort: Desc)])
+  // The review queue reads one creator's entries oldest-first, including the statuses the board
+  // index's consumers never ask for.
+  @@index([creatorId, createdAt])
   @@index([submittedByUserId])
 }
 
@@ -241,6 +273,51 @@ model Upvote {
   // Design §5: one upvote per person per entry.
   @@unique([recommendationId, userId])
   @@index([userId])
+}
+
+model Flag {
+  id               String     @id @default(uuid()) @db.Uuid
+  recommendationId String     @db.Uuid
+  flaggedByUserId  String     @db.Uuid
+  reason           FlagReason
+  note             String?
+  status           FlagStatus @default(OPEN)
+  resolvedByUserId String?    @db.Uuid
+  resolvedAt       DateTime?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  recommendation Recommendation @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
+  flaggedBy      User           @relation("FlagAuthor", fields: [flaggedByUserId], references: [id], onDelete: Cascade)
+  resolvedBy     User?          @relation("FlagResolver", fields: [resolvedByUserId], references: [id])
+
+  // One flag per person per entry: flag count is a moderation priority signal (design §6.6), and
+  // without this it measures one user's persistence rather than several users' agreement.
+  @@unique([recommendationId, flaggedByUserId])
+  @@index([recommendationId])
+  @@index([flaggedByUserId])
+  @@index([resolvedByUserId])
+}
+
+model ModerationAction {
+  id               String               @id @default(uuid()) @db.Uuid
+  recommendationId String               @db.Uuid
+  actorUserId      String               @db.Uuid
+  action           ModerationActionType
+  note             String?
+  // Before/after snapshots of the fields the action touched (design §3). Json rather than
+  // columns: the shape differs per action type, and an audit row is never queried by field.
+  before           Json?
+  after            Json?
+  createdAt        DateTime             @default(now())
+
+  recommendation Recommendation @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
+  // No cascade from the actor: deleting a moderator's account must not erase the record of what
+  // they did. This is the one relation in the schema where the audit outlives the user.
+  actor          User           @relation("ModerationActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([recommendationId, createdAt(sort: Desc)])
+  @@index([actorUserId])
 }
 
 model Title {

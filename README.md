@@ -75,6 +75,34 @@ nothing.
 State-changing requests need the `pp_csrf` cookie echoed in an `x-csrf-token` header. The token is
 signed and bound to the session, and is re-minted automatically on any safe request.
 
+## Submission lifecycle
+
+```
+PENDING ──▶ ACCEPTED ──▶ ACTIVE ──▶ COMPLETED
+   └──────────────▶ REJECTED          (DELETED = soft delete, restorable)
+```
+
+Only a `CreatorStaff` member moves an entry, via
+`POST /api/v1/creators/:slug/recommendations/:id/status`. The legal moves are a whitelist in
+`apps/api/src/moderation/transitions.ts`; anything else answers `409`. Restoring a `REJECTED` or
+`DELETED` entry returns it to `PENDING` — the row does not record where it came from.
+
+Every transition, redaction and flag resolution writes a `ModerationAction` **in the same
+transaction as the change**, carrying before/after snapshots of the fields it touched.
+
+**Visibility.** Patrons see `PENDING`, `ACCEPTED`, `ACTIVE` and `COMPLETED`; staff see everything.
+With `CreatorPolicy.hidePendingFromPublic` on, pending entries are hidden from everyone except
+staff and each entry's own submitter — who must keep seeing their submission, or the submit form
+looks broken.
+
+**Flags.** Any viewer with `VIEW` can report an entry
+(`POST .../recommendations/:id/flags`), one flag per person per entry. Staff work them at
+`GET /api/v1/creators/:slug/review-queue`, ordered by open flag count then age, and resolve or
+dismiss with `PATCH /api/v1/creators/:slug/flags/:flagId`.
+
+Not yet built: ML moderation, abuse scoring, notifications, creator notes, kanban drag-and-drop
+and bulk actions — see the plan's Scope section for why each waits.
+
 ## Verification
 
 ```bash

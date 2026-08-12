@@ -19,6 +19,8 @@ export interface ResolvedCreator {
   id: string;
   slug: string;
   displayName: string;
+  /** Design §7's toggle, carried here so the board read model does not re-query the policy. */
+  hidePendingFromPublic: boolean;
 }
 
 type CreatorRequest = Request & { creator?: ResolvedCreator; viewer?: Viewer };
@@ -67,7 +69,14 @@ export class CreatorAccessGuard implements CanActivate {
       throw viewer.isAuthenticated ? new ForbiddenException() : new UnauthorizedException();
     }
 
-    request.creator = { id: creator.id, slug: creator.slug, displayName: creator.displayName };
+    request.creator = {
+      id: creator.id,
+      slug: creator.slug,
+      displayName: creator.displayName,
+      // Fail closed for the same reason viewVisibility does: a creator with no policy row is a
+      // data-integrity fault, and the safe reading of a missing toggle is "hide".
+      hidePendingFromPublic: creator.policy?.hidePendingFromPublic ?? true,
+    };
     request.viewer = viewer;
     return true;
   }
@@ -84,6 +93,7 @@ export class CreatorAccessGuard implements CanActivate {
         policy: {
           select: {
             viewVisibility: true,
+            hidePendingFromPublic: true,
             submitMinTier: { select: { amountCents: true } },
             upvoteMinTier: { select: { amountCents: true } },
           },

@@ -2,7 +2,10 @@ import { expect, test } from '@playwright/test';
 import {
   CREATOR,
   resetRateLimits,
+  makeStaff,
   seedCreator,
+  seedEntryFrom,
+  setHidePending,
   setPatreonIdentity,
   setVisibility,
 } from './support';
@@ -183,4 +186,89 @@ test('a submitted title containing markup is shown as text', async ({ page }) =>
   await expect(page.getByRole('heading', { name: '<img src=x onerror=alert(1)>' })).toBeVisible();
   // Stored as text end to end, not merely escaped by a component test's fake.
   await expect(page.locator('main img')).toHaveCount(0);
+});
+
+test('a moderator accepts a suggestion and it moves to the Accepted column', async ({ page }) => {
+  await signIn(page, 500, 'patreon-mod-e2e');
+  makeStaff('patreon-mod-e2e');
+  seedEntryFrom('patreon-other-e2e', 'Princess Mononoke');
+
+  await page.goto(`/c/${CREATOR.slug}`);
+  await expect(page.getByRole('heading', { name: 'Suggestions' })).toBeVisible();
+
+  await page.getByRole('button', { name: /move “Princess Mononoke”/i }).click();
+  await page.getByRole('menuitem', { name: 'Accepted' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Accepted' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Suggestions' })).toHaveCount(0);
+});
+
+test('a patron reports an entry and a moderator dismisses it', async ({ page }) => {
+  await signIn(page, 500, 'patreon-mod-e2e');
+  makeStaff('patreon-mod-e2e');
+  seedEntryFrom('patreon-other-e2e', 'Grave of the Fireflies');
+
+  await page.goto(`/c/${CREATOR.slug}`);
+  await page.getByRole('button', { name: /report “Grave of the Fireflies”/i }).click();
+  await page.getByLabel(/reason/i).selectOption('SPAM');
+  await page.getByLabel(/what is wrong/i).fill('not a real suggestion');
+  await page.getByRole('button', { name: 'Send report' }).click();
+  await expect(page.getByText(/thanks/i)).toBeVisible();
+
+  await page.getByRole('link', { name: 'Review queue' }).click();
+  await page.waitForURL((url) => url.pathname.endsWith('/review'));
+  await expect(page.getByText('not a real suggestion')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Dismiss' }).click();
+  await expect(page.getByText(/no open reports/i)).toBeVisible();
+});
+
+test('a moderator redacts a description and the board shows the redaction', async ({ page }) => {
+  await signIn(page, 500, 'patreon-mod-e2e');
+  makeStaff('patreon-mod-e2e');
+  seedEntryFrom('patreon-other-e2e', 'Howls Moving Castle');
+
+  await page.goto(`/c/${CREATOR.slug}/review`);
+  await page.getByRole('button', { name: 'Redact' }).click();
+  await page.getByLabel('Description').fill('[removed by a moderator]');
+  await page.getByRole('button', { name: 'Save redaction' }).click();
+  await expect(page.getByText('[removed by a moderator]')).toBeVisible();
+
+  await page.goto(`/c/${CREATOR.slug}`);
+  await expect(page.getByText('[removed by a moderator]')).toBeVisible();
+});
+
+test('a deleted entry leaves the board but stays in the review queue', async ({ page }) => {
+  await signIn(page, 500, 'patreon-mod-e2e');
+  makeStaff('patreon-mod-e2e');
+  seedEntryFrom('patreon-other-e2e', 'Porco Rosso');
+
+  await page.goto(`/c/${CREATOR.slug}/review`);
+  await page.getByRole('button', { name: /move “Porco Rosso”/i }).click();
+  await page.getByRole('menuitem', { name: 'Deleted' }).click();
+  // Still reachable by the people who removed it — design §7 calls DELETED a restorable bin.
+  await expect(page.getByRole('heading', { name: 'Porco Rosso' })).toBeVisible();
+
+  // A patron sees nothing. Signing out is the cheapest way to become one.
+  await page.getByRole('button', { name: /sign out/i }).click();
+  await page.waitForURL((url) => url.pathname === '/');
+  await page.goto(`/c/${CREATOR.slug}`);
+  await expect(page.getByText('Porco Rosso')).toHaveCount(0);
+});
+
+test('hidePendingFromPublic hides other patrons pending entries but not your own', async ({
+  page,
+}) => {
+  seedEntryFrom('patreon-other-e2e', 'Kikis Delivery Service');
+  setHidePending(true);
+
+  await signIn(page, 500);
+  await page.goto(`/c/${CREATOR.slug}`);
+  await page.getByLabel(/catalogue does not have/i).fill('My Neighbour Totoro');
+  await page.getByRole('button', { name: 'Suggest', exact: true }).click();
+
+  // Their own pending suggestion stays visible — otherwise the form reports success over an
+  // empty board, which reads as a bug to the person who just used it.
+  await expect(page.getByRole('heading', { name: 'My Neighbour Totoro' })).toBeVisible();
+  await expect(page.getByText('Kikis Delivery Service')).toHaveCount(0);
 });

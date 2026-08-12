@@ -13,12 +13,33 @@ import { RateLimitService } from '../limits/rate-limit.service';
 import { ModerationService } from '../moderation/moderation.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SubmitRecommendationDto } from './dto/submit-recommendation.dto';
+import { PATRON_VISIBLE_STATUSES } from '../moderation/transitions';
 import { normalizeTitle } from './normalize-title';
 
 const MAX_PAGE = 50;
-// Not board-visible. DELETED is a soft delete; REJECTED is a moderation outcome that Plan 07
-// will set and which should not sit on a public board.
+// Not writable. DELETED is a soft delete and REJECTED a moderation outcome; neither may be
+// upvoted, whatever the read model shows a moderator.
 const HIDDEN_STATUSES: RecommendationStatus[] = ['DELETED', 'REJECTED'];
+
+/**
+ * Design §7: staff read the whole board including the bin, patrons read only the visible
+ * statuses — minus pending entries when the creator hides them, except their own.
+ */
+function visibilityWhere(
+  creator: { hidePendingFromPublic: boolean },
+  viewer: { userId: string | null; isStaff: boolean },
+): Prisma.RecommendationWhereInput {
+  if (viewer.isStaff) return {};
+  if (!creator.hidePendingFromPublic) return { status: { in: PATRON_VISIBLE_STATUSES } };
+  return {
+    OR: [
+      { status: { in: PATRON_VISIBLE_STATUSES.filter((s) => s !== 'PENDING') } },
+      // Hiding a patron's own submission from them makes the submit form look broken: success,
+      // then an empty board. Anonymous has no id and so matches nothing here, which is right.
+      ...(viewer.userId ? [{ status: 'PENDING' as const, submittedByUserId: viewer.userId }] : []),
+    ],
+  };
+}
 
 interface BoardCursor {
   upvoteCount: number;
@@ -299,34 +320,43 @@ export class RecommendationsService {
    * callers should de-duplicate by id.
    */
   async list(
-    creatorId: string,
+    creator: { id: string; hidePendingFromPublic: boolean },
     rawCursor: string | undefined,
     limit: number | undefined,
-    viewerUserId: string | null,
+    viewer: { userId: string | null; isStaff: boolean },
   ) {
     const take = Math.min(Math.max(limit ?? 20, 1), MAX_PAGE);
     const cursor = decodeCursor(rawCursor);
+    const viewerUserId = viewer.userId;
 
     const items = (await this.prisma.recommendation.findMany({
       where: {
-        creatorId,
-        status: { notIn: HIDDEN_STATUSES },
-        ...(cursor
-          ? {
-              OR: [
-                { upvoteCount: { lt: cursor.upvoteCount } },
+        creatorId: creator.id,
+        // Composed with AND, never spread: both clauses are disjunctions and want the `OR` key,
+        // so spreading let the cursor overwrite the visibility filter outright — page one was
+        // correct and every page after it returned rejected, deleted and other patrons' pending
+        // entries to anyone who clicked "Load more".
+        AND: [
+          visibilityWhere(creator, viewer),
+          ...(cursor
+            ? [
                 {
-                  upvoteCount: cursor.upvoteCount,
-                  createdAt: { lt: cursor.createdAt },
+                  OR: [
+                    { upvoteCount: { lt: cursor.upvoteCount } },
+                    {
+                      upvoteCount: cursor.upvoteCount,
+                      createdAt: { lt: cursor.createdAt },
+                    },
+                    {
+                      upvoteCount: cursor.upvoteCount,
+                      createdAt: cursor.createdAt,
+                      id: { lt: cursor.id },
+                    },
+                  ],
                 },
-                {
-                  upvoteCount: cursor.upvoteCount,
-                  createdAt: cursor.createdAt,
-                  id: { lt: cursor.id },
-                },
-              ],
-            }
-          : {}),
+              ]
+            : []),
+        ],
       },
       orderBy: [{ upvoteCount: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
       take: take + 1,
