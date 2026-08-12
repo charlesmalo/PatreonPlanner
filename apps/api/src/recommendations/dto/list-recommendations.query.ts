@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, Length, Max, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, IsUUID, Length, Max, Min } from 'class-validator';
 
 export class ListRecommendationsQuery {
   // Opaque, base64url-encoded boundary values — not an id, so it is not a UUID.
@@ -14,4 +14,9 @@ export class ListRecommendationsQuery {
   @Min(1)
   @Max(50)
   limit?: number;
+
+  /** Narrows the same read model rather than adding a second one the rules could drift between. */
+  @IsOptional()
+  @IsUUID()
+  theme?: string;
 }
