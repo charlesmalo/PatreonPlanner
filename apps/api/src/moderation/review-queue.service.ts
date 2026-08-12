@@ -61,6 +61,17 @@ export class ReviewQueueService {
         upvoteCount: true,
         createdAt: true,
         submittedBy: { select: { id: true, fullName: true, avatarUrl: true } },
+        // A watch order's text is mostly *in* its steps; a queue that hid them would be
+        // reviewing a title and nothing else.
+        watchOrderItems: {
+          select: {
+            position: true,
+            customTitle: true,
+            note: true,
+            title: { select: { name: true } },
+          },
+          orderBy: { position: 'asc' },
+        },
         flags: {
           where: { status: 'OPEN' },
           select: {

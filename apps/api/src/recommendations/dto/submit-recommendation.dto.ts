@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsIn,
   IsInt,
@@ -25,13 +26,39 @@ export class RecommendationLinkDto {
   label?: string;
 }
 
-const MAINSTREAM = ['MOVIE', 'SHOW'] as const;
-export type SubmittableType = 'MOVIE' | 'SHOW' | 'EXTERNAL_LINK';
+// Types that bind a canonical Title and therefore require a tmdbId. WATCH_ORDER is mainstream in
+// design §5's sense but has no single upstream identity — it is a curated sequence.
+const MAINSTREAM = ['MOVIE', 'SHOW', 'FRANCHISE'] as const;
+type MainstreamType = (typeof MAINSTREAM)[number];
+const isMainstream = (type: unknown): boolean => MAINSTREAM.includes(type as MainstreamType);
+
+export type SubmittableType = MainstreamType | 'WATCH_ORDER' | 'EXTERNAL_LINK';
+
+/** An ordered step in a WATCH_ORDER. Bound to the catalogue, or free text — never both. */
+export class WatchOrderItemDto {
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  tmdbId?: number;
+
+  // Needed alongside tmdbId because TMDB ids are unique only within a media type.
+  @IsOptional()
+  @IsIn(['MOVIE', 'SHOW'])
+  mediaType?: 'MOVIE' | 'SHOW';
+
+  @IsOptional()
+  @IsString()
+  @Length(1, 200)
+  customTitle?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(1, 500)
+  note?: string;
+}
 
 export class SubmitRecommendationDto {
-  // FRANCHISE and WATCH_ORDER need TMDB collections and ordered items, which arrive with the
-  // next catalogue plan; accepting them now would create rows nothing can resolve.
-  @IsIn(['MOVIE', 'SHOW', 'EXTERNAL_LINK'])
+  @IsIn(['MOVIE', 'SHOW', 'FRANCHISE', 'WATCH_ORDER', 'EXTERNAL_LINK'])
   type!: SubmittableType;
 
   /**
@@ -42,12 +69,12 @@ export class SubmitRecommendationDto {
   // Two @ValidateIf decorators on one property cancel out — class-validator skips the property
   // when any condition is false — so "must be absent on an external link" is enforced in the
   // service instead, where it can be expressed directly.
-  @ValidateIf((dto: SubmitRecommendationDto) => MAINSTREAM.includes(dto.type as 'MOVIE' | 'SHOW'))
+  @ValidateIf((dto: SubmitRecommendationDto) => isMainstream(dto.type))
   @IsInt()
   @IsPositive()
   tmdbId?: number;
 
-  @ValidateIf((dto: SubmitRecommendationDto) => !MAINSTREAM.includes(dto.type as 'MOVIE' | 'SHOW'))
+  @ValidateIf((dto: SubmitRecommendationDto) => !isMainstream(dto.type))
   @IsString()
   @Length(1, 200)
   customTitle?: string;
@@ -63,4 +90,17 @@ export class SubmitRecommendationDto {
   @ValidateNested({ each: true })
   @Type(() => RecommendationLinkDto)
   links?: RecommendationLinkDto[];
+
+  /**
+   * Required on a WATCH_ORDER and forbidden elsewhere. Capped because an unbounded list is an
+   * unbounded write; the service enforces the "forbidden elsewhere" half, since two @ValidateIf
+   * decorators on one property cancel out.
+   */
+  @ValidateIf((dto: SubmitRecommendationDto) => dto.type === 'WATCH_ORDER')
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => WatchOrderItemDto)
+  items?: WatchOrderItemDto[];
 }
