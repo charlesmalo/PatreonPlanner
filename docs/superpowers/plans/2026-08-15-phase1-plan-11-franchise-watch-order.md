@@ -391,8 +391,51 @@ docker-compose -f docker-compose.e2e.yml up -d --build && pnpm --filter e2e e2e
 - Ambiguous → return candidates to pick → already how `catalog/search` works; unchanged.
 - Nesting, themes, semantic de-dupe → **deferred** to the catalog-intelligence plan.
 
+## Found in review (fixed)
+
+1. **Important — `WATCH_ORDER` and `EXTERNAL_LINK` shared one de-dupe namespace.** The unbound
+   partial index is `(creatorId, normalizedTitle)` with no `type` column — harmless while external
+   links were the only unbound class. A watch order named like an existing link resolved to *that
+   link*: the submitter was told "already on the board", all their steps were silently discarded,
+   and they were handed a link card in reply. The README table in this very plan documented the
+   two as separate keys. Fixed by a new migration and a matching service filter.
+2. **Important — a franchise got a *film's* streaming availability.** `COLLECTION` fell through to
+   `/movie/{id}/watch/providers`, and TMDB ids are unique only within a media type — so the call
+   succeeded and attributed a different work's offers to the franchise. Deferring franchise
+   availability means skipping the lookup, not mis-routing it. Now skipped at both layers.
+3. **Important — the `P2002` handler swallowed unrelated unique violations.** Moving item
+   resolution inside `create()` put `Title` upserts inside the catch that reads any `P2002` as
+   "someone won the de-dupe race" — which would have refunded the limit and thrown `P2025` on a
+   valid submission. Item resolution is hoisted out, and the handler now rethrows when no winner
+   exists.
+4. **Important — a duplicate watch order skipped all item validation.** The same body was a 400
+   with a fresh name and a 200 with a taken one. Fixed by the same hoist.
+5. **Important — fifty steps meant fifty simultaneous TMDB calls**, uncached, which trips the
+   upstream rate limit and exhausts the connection pool. Worse, `fetchTitle` swallowed *every*
+   error as "unknown title", so a 429 told the patron their valid submission contained a title
+   that does not exist. Now sequential, and 404 is distinguished from failure.
+6. **Important — the review queue exposed items over the API but never rendered them.** This
+   plan's own Known Risk 3 asserted "the review queue now shows the items"; end to end it did not.
+7. **Important — no way to compose a catalogue-bound step.** Nothing in the SPA ever set `tmdbId`,
+   so the bound branch was unreachable in production and half of "steps may be catalogue-bound"
+   was API-only. Each step now has catalogue suggestions.
+8. **Minor, also fixed:** `mediaType` was optional beside `tmdbId`, so a series id silently bound
+   a film; a whitespace-only step title persisted as an invisible step; the link field stayed
+   visible in watch-order mode while never being sent; the fifty-step cap was not mirrored
+   client-side; `search/collection` omitted `include_adult=false`; and two tests were vacuous —
+   one asserted the opposite of its own name and would have passed with the feature deleted.
+
+**Behaviour change worth noting:** `customTitle` on a `MOVIE`/`SHOW`/`FRANCHISE` is now a 400
+rather than accepted-and-ignored. Correct — silently discarding it lets a submitter believe they
+named the entry — but it is a breaking change for any client other than this SPA.
+
 **Known risks:**
 
+0. **The duplicate path still refunds the rate limit after spending a TMDB call and a full
+   moderation pass.** A patron can replay a known-duplicate watch order indefinitely at zero
+   limit cost, driving 101 moderation reviews per request — against the stated intent that "a
+   flood must not be able to drive that cost". Pre-existing, but this plan enlarges the blast
+   radius; it belongs with the abuse-scoring work.
 1. **`ALTER TYPE … ADD VALUE` is not reversible.** Postgres cannot drop an enum value, so rolling this migration back means recreating the type. Acceptable for a value that is only ever added.
 2. **A watch order's items are not de-duplicated against each other.** Listing the same film twice is legal, and sometimes correct (a rewatch mid-order), so this is deliberate — but it also means a bored submitter can pad fifty entries with one title.
 3. **Item moderation reviews text but not the *composition*.** Fifty items each individually clean can still be an abusive sequence read as a whole. That is a human-review problem, and the review queue now shows the items.

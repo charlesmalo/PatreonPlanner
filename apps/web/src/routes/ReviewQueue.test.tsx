@@ -15,6 +15,7 @@ function queueItem(overrides: Record<string, unknown> = {}) {
     submittedBy: { id: 'user-1', fullName: 'Grace', avatarUrl: null },
     openFlagCount: 0,
     flags: [],
+    watchOrderItems: [],
     ...overrides,
   };
 }
@@ -63,6 +64,28 @@ describe('ReviewQueue', () => {
     expect(await screen.findByText('Spirited Away')).toBeInTheDocument();
     expect(screen.getByText(/spam or advertising/i)).toBeInTheDocument();
     expect(screen.getByText('link farm')).toBeInTheDocument();
+  });
+
+  it('shows a watch order steps so they can be moderated', async () => {
+    // The API returns them; a queue that dropped them would review a title and nothing else.
+    global.fetch = fakeApi({
+      'GET /api/v1/creators/ada-writes': creator,
+      'GET /api/v1/creators/ada-writes/capabilities': moderator,
+      'GET /api/v1/creators/ada-writes/review-queue': {
+        items: [
+          queueItem({
+            customTitle: 'An order',
+            watchOrderItems: [
+              { position: 0, customTitle: 'First thing', note: 'start here', title: null },
+            ],
+          }),
+        ],
+        nextOffset: null,
+      },
+    });
+    renderQueue();
+    expect(await screen.findByText('First thing')).toBeInTheDocument();
+    expect(screen.getByText('start here')).toBeInTheDocument();
   });
 
   it('shows an empty state rather than a blank page', async () => {

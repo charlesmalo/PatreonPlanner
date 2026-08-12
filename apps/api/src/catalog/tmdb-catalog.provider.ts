@@ -4,6 +4,8 @@ import { ConfigService } from '../config/config.module';
 import { CatalogNotConfiguredError, CatalogProvider } from './catalog.provider';
 import { CatalogResult } from './catalog.types';
 
+class TitleNotFound extends Error {}
+
 const PATHS: Record<MediaType, string> = { MOVIE: 'movie', TV: 'tv', COLLECTION: 'collection' };
 
 interface TmdbItem {
@@ -39,7 +41,7 @@ export class TmdbCatalogProvider implements CatalogProvider {
     const encoded = encodeURIComponent(query);
     const [multi, collections] = await Promise.allSettled([
       this.get<{ results?: TmdbItem[] }>(`/search/multi?query=${encoded}&include_adult=false`),
-      this.get<{ results?: TmdbItem[] }>(`/search/collection?query=${encoded}`),
+      this.get<{ results?: TmdbItem[] }>(`/search/collection?query=${encoded}&include_adult=false`),
     ]);
     if (multi.status === 'rejected' && collections.status === 'rejected') throw multi.reason;
 
@@ -64,9 +66,11 @@ export class TmdbCatalogProvider implements CatalogProvider {
     try {
       const item = await this.get<TmdbItem>(`/${path}/${tmdbId}`);
       return this.toResult(item, mediaType);
-    } catch {
-      // An id TMDB does not know is a client mistake, not an outage.
-      return null;
+    } catch (error) {
+      // Only a 404 means "no such title". Swallowing everything told a patron their perfectly
+      // valid watch order contained an "Unknown title" when TMDB had merely rate-limited us.
+      if (error instanceof TitleNotFound) return null;
+      throw error;
     }
   }
 
@@ -78,6 +82,7 @@ export class TmdbCatalogProvider implements CatalogProvider {
       headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' },
     });
     if (!response.ok) {
+      if (response.status === 404) throw new TitleNotFound();
       // Status only: the body can echo the query and, on some errors, the key.
       this.logger.warn(`TMDB request failed with status ${response.status}`);
       throw new Error('Catalogue request failed');

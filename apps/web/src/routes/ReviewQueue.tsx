@@ -4,6 +4,7 @@ import { ApiError, api } from '../api/client';
 import { useCreator, useReviewQueue } from '../api/hooks';
 import type { ReviewQueueItem } from '../api/types';
 import { STATUS_LABELS, StatusControl } from '../components/StatusControl';
+import { WatchOrderList } from '../components/WatchOrderList';
 
 const REASON_LABELS: Record<string, string> = {
   SPAM: 'Spam or advertising',
@@ -105,6 +106,9 @@ function QueueRow({ slug, item, onUpdate, onFlagResolved }: QueueRowProps) {
               {item.description}
             </p>
           ) : null}
+          {/* Without this a moderator reviewing a fifty-step watch order sees a title and
+              nothing else — which is what the API change exists to prevent. */}
+          <WatchOrderList items={item.watchOrderItems ?? []} />
         </div>
         <div className="flex items-start gap-2">
           <button

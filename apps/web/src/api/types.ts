@@ -124,4 +124,6 @@ export interface ReviewQueueItem {
   submittedBy: { id: string; fullName: string | null; avatarUrl: string | null };
   openFlagCount: number;
   flags: FlagSummary[];
+  /** A watch order's text is mostly in its steps; a queue without them reviews only a title. */
+  watchOrderItems: WatchOrderItem[];
 }

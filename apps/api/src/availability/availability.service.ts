@@ -166,6 +166,9 @@ export class AvailabilityService implements OnApplicationShutdown {
       select: { tmdbId: true, mediaType: true },
     });
     if (!title) return null;
+    // Nothing upstream to ask, and no row to write: storing an empty one would put a franchise
+    // into the refresh job's working set forever for an answer that can never arrive.
+    if (title.mediaType === 'COLLECTION') return null;
 
     let snapshot: AvailabilitySnapshot | null;
     try {

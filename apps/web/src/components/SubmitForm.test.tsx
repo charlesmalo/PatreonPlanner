@@ -235,8 +235,33 @@ describe('SubmitForm content classes', () => {
     expect(JSON.parse(String(posted?.[1]?.body)).items).toEqual([{ customTitle: 'One' }]);
   });
 
-  it('hides the catalogue search in watch-order mode', () => {
+  it('hides the catalogue search and the link field in watch-order mode', async () => {
+    // The search picks a single work, and a watch order has no single work; the link field is
+    // never sent for one, so leaving it visible silently drops whatever is typed there.
     renderForm();
     expect(screen.getByLabelText(/search films and shows/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('radio', { name: /watch order/i }));
+    // Unmounted rather than class-hidden: jsdom applies no stylesheet, so a `hidden` class here
+    // would make the assertion meaningless.
+    expect(screen.queryByLabelText(/search films and shows/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/link/i)).not.toBeInTheDocument();
   });
+
+  it('refuses more than fifty steps without a request', async () => {
+    const fetchMock = fakeApi({});
+    global.fetch = fetchMock;
+    renderForm();
+    await userEvent.click(screen.getByRole('radio', { name: /watch order/i }));
+    await userEvent.type(screen.getByLabelText(/what to call it/i), 'Long');
+    // Faster than clicking "Add a step" fifty-one times, and the assertion is about the cap.
+    for (let i = 0; i < 51; i += 1) {
+      await userEvent.click(screen.getByRole('button', { name: /add a step/i }));
+    }
+    const inputs = screen.getAllByPlaceholderText('What to watch');
+    for (const input of inputs) await userEvent.type(input, 'x');
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent(/fifty steps/i);
+    expect(fetchMock.mock.calls.filter(([, i]) => i?.method === 'POST')).toHaveLength(0);
+  }, 30_000);
 });

@@ -175,6 +175,11 @@ export class RecommendationsService {
     // Resolved after moderation, for the same reason de-dupe is: a blocked submission must not
     // be able to probe the catalogue or spend its quota.
     const title = await this.resolveTitle(dto);
+    // Resolved here rather than inside create(), for two reasons. A duplicate must not skip item
+    // validation — the same body was a 400 with a fresh name and a 200 with a taken one. And the
+    // Title upserts these do must sit outside the P2002 catch below, which reads any unique
+    // violation as "someone won the de-dupe race".
+    const items = await this.resolveItems(dto);
 
     // De-dupe after moderation, so a blocked resubmission cannot be used to confirm what
     // already exists on a board the sender cannot read.
@@ -188,7 +193,15 @@ export class RecommendationsService {
     const existing = await this.prisma.recommendation.findFirst({
       where: title
         ? { creatorId, titleId: title.id, type: dto.type, status: { notIn: HIDDEN_STATUSES } }
-        : { creatorId, titleId: null, normalizedTitle, status: { notIn: HIDDEN_STATUSES } },
+        : {
+            creatorId,
+            titleId: null,
+            normalizedTitle,
+            // Scoped by type, matching the partial index: a watch order and an external link
+            // that happen to share a name are different suggestions.
+            type: dto.type,
+            status: { notIn: HIDDEN_STATUSES },
+          },
       select: RECOMMENDATION_FIELDS,
     });
     // Design §5: a resubmit returns the existing entry and invites an upvote rather than
@@ -208,19 +221,23 @@ export class RecommendationsService {
         displayTitle,
         normalizedTitle,
         title?.id ?? null,
+        items,
       );
     } catch (error) {
       // Two patrons submitting the same title concurrently both miss the read above; the unique
       // index is what actually enforces de-duplication, and the loser resolves to the winner's
       // row rather than erroring.
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        await this.refund(perCreatorKey, globalKey);
-        const winner = await this.prisma.recommendation.findFirstOrThrow({
+        const winner = await this.prisma.recommendation.findFirst({
           where: title
             ? { creatorId, titleId: title.id, type: dto.type }
-            : { creatorId, titleId: null, normalizedTitle },
+            : { creatorId, titleId: null, normalizedTitle, type: dto.type },
           select: RECOMMENDATION_FIELDS,
         });
+        // No winner means the violation came from somewhere else — a Title upsert, say — and
+        // reporting it as a duplicate would refund the limit and lose the submission.
+        if (!winner) throw error;
+        await this.refund(perCreatorKey, globalKey);
         return { duplicate: true as const, recommendation: await this.withUpvoted(winner, userId) };
       }
       throw error;
@@ -294,11 +311,8 @@ export class RecommendationsService {
     displayTitle: string,
     normalizedTitle: string,
     titleId: string | null,
+    items: Awaited<ReturnType<RecommendationsService['resolveItems']>>,
   ) {
-    // Resolved before the write, so an item with an id the catalogue does not know is a 400
-    // rather than a half-written watch order.
-    const items = await this.resolveItems(dto);
-
     const recommendation = await this.prisma.recommendation.create({
       data: {
         creatorId,
@@ -329,37 +343,57 @@ export class RecommendationsService {
   private async resolveItems(dto: SubmitRecommendationDto) {
     if (dto.type !== 'WATCH_ORDER' || !dto.items) return [];
 
-    return Promise.all(
-      dto.items.map(async (item, position) => {
-        const bound = item.tmdbId !== undefined;
-        // Exactly one identity: neither leaves nothing to render, both is ambiguous about which
-        // name is authoritative. The database check constraint enforces the same rule.
-        if (bound === (item.customTitle !== undefined)) {
-          throw new BadRequestException('Each step needs either a catalogue id or a title');
-        }
-        if (!bound) {
-          return { position, customTitle: item.customTitle as string, note: item.note ?? null };
-        }
+    const resolved: Array<{
+      position: number;
+      titleId?: string;
+      customTitle?: string;
+      note: string | null;
+    }> = [];
 
-        const mediaType: MediaType = item.mediaType === 'SHOW' ? 'TV' : 'MOVIE';
-        const result = await this.catalog.fetchTitle(item.tmdbId as number, mediaType);
-        if (!result) throw new BadRequestException('Unknown title in the watch order');
-        const title = await this.prisma.title.upsert({
-          where: { tmdbId_mediaType: { tmdbId: result.tmdbId, mediaType } },
-          create: {
-            tmdbId: result.tmdbId,
-            mediaType,
-            name: result.name,
-            year: result.year,
-            posterPath: result.posterPath,
-            overview: result.overview,
-          },
-          update: { name: result.name, year: result.year, posterPath: result.posterPath },
-          select: { id: true },
+    // Sequential, not Promise.all: fifty steps meant fifty simultaneous TMDB requests and fifty
+    // concurrent upserts, which trips the upstream rate limit and exhausts the connection pool —
+    // and a 429 surfaced to the patron as "Unknown title", blaming them for our fan-out.
+    for (const [position, item] of dto.items.entries()) {
+      const bound = item.tmdbId !== undefined;
+      const titled = (item.customTitle ?? '').trim().length > 0;
+      // Exactly one identity: neither leaves nothing to render, both is ambiguous about which
+      // name is authoritative. The database check constraint enforces the same rule.
+      if (bound === titled) {
+        throw new BadRequestException('Each step needs either a catalogue id or a title');
+      }
+      if (!bound) {
+        resolved.push({
+          position,
+          customTitle: (item.customTitle as string).trim(),
+          note: item.note?.trim() || null,
         });
-        return { position, titleId: title.id, note: item.note ?? null };
-      }),
-    );
+        continue;
+      }
+      // Required alongside tmdbId: TMDB ids are unique only within a media type, so defaulting
+      // it silently bound film 1399 for a caller who meant series 1399.
+      if (!item.mediaType) {
+        throw new BadRequestException('A catalogue step must say whether it is a film or a show');
+      }
+
+      const mediaType: MediaType = item.mediaType === 'SHOW' ? 'TV' : 'MOVIE';
+      const result = await this.catalog.fetchTitle(item.tmdbId as number, mediaType);
+      if (!result) throw new BadRequestException('Unknown title in the watch order');
+      const title = await this.prisma.title.upsert({
+        where: { tmdbId_mediaType: { tmdbId: result.tmdbId, mediaType } },
+        create: {
+          tmdbId: result.tmdbId,
+          mediaType,
+          name: result.name,
+          year: result.year,
+          posterPath: result.posterPath,
+          overview: result.overview,
+        },
+        update: { name: result.name, year: result.year, posterPath: result.posterPath },
+        select: { id: true },
+      });
+      resolved.push({ position, titleId: title.id, note: item.note?.trim() || null });
+    }
+    return resolved;
   }
 
   async toggleUpvote(creatorId: string, recommendationId: string, userId: string) {

@@ -223,6 +223,40 @@ describe('Franchise and watch-order submissions (integration)', () => {
       }).expect(400);
     });
 
+    it('does not collide with an external link of the same name', async () => {
+      // The unbound de-dupe index had no `type`, so a watch order named like an existing link
+      // resolved to that link: the steps were silently discarded and a link card came back.
+      await submit(patron, {
+        type: 'EXTERNAL_LINK',
+        customTitle: 'Star Wars Marathon',
+        links: [{ url: 'https://example.invalid/marathon' }],
+      }).expect(201);
+
+      const res = await submit(staff, order([{ customTitle: 'One' }], 'Star Wars Marathon')).expect(
+        201,
+      );
+      expect(res.body.recommendation.type).toBe('WATCH_ORDER');
+      expect(res.body.recommendation.watchOrderItems).toHaveLength(1);
+      expect(await countEntries()).toBe(2);
+    });
+
+    it('validates items even when the submission is a duplicate', async () => {
+      // The same body was a 400 with a fresh name and a 200 with a taken one, because the
+      // de-dupe read returned before items were ever looked at.
+      await submit(patron, order([{ customTitle: 'One' }])).expect(201);
+      await submit(staff, order([{ note: 'no title' }])).expect(400);
+    });
+
+    it('requires a media type alongside a catalogue id', async () => {
+      // TMDB ids are unique only within a media type; defaulting to MOVIE silently bound film
+      // 1399 for someone who meant series 1399.
+      await submit(patron, order([{ tmdbId: 129 }])).expect(400);
+    });
+
+    it('refuses a step whose title is only whitespace', async () => {
+      await submit(patron, order([{ customTitle: '   ' }])).expect(400);
+    });
+
     it('de-duplicates on the outer title like an external link does', async () => {
       await submit(patron, order([{ customTitle: 'A' }])).expect(201);
       const res = await submit(staff, order([{ customTitle: 'B' }])).expect(200);

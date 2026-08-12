@@ -19,6 +19,8 @@ const TYPE_FOR_MEDIA: Record<CatalogResult['mediaType'], 'MOVIE' | 'SHOW' | 'FRA
   COLLECTION: 'FRANCHISE',
 };
 
+const MAX_ITEMS = 50;
+
 const MAX_TITLE = 200;
 const MAX_DESCRIPTION = 2000;
 
@@ -50,6 +52,11 @@ export function SubmitForm({ slug, onCreated }: SubmitFormProps) {
     }
     if (filled.length === 0) {
       setMessage('A watch order needs at least one step.');
+      return;
+    }
+    // Mirrors the DTO's cap so the mistake costs no round-trip; the server's 400 still wins.
+    if (filled.length > MAX_ITEMS) {
+      setMessage('A watch order can have at most fifty steps.');
       return;
     }
 
@@ -196,57 +203,61 @@ export function SubmitForm({ slug, onCreated }: SubmitFormProps) {
         </div>
       </fieldset>
       <div className="mt-3 space-y-3">
-        <div className={mode === 'WATCH_ORDER' ? 'hidden' : undefined}>
-          <label htmlFor="rec-search" className="block text-sm font-medium">
-            Search films and shows
-          </label>
-          {picked ? (
-            <div className="mt-1 flex items-center gap-2">
-              <span className="rounded bg-slate-100 px-2 py-1 text-sm dark:bg-slate-800">
-                {picked.name}
-                {picked.year ? ` (${picked.year})` : ''}
-              </span>
-              <button
-                type="button"
-                onClick={() => setPicked(null)}
-                className="text-sm underline focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
-              >
-                Change
-              </button>
-            </div>
-          ) : (
-            <>
-              <input
-                id="rec-search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="e.g. Spirited Away"
-                className="mt-1 w-full rounded border border-slate-300 px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-slate-700 dark:bg-slate-950"
-              />
-              {results.length > 0 ? (
-                <ul className="mt-2 space-y-1">
-                  {results.slice(0, 5).map((result) => (
-                    <li key={`${result.mediaType}-${result.tmdbId}`}>
-                      <button
-                        type="button"
-                        onClick={() => setPicked(result)}
-                        className="w-full rounded px-2 py-1 text-left text-sm hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:hover:bg-slate-800"
-                      >
-                        {result.name}
-                        {result.year ? ` (${result.year})` : ''}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              {searchError ? (
-                <p role="status" className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                  {searchError}
-                </p>
-              ) : null}
-            </>
-          )}
-        </div>
+        {/* Unmounted, not class-hidden: a watch order has no single work to look up, and a
+            leftover pick would be sent as the entry's type. */}
+        {mode === 'WATCH_ORDER' ? null : (
+          <div>
+            <label htmlFor="rec-search" className="block text-sm font-medium">
+              Search films and shows
+            </label>
+            {picked ? (
+              <div className="mt-1 flex items-center gap-2">
+                <span className="rounded bg-slate-100 px-2 py-1 text-sm dark:bg-slate-800">
+                  {picked.name}
+                  {picked.year ? ` (${picked.year})` : ''}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPicked(null)}
+                  className="text-sm underline focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                >
+                  Change
+                </button>
+              </div>
+            ) : (
+              <>
+                <input
+                  id="rec-search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="e.g. Spirited Away"
+                  className="mt-1 w-full rounded border border-slate-300 px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-slate-700 dark:bg-slate-950"
+                />
+                {results.length > 0 ? (
+                  <ul className="mt-2 space-y-1">
+                    {results.slice(0, 5).map((result) => (
+                      <li key={`${result.mediaType}-${result.tmdbId}`}>
+                        <button
+                          type="button"
+                          onClick={() => setPicked(result)}
+                          className="w-full rounded px-2 py-1 text-left text-sm hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:hover:bg-slate-800"
+                        >
+                          {result.name}
+                          {result.year ? ` (${result.year})` : ''}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {searchError ? (
+                  <p role="status" className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                    {searchError}
+                  </p>
+                ) : null}
+              </>
+            )}
+          </div>
+        )}
         <div className={picked && mode !== 'WATCH_ORDER' ? 'hidden' : undefined}>
           <label htmlFor="rec-title" className="block text-sm font-medium">
             {mode === 'WATCH_ORDER'
@@ -261,7 +272,9 @@ export function SubmitForm({ slug, onCreated }: SubmitFormProps) {
             className="mt-1 w-full rounded border border-slate-300 px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-slate-700 dark:bg-slate-950"
           />
         </div>
-        {mode === 'WATCH_ORDER' ? <WatchOrderEditor items={items} onChange={setItems} /> : null}
+        {mode === 'WATCH_ORDER' ? (
+          <WatchOrderEditor slug={slug} items={items} onChange={setItems} />
+        ) : null}
         <div>
           <label htmlFor="rec-description" className="block text-sm font-medium">
             Why? <span className="font-normal text-slate-500 dark:text-slate-400">(optional)</span>
@@ -275,19 +288,24 @@ export function SubmitForm({ slug, onCreated }: SubmitFormProps) {
             className="mt-1 w-full rounded border border-slate-300 px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-slate-700 dark:bg-slate-950"
           />
         </div>
-        <div className={picked ? 'hidden' : undefined}>
-          <label htmlFor="rec-url" className="block text-sm font-medium">
-            Link <span className="font-normal text-slate-500 dark:text-slate-400">(optional)</span>
-          </label>
-          <input
-            id="rec-url"
-            type="url"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://"
-            className="mt-1 w-full rounded border border-slate-300 px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-slate-700 dark:bg-slate-950"
-          />
-        </div>
+        {/* Unmounted rather than hidden in watch-order mode: submitWatchOrder never sends links,
+            so a URL typed here would be silently dropped. */}
+        {mode === 'WATCH_ORDER' ? null : (
+          <div className={picked ? 'hidden' : undefined}>
+            <label htmlFor="rec-url" className="block text-sm font-medium">
+              Link{' '}
+              <span className="font-normal text-slate-500 dark:text-slate-400">(optional)</span>
+            </label>
+            <input
+              id="rec-url"
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://"
+              className="mt-1 w-full rounded border border-slate-300 px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-slate-700 dark:bg-slate-950"
+            />
+          </div>
+        )}
       </div>
       <button
         type="submit"

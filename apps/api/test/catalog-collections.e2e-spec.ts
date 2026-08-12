@@ -106,3 +106,26 @@ describe('TmdbCatalogProvider collections', () => {
     await expect(provider.search('star wars')).rejects.toThrow();
   });
 });
+
+describe('TmdbCatalogProvider error handling', () => {
+  const originalFetch = global.fetch;
+  let provider: TmdbCatalogProvider;
+
+  beforeAll(() => {
+    process.env.TMDB_API_KEY = 'test-key';
+    provider = new TmdbCatalogProvider(new ConfigService());
+  });
+  afterAll(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('distinguishes an unknown title from an upstream failure', async () => {
+    // Both used to return null, so a 429 during a fifty-step watch order told the patron their
+    // submission contained an "Unknown title".
+    global.fetch = jest.fn(async () => ({ ok: false, status: 404 })) as never;
+    expect(await provider.fetchTitle(1, 'MOVIE')).toBeNull();
+
+    global.fetch = jest.fn(async () => ({ ok: false, status: 429 })) as never;
+    await expect(provider.fetchTitle(1, 'MOVIE')).rejects.toThrow();
+  });
+});

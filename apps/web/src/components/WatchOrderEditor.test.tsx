@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { WatchOrderEditor, type DraftItem } from './WatchOrderEditor';
+import { fakeApi } from '../test-support';
 
 function Harness({ initial = [] as DraftItem[] }) {
   const [items, setItems] = useState<DraftItem[]>(initial);
   return (
     <>
-      <WatchOrderEditor items={items} onChange={setItems} />
+      <WatchOrderEditor slug="ada-writes" items={items} onChange={setItems} />
       <output data-testid="order">{items.map((i) => i.customTitle).join('|')}</output>
     </>
   );
@@ -16,8 +17,9 @@ function Harness({ initial = [] as DraftItem[] }) {
 const order = () => screen.getByTestId('order').textContent;
 
 describe('WatchOrderEditor', () => {
-  it('starts with a single empty step', () => {
+  it('renders no steps until one is added', () => {
     render(<Harness />);
+    expect(screen.queryByLabelText('Step 1 title')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /add a step/i })).toBeInTheDocument();
   });
 
@@ -71,5 +73,43 @@ describe('WatchOrderEditor', () => {
     render(<Harness initial={[{ tmdbId: 129, mediaType: 'MOVIE', boundName: 'Spirited Away' }]} />);
     expect(screen.getByText('Spirited Away')).toBeInTheDocument();
     expect(screen.queryByLabelText('Step 1 title')).not.toBeInTheDocument();
+  });
+});
+
+describe('WatchOrderEditor catalogue binding', () => {
+  const originalFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('binds a step to a catalogue result and stops offering a title field', async () => {
+    // Without this the bound branch was unreachable in production: nothing anywhere set tmdbId,
+    // so half of "steps may be catalogue-bound" was API-only.
+    global.fetch = fakeApi({
+      'GET /api/v1/creators/ada-writes/catalog/search': {
+        results: [
+          {
+            tmdbId: 129,
+            mediaType: 'MOVIE',
+            name: 'Spirited Away',
+            year: 2001,
+            posterPath: null,
+            overview: null,
+          },
+        ],
+      },
+    });
+    render(<Harness initial={[{ customTitle: '' }]} />);
+    await userEvent.type(screen.getByLabelText('Step 1 title'), 'spirited');
+    await userEvent.click(await screen.findByRole('button', { name: /use spirited away/i }));
+
+    expect(screen.getByText('Spirited Away')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Step 1 title')).not.toBeInTheDocument();
+  });
+
+  it('lets a bound step go back to free text', async () => {
+    render(<Harness initial={[{ tmdbId: 129, mediaType: 'MOVIE', boundName: 'Spirited Away' }]} />);
+    await userEvent.click(screen.getByRole('button', { name: /unlink step 1/i }));
+    expect(screen.getByLabelText('Step 1 title')).toBeInTheDocument();
   });
 });
