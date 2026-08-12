@@ -728,8 +728,42 @@ docker compose -f docker-compose.e2e.yml up -d --build && pnpm --filter e2e e2e
 - "multiple flags raise priority" → Task 6's ordering by open flag count. ✅
 - `ModerationResult`, `AbuseRecord`, `Notification`, `CreatorNote`, kanban drag, bulk actions, per-IP bucket → **deferred**, each with its reason in Scope. ✅
 
+## Found in review (fixed)
+
+1. **Critical — the cursor clause deleted the visibility filter.** `visibilityWhere()` returns a
+   bare `{ OR: [...] }` and the keyset clause wanted the same key; spreading both meant last-wins,
+   so page two of a board with `hidePendingFromPublic` on came back with *no status filter at
+   all* — rejected, deleted and other patrons' pending entries, to anyone who clicked "Load more".
+   Page one was correct, which is what made it survive review of the first draft. Composed with
+   `AND` now, and `board-visibility.int-spec.ts` pages with `limit=1`. The original test used
+   `limit=50` against four rows and so never reached a second page.
+2. **Important — the queue's priority sort counted resolved flags.** Prisma's
+   `orderBy: { flags: { _count } }` takes no `where`, so an entry whose reports had all been
+   handled stayed pinned above one with a live report, showing "Reports (0)". Ordering now happens
+   in a raw query over a filtered count, before the limit — sorting the page in memory would sort
+   only the page and put the wrong entries on it.
+3. **Important — the transition check ran outside its transaction.** Two moderators could both
+   read `PENDING`, both pass the map, and both write, reaching `ACCEPTED` via `REJECTED` — a move
+   the map forbids — with an audit row claiming a `before` that was no longer true. Every mutation
+   here now writes conditionally on the state it was checked against and answers `409` otherwise.
+   The same shape was fixed in `redact` (where a second edit recorded the first moderator's
+   replacement as the "original") and in `resolveFlag`.
+4. **Minor, also fixed:** an already-handled flag could be re-resolved, overwriting who handled it;
+   redaction left the pre-redaction title in `normalizedTitle`, so the original still owned the
+   de-duplication key; the SPA dropped `nextOffset`, capping the queue at 20 entries; a staff page
+   holding only rejected/deleted entries rendered blank; `Recommendation_creatorId_createdAt_idx`
+   was missing from `schema.prisma`, so the next `migrate dev` would have proposed dropping it;
+   and the e2e seed helper broke on an apostrophe in a title.
+
 **Known risks:**
 
+0. **The audit log does not outlive the content it describes.** `ModerationAction.actorUserId` is
+   `Restrict` so a moderator's deletion cannot erase their record — but the row cascades from
+   `Recommendation`, which cascades from the submitting `User`. Deleting the account of the person
+   whose content was moderated destroys the record of the moderation, and that is the account most
+   likely to be deleted after abuse. Left as is deliberately: severing it means a nullable
+   `recommendationId` and a decision about what an audit row means once its subject is gone, which
+   belongs with the abuse-record work that has the same question.
 1. **`hidePendingFromPublic` still lets an upvote confirm a hidden entry exists.** The upvote path
    filters on `HIDDEN_STATUSES`, which does not include `PENDING`, so a patron holding an id can
    upvote an entry the board would not show them. It leaks existence, not content. Closing it

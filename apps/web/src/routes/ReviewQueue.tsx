@@ -60,6 +60,22 @@ export function ReviewQueue() {
           ))}
         </ul>
       )}
+
+      {queue.hasMore ? (
+        <button
+          type="button"
+          onClick={queue.loadMore}
+          disabled={queue.loadingMore}
+          className="mt-4 rounded border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-slate-700 dark:hover:bg-slate-800"
+        >
+          {queue.loadingMore ? 'Loading…' : 'Load more'}
+        </button>
+      ) : null}
+      {queue.moreError ? (
+        <p role="status" aria-live="polite" className="mt-2 text-sm text-red-600 dark:text-red-400">
+          {queue.moreError}
+        </p>
+      ) : null}
     </section>
   );
 }

@@ -76,7 +76,9 @@ describe('Board visibility (integration)', () => {
   type Auth = Awaited<ReturnType<typeof loginAs>>;
 
   let counter = 0;
-  async function makeEntry(status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'DELETED') {
+  async function makeEntry(
+    status: 'PENDING' | 'ACCEPTED' | 'ACTIVE' | 'COMPLETED' | 'REJECTED' | 'DELETED',
+  ) {
     counter += 1;
     return ctx.prisma.recommendation.create({
       data: {
@@ -143,6 +145,33 @@ describe('Board visibility (integration)', () => {
     await setHidePending(true);
     const res = await board().expect(200);
     expect(ids(res.body)).not.toContain(pendingId);
+  });
+
+  it('keeps the visibility filter on every page, not just the first', async () => {
+    // The cursor clause and the visibility clause both wanted the `OR` key, and the spread let
+    // the cursor overwrite it — so page 2 came back with no status filter at all.
+    await setHidePending(true);
+    // Enough visible entries that a limit of 1 actually produces a second page — with a single
+    // survivor the first page carries no cursor and the paged path is never reached.
+    const extra = [await makeEntry('ACCEPTED'), await makeEntry('COMPLETED')];
+    const seen: string[] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < 10; page += 1) {
+      const url = `/api/v1/creators/visibility-co/recommendations?limit=1${
+        cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''
+      }`;
+      const res = await request(ctx.app.getHttpServer())
+        .get(url)
+        .set('Cookie', [otherPatron.session, otherPatron.csrf])
+        .expect(200);
+      seen.push(...ids(res.body));
+      if (!res.body.nextCursor) break;
+      cursor = res.body.nextCursor;
+    }
+    expect(seen).not.toContain(rejectedId);
+    expect(seen).not.toContain(deletedId);
+    expect(seen).not.toContain(pendingId);
+    expect(seen).toEqual(expect.arrayContaining([acceptedId, ...extra.map((e) => e.id)]));
   });
 
   it('still shows staff pending entries when the toggle is on', async () => {

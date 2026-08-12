@@ -1,6 +1,13 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { FlagStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { normalizeTitle } from '../recommendations/normalize-title';
 import { ModerationService } from './moderation.service';
 
 const MAX_PAGE = 50;
@@ -24,8 +31,28 @@ export class ReviewQueueService {
    */
   async list(creatorId: string, offset = 0, limit = 20) {
     const take = Math.min(Math.max(limit, 1), MAX_PAGE);
-    const items = await this.prisma.recommendation.findMany({
-      where: { creatorId },
+
+    // Ordered in SQL over a count of *open* flags only. Prisma's `orderBy: { flags: { _count } }`
+    // has no `where`, so it counts resolved and dismissed reports too — which left an entry whose
+    // reports had all been handled pinned to the top of the queue showing "Reports (0)", while a
+    // live report sat below it. Paging in memory would only sort the page, putting the wrong
+    // entries on it, so the ordering has to happen before the limit.
+    const ordered = await this.prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT r."id"
+      FROM "Recommendation" r
+      LEFT JOIN "Flag" f ON f."recommendationId" = r."id" AND f."status" = 'OPEN'
+      WHERE r."creatorId" = ${creatorId}::uuid
+      GROUP BY r."id", r."createdAt"
+      ORDER BY COUNT(f."id") DESC, r."createdAt" ASC
+      LIMIT ${take + 1} OFFSET ${offset}
+    `;
+    const orderedIds = ordered.map((row) => row.id);
+    if (orderedIds.length === 0) return { items: [], nextOffset: null };
+
+    const rows = await this.prisma.recommendation.findMany({
+      // Still scoped by creatorId as well as the id list: a defence-in-depth pairing, so a future
+      // change to the raw query above cannot alone leak another tenant's entries.
+      where: { id: { in: orderedIds }, creatorId },
       select: {
         id: true,
         customTitle: true,
@@ -47,12 +74,14 @@ export class ReviewQueueService {
         },
         _count: { select: { flags: { where: { status: 'OPEN' } } } },
       },
-      // "Multiple flags raise priority" (design §6.6). Postgres orders by the counted relation,
-      // so the queue does not have to be sorted in memory after a paged read — which would sort
-      // only the page and put the wrong entries on it.
-      orderBy: [{ flags: { _count: 'desc' } }, { createdAt: 'asc' }],
-      skip: offset,
-      take: take + 1,
+    });
+
+    // `IN` returns rows in whatever order Postgres likes, so the priority order from the query
+    // above has to be reapplied here.
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const items = orderedIds.flatMap((id) => {
+      const row = byId.get(id);
+      return row ? [row] : [];
     });
 
     const hasMore = items.length > take;
@@ -100,9 +129,28 @@ export class ReviewQueueService {
     const after = Object.fromEntries(fields);
 
     return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.recommendation.update({
+      // Conditional on the text the snapshot was taken from. Without it a second redaction of the
+      // same entry records the first moderator's replacement as the "original", and the true
+      // original is gone from the log for good.
+      const { count } = await tx.recommendation.updateMany({
+        where: {
+          id: recommendationId,
+          creatorId,
+          ...Object.fromEntries(fields.map(([key]) => [key, current[key as keyof typeof changes]])),
+        },
+        data: {
+          ...after,
+          // Recomputed with the title, or the pre-redaction text lives on in the de-duplication
+          // key: a resubmission of the original abusive title would resolve to this entry as a
+          // duplicate, while the redacted title would not de-duplicate at all.
+          ...(after.customTitle ? { normalizedTitle: normalizeTitle(after.customTitle) } : {}),
+        },
+      });
+      if (count === 0) {
+        throw new ConflictException('That entry changed while you were editing it');
+      }
+      const updated = await tx.recommendation.findUniqueOrThrow({
         where: { id: recommendationId },
-        data: after,
         select: { id: true, customTitle: true, description: true, status: true },
       });
       await tx.moderationAction.create({
@@ -139,13 +187,21 @@ export class ReviewQueueService {
       select: { id: true, status: true, recommendationId: true },
     });
     if (!flag) throw new NotFoundException();
+    if (flag.status !== 'OPEN') {
+      // Re-resolving overwrites who handled it and when, and appends an audit row whose `before`
+      // is a state the design defines no transition out of.
+      throw new ConflictException('That report has already been handled');
+    }
 
     return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.flag.update({
-        where: { id: flagId },
+      const { count } = await tx.flag.updateMany({
+        where: { id: flagId, status: 'OPEN' },
         data: { status, resolvedByUserId: actorUserId, resolvedAt: new Date() },
-        select: { id: true, status: true, resolvedAt: true },
       });
+      // Conditional for the same reason the status transition is: the check above ran before the
+      // transaction, so two moderators clicking at once would otherwise both write.
+      if (count === 0) throw new ConflictException('That report has already been handled');
+      const updated = { id: flagId, status };
       await tx.moderationAction.create({
         data: {
           recommendationId: flag.recommendationId,

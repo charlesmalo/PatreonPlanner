@@ -62,11 +62,16 @@ export function CreatorBoard() {
         </p>
       ) : board.error ? (
         <BoardError status={board.error.status} />
-      ) : board.items.length === 0 ? (
+      ) : columns.length === 0 ? (
         <>
           <h2 className="mt-8 text-lg font-medium">Suggestions</h2>
           <p className="mt-3 text-slate-600 dark:text-slate-300">
-            Nothing suggested yet. {capabilities.submit ? 'Be the first.' : ''}
+            {/* Keyed on the rendered columns, not the raw item count: a staff viewer whose page
+                holds only rejected or deleted entries has items but no column to show them in,
+                and rendered a page with nothing on it at all. */}
+            {board.items.length === 0
+              ? `Nothing suggested yet. ${capabilities.submit ? 'Be the first.' : ''}`
+              : 'Nothing on the board — the entries here are in the review queue.'}
           </p>
         </>
       ) : (

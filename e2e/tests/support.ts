@@ -127,7 +127,7 @@ export function makeStaff(patreonUserId: string): void {
   seed(`
     INSERT INTO "CreatorStaff"(id,"creatorId","userId",role,"createdAt","updatedAt")
       SELECT gen_random_uuid(),'${CREATOR.id}',u.id,'MOD',now(),now()
-      FROM "User" u WHERE u."patreonUserId"='${patreonUserId}'
+      FROM "User" u WHERE u."patreonUserId"=${sqlLiteral(patreonUserId)}
       ON CONFLICT ("creatorId","userId") DO NOTHING;
   `);
 }
@@ -143,6 +143,11 @@ export function setHidePending(value: boolean): void {
  * needs a second patron's submission without a second login — switching identities mid-test
  * proved flaky, and the property under test is about *whose* entry it is, not how it got there.
  */
+/** Postgres string literal quoting — the seed helpers interpolate titles straight into SQL. */
+function sqlLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
 export function seedEntryFrom(
   patreonUserId: string,
   title: string,
@@ -154,10 +159,10 @@ export function seedEntryFrom(
     .trim();
   seed(`
     INSERT INTO "User"(id,"patreonUserId","fullName","createdAt","updatedAt")
-      VALUES (gen_random_uuid(),'${patreonUserId}','Other Patron',now(),now())
+      VALUES (gen_random_uuid(),${sqlLiteral(patreonUserId)},'Other Patron',now(),now())
       ON CONFLICT ("patreonUserId") DO NOTHING;
     INSERT INTO "Recommendation"(id,"creatorId","submittedByUserId",type,"customTitle","normalizedTitle",status,"createdAt","updatedAt")
-      SELECT gen_random_uuid(),'${CREATOR.id}',u.id,'EXTERNAL_LINK','${title}','${normalized}','${status}',now(),now()
-      FROM "User" u WHERE u."patreonUserId"='${patreonUserId}';
+      SELECT gen_random_uuid(),'${CREATOR.id}',u.id,'EXTERNAL_LINK',${sqlLiteral(title)},${sqlLiteral(normalized)},'${status}',now(),now()
+      FROM "User" u WHERE u."patreonUserId"=${sqlLiteral(patreonUserId)};
   `);
 }

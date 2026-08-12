@@ -133,6 +133,23 @@ describe('Review queue (integration)', () => {
     expect(res.body.items[2].openFlagCount).toBe(0);
   });
 
+  it('does not keep a fully-resolved entry at the top of the queue', async () => {
+    // Ordering on the *unfiltered* relation count leaves an entry whose reports were all handled
+    // sitting above one with a live report, showing "Reports (0)" — the opposite of design §6.6.
+    const handled = await makeEntry();
+    const live = await makeEntry();
+    await flagAs(patron, handled.id).expect(201);
+    await flagAs(otherPatron, handled.id).expect(201);
+    await flagAs(patron, live.id).expect(201);
+    for (const f of await ctx.prisma.flag.findMany({ where: { recommendationId: handled.id } })) {
+      await patch(staff, `/creators/queue-co/flags/${f.id}`, { status: 'DISMISSED' }).expect(200);
+    }
+
+    const res = await queue(staff).expect(200);
+    expect(res.body.items[0].id).toBe(live.id);
+    expect(res.body.items[0].openFlagCount).toBe(1);
+  });
+
   it('exposes each flag reason and note to the moderator', async () => {
     const rec = await makeEntry();
     await flagAs(patron, rec.id).expect(201);
@@ -245,6 +262,32 @@ describe('Review queue (integration)', () => {
     await patch(staff, `/creators/queue-co/flags/${foreignFlag.id}`, {
       status: 'RESOLVED',
     }).expect(404);
+  });
+
+  it('refuses to handle a report twice', async () => {
+    const rec = await makeEntry();
+    await flagAs(patron, rec.id).expect(201);
+    const flag = await ctx.prisma.flag.findFirstOrThrow({ where: { recommendationId: rec.id } });
+    await patch(staff, `/creators/queue-co/flags/${flag.id}`, { status: 'RESOLVED' }).expect(200);
+    // Re-handling would overwrite who resolved it and when, and log a transition the design has
+    // no rule for.
+    await patch(staff, `/creators/queue-co/flags/${flag.id}`, { status: 'DISMISSED' }).expect(409);
+    const row = await ctx.prisma.flag.findUniqueOrThrow({ where: { id: flag.id } });
+    expect(row.status).toBe('RESOLVED');
+    expect(await ctx.prisma.moderationAction.count({ where: { recommendationId: rec.id } })).toBe(
+      1,
+    );
+  });
+
+  it('recomputes the de-duplication key when a title is redacted', async () => {
+    // Otherwise the pre-redaction title lives on as the de-dupe key: a resubmission of the
+    // original resolves to this entry, and the redacted title de-duplicates against nothing.
+    const rec = await makeEntry();
+    await patch(staff, `/creators/queue-co/recommendations/${rec.id}`, {
+      customTitle: 'Redacted Title',
+    }).expect(200);
+    const row = await ctx.prisma.recommendation.findUniqueOrThrow({ where: { id: rec.id } });
+    expect(row.normalizedTitle).toBe('redacted title');
   });
 
   it('refuses to move a flag back to OPEN', async () => {

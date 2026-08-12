@@ -332,23 +332,31 @@ export class RecommendationsService {
     const items = (await this.prisma.recommendation.findMany({
       where: {
         creatorId: creator.id,
-        ...visibilityWhere(creator, viewer),
-        ...(cursor
-          ? {
-              OR: [
-                { upvoteCount: { lt: cursor.upvoteCount } },
+        // Composed with AND, never spread: both clauses are disjunctions and want the `OR` key,
+        // so spreading let the cursor overwrite the visibility filter outright — page one was
+        // correct and every page after it returned rejected, deleted and other patrons' pending
+        // entries to anyone who clicked "Load more".
+        AND: [
+          visibilityWhere(creator, viewer),
+          ...(cursor
+            ? [
                 {
-                  upvoteCount: cursor.upvoteCount,
-                  createdAt: { lt: cursor.createdAt },
+                  OR: [
+                    { upvoteCount: { lt: cursor.upvoteCount } },
+                    {
+                      upvoteCount: cursor.upvoteCount,
+                      createdAt: { lt: cursor.createdAt },
+                    },
+                    {
+                      upvoteCount: cursor.upvoteCount,
+                      createdAt: cursor.createdAt,
+                      id: { lt: cursor.id },
+                    },
+                  ],
                 },
-                {
-                  upvoteCount: cursor.upvoteCount,
-                  createdAt: cursor.createdAt,
-                  id: { lt: cursor.id },
-                },
-              ],
-            }
-          : {}),
+              ]
+            : []),
+        ],
       },
       orderBy: [{ upvoteCount: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
       take: take + 1,

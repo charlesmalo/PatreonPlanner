@@ -31,11 +31,18 @@ export class ModerationActionsService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.recommendation.update({
-        where: { id: recommendationId },
+      // Conditional on the status the transition was checked against. An unconditional update
+      // let two concurrent moderators both read PENDING, both pass the map, and both write —
+      // ending at ACCEPTED via REJECTED, a move the map forbids, with an audit row claiming a
+      // `before` that was no longer true when the write landed.
+      const { count } = await tx.recommendation.updateMany({
+        where: { id: recommendationId, creatorId, status: current.status },
         data: { status: to },
-        select: { id: true, status: true },
       });
+      if (count === 0) {
+        throw new ConflictException('That entry changed while you were looking at it');
+      }
+      const updated = { id: recommendationId, status: to };
       await tx.moderationAction.create({
         data: {
           recommendationId,

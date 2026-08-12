@@ -148,6 +148,26 @@ describe('Submission lifecycle (integration)', () => {
     await changeStatus(staff, rec.id, { status: 'BANANA' }).expect(400);
   });
 
+  it('lets only one of two identical concurrent transitions win', async () => {
+    // Exactly one 200 and exactly one audit row under every interleaving. If both requests read
+    // PENDING before either wrote, the unconditional update let both commit — two audit rows for
+    // one change, the second claiming a `before` that was no longer true. The write is now
+    // conditional on the status the transition map was checked against.
+    const rec = await makeEntry();
+    const results = await Promise.all([
+      changeStatus(staff, rec.id, { status: 'ACCEPTED' }),
+      changeStatus(staff, rec.id, { status: 'ACCEPTED' }),
+    ]);
+    expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+
+    const actions = await ctx.prisma.moderationAction.findMany({
+      where: { recommendationId: rec.id },
+    });
+    expect(actions).toHaveLength(1);
+    const row = await ctx.prisma.recommendation.findUniqueOrThrow({ where: { id: rec.id } });
+    expect(actions[0].after).toEqual({ status: row.status });
+  });
+
   it('stores the moderator note on the audit row', async () => {
     const rec = await makeEntry();
     await changeStatus(staff, rec.id, { status: 'REJECTED', note: 'off topic' }).expect(200);

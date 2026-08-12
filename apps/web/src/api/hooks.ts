@@ -84,8 +84,11 @@ export function useCreator(slug: string) {
 
 export function useReviewQueue(slug: string) {
   const [items, setItems] = useState<ReviewQueueItem[]>([]);
+  const [nextOffset, setNextOffset] = useState<number | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState<string | null>(null);
 
   const path = `/creators/${encodeURIComponent(slug)}/review-queue`;
 
@@ -94,9 +97,11 @@ export function useReviewQueue(slug: string) {
     setLoading(true);
     setError(null);
     api
-      .get<{ items: ReviewQueueItem[] }>(path)
+      .get<{ items: ReviewQueueItem[]; nextOffset: number | null }>(path)
       .then((queue) => {
-        if (!cancelled) setItems(queue.items);
+        if (cancelled) return;
+        setItems(queue.items);
+        setNextOffset(queue.nextOffset);
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof ApiError ? err : new ApiError(0));
@@ -130,7 +135,41 @@ export function useReviewQueue(slug: string) {
     );
   }, []);
 
-  return { items, loading, error, update, dropFlag };
+  /**
+   * The queue lists every entry on the board, not only flagged ones, so a board with more than a
+   * page of entries left its tail permanently unreachable without this.
+   */
+  const loadMore = useCallback(async () => {
+    if (nextOffset === null) return;
+    setLoadingMore(true);
+    setMoreError(null);
+    try {
+      const queue = await api.get<{ items: ReviewQueueItem[]; nextOffset: number | null }>(
+        `${path}?offset=${nextOffset}`,
+      );
+      setItems((current) => {
+        const seen = new Set(current.map((i) => i.id));
+        return [...current, ...queue.items.filter((i) => !seen.has(i.id))];
+      });
+      setNextOffset(queue.nextOffset);
+    } catch {
+      setMoreError('Could not load more. Try again.');
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [nextOffset, path]);
+
+  return {
+    items,
+    loading,
+    error,
+    update,
+    dropFlag,
+    loadMore,
+    loadingMore,
+    moreError,
+    hasMore: nextOffset !== null,
+  };
 }
 
 export function useBoard(slug: string, enabled: boolean) {

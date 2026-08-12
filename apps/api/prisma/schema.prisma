@@ -243,6 +243,9 @@ model Recommendation {
   // cannot be walked in sort order — the board fell back to sorting the creator's whole table.
   // This one matches the ORDER BY exactly.
   @@index([creatorId, upvoteCount(sort: Desc), createdAt(sort: Desc), id(sort: Desc)])
+  // The review queue reads one creator's entries oldest-first, including the statuses the board
+  // index's consumers never ask for.
+  @@index([creatorId, createdAt])
   @@index([submittedByUserId])
 }
 
