@@ -109,11 +109,55 @@ export function seedCreator(): void {
     INSERT INTO "CreatorPolicy"(id,"creatorId","createdAt","updatedAt")
       VALUES ('${CREATOR.policyId}','${CREATOR.id}',now(),now())
       ON CONFLICT ("creatorId") DO NOTHING;
-    UPDATE "CreatorPolicy" SET "viewVisibility"='PUBLIC', "submitMinTierId"=NULL, "upvoteMinTierId"=NULL
+    UPDATE "CreatorPolicy" SET "viewVisibility"='PUBLIC', "submitMinTierId"=NULL,
+      "upvoteMinTierId"=NULL, "hidePendingFromPublic"=false
       WHERE "creatorId"='${CREATOR.id}';
   `);
 }
 
 export function setVisibility(value: 'PUBLIC' | 'ANY_PATREON_USER' | 'SUBSCRIBERS_ONLY'): void {
   seed(`UPDATE "CreatorPolicy" SET "viewVisibility"='${value}' WHERE "creatorId"='${CREATOR.id}';`);
+}
+
+/**
+ * Grants moderation power to an already-logged-in identity. The User row only exists after a
+ * first login, so this is keyed on the Patreon id and runs after signing in.
+ */
+export function makeStaff(patreonUserId: string): void {
+  seed(`
+    INSERT INTO "CreatorStaff"(id,"creatorId","userId",role,"createdAt","updatedAt")
+      SELECT gen_random_uuid(),'${CREATOR.id}',u.id,'MOD',now(),now()
+      FROM "User" u WHERE u."patreonUserId"='${patreonUserId}'
+      ON CONFLICT ("creatorId","userId") DO NOTHING;
+  `);
+}
+
+export function setHidePending(value: boolean): void {
+  seed(
+    `UPDATE "CreatorPolicy" SET "hidePendingFromPublic"=${value} WHERE "creatorId"='${CREATOR.id}';`,
+  );
+}
+
+/**
+ * Seeds an entry attributed to someone other than the browser's identity. Used where a journey
+ * needs a second patron's submission without a second login — switching identities mid-test
+ * proved flaky, and the property under test is about *whose* entry it is, not how it got there.
+ */
+export function seedEntryFrom(
+  patreonUserId: string,
+  title: string,
+  status: 'PENDING' | 'ACCEPTED' | 'ACTIVE' | 'COMPLETED' = 'PENDING',
+): void {
+  const normalized = title
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+  seed(`
+    INSERT INTO "User"(id,"patreonUserId","fullName","createdAt","updatedAt")
+      VALUES (gen_random_uuid(),'${patreonUserId}','Other Patron',now(),now())
+      ON CONFLICT ("patreonUserId") DO NOTHING;
+    INSERT INTO "Recommendation"(id,"creatorId","submittedByUserId",type,"customTitle","normalizedTitle",status,"createdAt","updatedAt")
+      SELECT gen_random_uuid(),'${CREATOR.id}',u.id,'EXTERNAL_LINK','${title}','${normalized}','${status}',now(),now()
+      FROM "User" u WHERE u."patreonUserId"='${patreonUserId}';
+  `);
 }
