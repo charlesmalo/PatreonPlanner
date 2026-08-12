@@ -22,7 +22,11 @@ describe('TmdbAvailabilityProvider', () => {
   });
 
   const stubJson = (body: unknown) =>
-    (global.fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => body })) as never);
+    (global.fetch = jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => body,
+    })) as never);
 
   const stubStatus = (status: number) =>
     (global.fetch = jest.fn(async () => ({ ok: false, status })) as never);

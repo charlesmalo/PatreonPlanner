@@ -17,11 +17,7 @@ export interface AvailabilityProvider {
    *
    * Throws on upstream trouble. An outage must never be stored as "available nowhere".
    */
-  fetch(
-    tmdbId: number,
-    mediaType: MediaType,
-    region: string,
-  ): Promise<AvailabilitySnapshot | null>;
+  fetch(tmdbId: number, mediaType: MediaType, region: string): Promise<AvailabilitySnapshot | null>;
 }
 
 export class AvailabilityNotConfiguredError extends Error {
