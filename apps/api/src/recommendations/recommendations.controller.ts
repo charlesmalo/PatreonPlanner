@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   HttpStatus,
   Param,
   ParseUUIDPipe,
@@ -19,6 +20,8 @@ import {
   ResolvedCreator,
 } from '../access/creator-access.guard';
 import { RequireCapability } from '../access/require-capability.decorator';
+import { ChangeStatusDto } from '../moderation/dto/change-status.dto';
+import { ModerationActionsService } from '../moderation/moderation-actions.service';
 import { CurrentUser, CurrentUserPayload, SessionGuard } from '../session/session.guard';
 import { ListRecommendationsQuery } from './dto/list-recommendations.query';
 import { SubmitRecommendationDto } from './dto/submit-recommendation.dto';
@@ -27,7 +30,10 @@ import { RecommendationsService } from './recommendations.service';
 // :slug so CreatorAccessGuard resolves the tenant the same way it does everywhere else.
 @Controller('creators/:slug/recommendations')
 export class RecommendationsController {
-  constructor(private readonly recommendations: RecommendationsService) {}
+  constructor(
+    private readonly recommendations: RecommendationsService,
+    private readonly moderationActions: ModerationActionsService,
+  ) {}
 
   @Get()
   @RequireCapability('VIEW')
@@ -54,6 +60,21 @@ export class RecommendationsController {
     // "Created" would be untrue and clients key retry behaviour off it.
     res.status(result.duplicate ? HttpStatus.OK : HttpStatus.CREATED);
     return result;
+  }
+
+  @Post(':id/status')
+  // The addressed resource is the recommendation, which is updated in place — 201 would promise
+  // a new resource at a new location, and there is none.
+  @HttpCode(HttpStatus.OK)
+  @RequireCapability('MODERATE')
+  @UseGuards(CreatorAccessGuard, SessionGuard)
+  changeStatus(
+    @CurrentCreator() creator: ResolvedCreator,
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ChangeStatusDto,
+  ) {
+    return this.moderationActions.changeStatus(creator.id, id, user.id, dto.status, dto.note);
   }
 
   @Post(':id/upvote')
