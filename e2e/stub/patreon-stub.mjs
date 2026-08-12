@@ -40,6 +40,17 @@ let catalog = [
   },
 ];
 
+// Collections are a separate TMDB search endpoint and a separate detail path, so they are a
+// separate fixture here too.
+let collections = [
+  {
+    id: 10,
+    name: 'Studio Ghibli Collection',
+    poster_path: '/ghibli.jpg',
+    overview: 'Films from Studio Ghibli.',
+  },
+];
+
 function json(res, body, status = 200) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -126,6 +137,19 @@ const server = createServer(async (req, res) => {
   }
 
   // TMDB routes.
+  if (url.pathname === '/3/search/collection') {
+    const query = (url.searchParams.get('query') ?? '').toLowerCase();
+    return json(res, {
+      results: collections.filter((c) => c.name.toLowerCase().includes(query)),
+    });
+  }
+
+  const collection = url.pathname.match(/^\/3\/collection\/(\d+)$/);
+  if (collection) {
+    const item = collections.find((c) => c.id === Number(collection[1]));
+    return item ? json(res, item) : json(res, { error: 'not found' }, 404);
+  }
+
   if (url.pathname === '/3/search/multi') {
     const query = (url.searchParams.get('query') ?? '').toLowerCase();
     return json(res, {

@@ -75,6 +75,25 @@ nothing.
 State-changing requests need the `pp_csrf` cookie echoed in an `x-csrf-token` header. The token is
 signed and bound to the session, and is re-minted automatically on any safe request.
 
+## Content classes
+
+A suggestion is one of five kinds (design §5):
+
+| Type             | Binds                                                           | De-duplicates on         |
+| ---------------- | --------------------------------------------------------------- | ------------------------ |
+| `MOVIE` / `SHOW` | a TMDB film or series                                           | `(creator, title, type)` |
+| `FRANCHISE`      | a TMDB **collection** — a `Title` with `mediaType = COLLECTION` | `(creator, title, type)` |
+| `WATCH_ORDER`    | nothing; carries ordered `WatchOrderItem` steps                 | normalized outer title   |
+| `EXTERNAL_LINK`  | nothing                                                         | normalized title         |
+
+A watch order's steps are numbered `0..n-1` **by the server** from the order they arrive in; a
+client-supplied position is not trusted. Each step is either catalogue-bound or free text, never
+both — enforced by a check constraint as well as by the service, so "and then the fan edit" stays
+expressible without giving up canonical names for the steps TMDB does know.
+
+Not built: automatic nesting (submitting "Season 2" under an existing show), themes, and a
+franchise's member titles — all need the relationship graph, which is its own plan.
+
 ## Where to watch
 
 Catalogue-bound entries carry streaming availability from TMDB's watch-provider data, stored per

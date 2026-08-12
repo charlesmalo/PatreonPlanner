@@ -291,3 +291,41 @@ test('a catalogue title shows where to watch it', async ({ page }) => {
   // TMDB's terms require the attribution wherever this data is shown.
   await expect(page.getByText(/availability data by justwatch/i)).toBeVisible();
 });
+
+test('a patron can suggest a whole franchise', async ({ page }) => {
+  await signIn(page, 500);
+  await page.goto(`/c/${CREATOR.slug}`);
+
+  await page.getByLabel(/search films and shows/i).fill('ghibli');
+  await page.getByRole('button', { name: /studio ghibli collection/i }).click();
+  await page.getByRole('button', { name: 'Suggest', exact: true }).click();
+
+  // The name comes from the collection, not from anything typed — and it is a FRANCHISE, so it
+  // had to resolve against TMDB's collection endpoint rather than its movie one.
+  await expect(page.getByRole('heading', { name: 'Studio Ghibli Collection' })).toBeVisible();
+});
+
+test('a patron can compose, reorder and submit a watch order', async ({ page }) => {
+  await signIn(page, 500);
+  await page.goto(`/c/${CREATOR.slug}`);
+
+  await page.getByRole('radio', { name: /watch order/i }).check();
+  await page.getByLabel(/what to call it/i).fill('Ghibli in release order');
+
+  await page.getByRole('button', { name: /add a step/i }).click();
+  await page.getByLabel('Step 1 title').fill('Castle in the Sky');
+  await page.getByRole('button', { name: /add a step/i }).click();
+  await page.getByLabel('Step 2 title').fill('My Neighbour Totoro');
+
+  // Reorder before submitting: the server numbers the steps from the order they arrive in, so
+  // this is the assertion that the array order is what actually reaches it.
+  await page.getByRole('button', { name: 'Move step 2 up' }).click();
+  await page.getByRole('button', { name: 'Suggest', exact: true }).click();
+
+  await expect(page.getByRole('heading', { name: 'Ghibli in release order' })).toBeVisible();
+  // Asserted through the rendered numbering rather than list position: the card is itself a
+  // listitem, so a positional locator matches the card as well as its steps.
+  const card = page.getByRole('listitem').filter({ hasText: 'Ghibli in release order' }).first();
+  await expect(card).toContainText(/1\.\s*My Neighbour Totoro/);
+  await expect(card).toContainText(/2\.\s*Castle in the Sky/);
+});
