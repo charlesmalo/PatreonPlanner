@@ -1,4 +1,5 @@
 import type { Availability, AvailabilityOffer } from '../api/types';
+import { isSafeHttpUrl } from './RecommendationCard';
 
 // Built here rather than stored, so the image size can change without a migration.
 const LOGO_BASE = 'https://image.tmdb.org/t/p/w45';
@@ -62,7 +63,10 @@ export function AvailabilityBadges({ availability, title }: AvailabilityBadgesPr
         Where to watch ({availability.region})
       </h4>
       <div className="mt-1">
-        {availability.link ? (
+        {/* The same guard the cards use. The base URL is env-configurable, so the upstream is
+            not a trust boundary, and React only warns on a javascript: href — it does not block
+            it. */}
+        {availability.link && isSafeHttpUrl(availability.link) ? (
           <a
             href={availability.link}
             target="_blank"

@@ -495,8 +495,41 @@ docker-compose -f docker-compose.e2e.yml up -d --build && pnpm --filter e2e e2e
 - Where-to-watch badges/deep-links on board cards (design §7) → Tasks 4, 6. ✅
 - Redis hot cache for availability (design §5 caching) → **not built**: `StreamingAvailability` is already a durable cache read by primary key, and fronting a single indexed Postgres read with Redis is machinery without a measured problem. Noted as a risk rather than pretended.
 
+## Found in review (fixed)
+
+1. **Critical — background refreshes were unbounded and undeduplicated.** `queueRefresh` started
+   work without consulting anything: a cold board of twenty entries fired twenty simultaneous
+   upstream calls, and ten readers of that same board fired two hundred for twenty distinct keys.
+   Now de-duplicated by `titleId:region` through a shared in-flight promise and capped at
+   `MAX_IN_FLIGHT_REFRESHES`; anything over the cap is left to the refresh job, which is the
+   durable path anyway.
+2. **Critical — a title the upstream did not know was re-asked on every board read, forever.**
+   Exactly the failure this plan's own decision section forbids: the empty-region case stored a
+   row, but the 404 case stored nothing, so "never asked" and "asked, nothing there" were
+   indistinguishable and the second kept re-queueing. Both now store a row.
+3. **Important — a board read was not isolated from availability failing.** Only the
+   *unconfigured* path degraded; a runtime failure propagated and would have 500'd the whole
+   board. Now caught and logged, badges dropped.
+4. **Important — `drainRefreshes` was documented as the shutdown hook but never wired**, and its
+   `while (size > 0)` could not terminate under sustained traffic. `AvailabilityService` now
+   implements `OnApplicationShutdown`, sets a `stopping` flag that blocks new queueing, and the
+   drain is bounded.
+5. **Important — the endpoint was unreachable.** It keys on `Title.id`, which no response
+   exposed: `list()` selected `titleId` for the join and deliberately dropped it, and
+   `catalog/search` returns `tmdbId`. The endpoint and its tests both worked only because the
+   tests read the id straight from Prisma. The board's title projection now includes `id`.
+6. **Important — the region was a free parameter on a `VIEW`-gated route.** One caller could
+   drive 676 upstream lookups for a single title and leave 676 rows in the refresh job's working
+   set permanently. Bounded by `AVAILABILITY_REGIONS`.
+7. **Minor, also fixed:** the third-party watch URL became an `href` without the `isSafeHttpUrl`
+   guard the cards one file over already apply; the board spec could leak a queued refresh across
+   tests; `.env.example` was missing the new settings.
+
 **Known risks:**
 
+0. **A row whose region is later removed from `AVAILABILITY_REGIONS` throws on every refresh
+   attempt.** The job stamps `fetchedAt` regardless, so it is retried once per TTL rather than
+   spinning — bounded, but it is dead work that a cleanup pass should remove.
 1. **`forTitles` never blocks, so a cold board shows no badges on first load.** The refresh lands and the next render has them. Correct for the common case — a board is read far more often than it is first read — but a creator opening a brand-new board sees an unadorned page and may conclude the feature is broken.
 2. **The refresh job walks every region ever asked for.** Ten regions across a thousand titles is ten thousand rows on a fixed batch size, and the oldest-first ordering means an unpopular region can be refreshed as eagerly as the busy one. A popularity signal belongs here eventually.
 3. **TMDB's provider data is JustWatch's, and its licence terms are stricter than TMDB's own.** The attribution is implemented; whether the deployment's usage stays inside JustWatch's terms is a question for whoever ships it, not something code settles.

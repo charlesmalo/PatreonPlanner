@@ -7,7 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, RecommendationStatus } from '@prisma/client';
-import { AvailabilityService } from '../availability/availability.service';
+import { AvailabilityService, StoredAvailability } from '../availability/availability.service';
 import { CatalogService } from '../catalog/catalog.service';
 import { ConfigService } from '../config/config.module';
 import { RateLimitService } from '../limits/rate-limit.service';
@@ -84,7 +84,9 @@ const RECOMMENDATION_FIELDS = {
   upvoteCount: true,
   createdAt: true,
   title: {
-    select: { tmdbId: true, mediaType: true, name: true, year: true, posterPath: true },
+    // `id` is what GET /catalog/titles/:id/availability keys on. Without it the endpoint is
+    // unreachable: no response anywhere exposed the catalogue row's id.
+    select: { id: true, tmdbId: true, mediaType: true, name: true, year: true, posterPath: true },
   },
   links: { select: { url: true, label: true } },
   submittedBy: { select: { id: true, fullName: true, avatarUrl: true } },
@@ -392,7 +394,15 @@ export class RecommendationsService {
     // refresh it queues lands before the next read.
     const region = this.config.get('AVAILABILITY_REGION_DEFAULT');
     const titleIds = page.flatMap((item) => (item.titleId ? [item.titleId] : []));
-    const availability = await this.availability.forTitles(titleIds, region);
+    // Badges are garnish; the board is the product. The unconfigured path already degrades, but a
+    // *runtime* failure here — a slow query, an exhausted pool — would otherwise 500 the whole
+    // board rather than dropping the badges.
+    let availability = new Map<string, StoredAvailability>();
+    try {
+      availability = await this.availability.forTitles(titleIds, region);
+    } catch (error) {
+      this.logger.warn(`Availability lookup failed for board ${creator.id}: ${String(error)}`);
+    }
 
     return {
       items: page.map(({ upvotes, titleId, ...item }) => ({

@@ -1,6 +1,10 @@
+import { randomUUID } from 'node:crypto';
 import { MediaType } from '@prisma/client';
 import { AvailabilityProvider } from '../src/availability/availability.provider';
-import { AvailabilityService } from '../src/availability/availability.service';
+import {
+  AvailabilityService,
+  MAX_IN_FLIGHT_REFRESHES,
+} from '../src/availability/availability.service';
 import { AvailabilitySnapshot } from '../src/availability/availability.types';
 import { PrismaClient } from '@prisma/client';
 import { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
@@ -153,9 +157,13 @@ describe('AvailabilityService (integration)', () => {
     expect(await prisma.streamingAvailability.count({ where: { titleId } })).toBe(0);
   });
 
-  it('returns null for a title the provider does not know', async () => {
+  it('answers with an empty snapshot for a title the provider does not know', async () => {
     provider.nextSnapshot = null;
-    expect(await service.forTitle(titleId, 'GB')).toBeNull();
+    expect((await service.forTitle(titleId, 'GB'))?.offers).toEqual([]);
+  });
+
+  it('returns null for a title that is not in the catalogue at all', async () => {
+    expect(await service.forTitle(randomUUID(), 'GB')).toBeNull();
   });
 
   it('reads a page of titles in one query', async () => {
@@ -190,6 +198,41 @@ describe('AvailabilityService (integration)', () => {
 
   it('returns an empty map rather than querying for no titles', async () => {
     expect((await service.forTitles([], 'GB')).size).toBe(0);
+  });
+
+  it('collapses concurrent lookups of the same title into one upstream call', async () => {
+    // Ten patrons opening the same cold board produced ten identical in-flight fetches: the Set
+    // tracked completions but nothing consulted it before starting work.
+    await Promise.all(Array.from({ length: 10 }, () => service.forTitles([titleId], 'GB')));
+    await service.drainRefreshes();
+    expect(provider.calls).toBe(1);
+  });
+
+  it('bounds how many refreshes a single board read can start', async () => {
+    const titles = await Promise.all(
+      Array.from({ length: MAX_IN_FLIGHT_REFRESHES + 10 }, (_unused, i) =>
+        prisma.title.create({ data: { tmdbId: 5000 + i, mediaType: 'MOVIE', name: `Bulk ${i}` } }),
+      ),
+    );
+    await service.forTitles(
+      titles.map((t) => t.id),
+      'GB',
+    );
+    // The rest are left to the refresh job rather than fired at the upstream all at once.
+    expect(provider.calls).toBeLessThanOrEqual(MAX_IN_FLIGHT_REFRESHES);
+  });
+
+  it('records a title the provider does not know, so it is not re-asked forever', async () => {
+    // A row with no offers is "we asked and there is nothing"; no row at all means "never asked",
+    // and every board read would queue another doomed fetch.
+    provider.nextSnapshot = null;
+    await service.forTitle(titleId, 'GB');
+    expect((await row(titleId, 'GB')).offers).toEqual([]);
+
+    provider.calls = 0;
+    await service.forTitles([titleId], 'GB');
+    await service.drainRefreshes();
+    expect(provider.calls).toBe(0);
   });
 
   it('rejects a malformed region rather than storing it', async () => {

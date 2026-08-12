@@ -148,3 +148,30 @@ describe('AvailabilityBadges', () => {
     expect(screen.getAllByTestId('provider-name')).toHaveLength(1);
   });
 });
+
+describe('AvailabilityBadges link safety', () => {
+  it('refuses a javascript: link rather than rendering it', () => {
+    // React only warns on a javascript: href; it does not block it, which is why the cards
+    // already carry this guard.
+    render(
+      <AvailabilityBadges
+        title="Spirited Away"
+        availability={{
+          region: 'GB',
+          link: 'javascript:alert(1)',
+          offers: [
+            {
+              providerId: 8,
+              providerName: 'Netflix',
+              logoPath: null,
+              kind: 'FLATRATE',
+              displayPriority: 1,
+            },
+          ],
+        }}
+      />,
+    );
+    expect(screen.getByText('Netflix')).toBeInTheDocument();
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+  });
+});

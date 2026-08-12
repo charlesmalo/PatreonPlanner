@@ -69,6 +69,9 @@ describe('Availability on the board (integration)', () => {
   });
 
   beforeEach(async () => {
+    // Drain first: a refresh queued by the previous test would otherwise upsert a row *after*
+    // this delete and leak into the next assertion.
+    await ctx.availabilityService.drainRefreshes();
     await ctx.prisma.streamingAvailability.deleteMany();
     ctx.availability.reset();
   });
@@ -109,6 +112,22 @@ describe('Availability on the board (integration)', () => {
       patron,
     ).expect(200);
     expect(res.body.region).toBe('US');
+  });
+
+  it('refuses a region the deployment does not serve', async () => {
+    // Bounded on purpose: an open region set lets one caller create a permanent row, and a
+    // permanent refresh obligation, for every country on earth.
+    await get(
+      `/creators/availability-co/catalog/titles/${titleId}/availability?region=ZZ`,
+      patron,
+    ).expect(400);
+  });
+
+  it('exposes the catalogue id the availability endpoint keys on', async () => {
+    // Without it the endpoint is unreachable: no response anywhere carried the title's id.
+    const res = await board(patron).expect(200);
+    const bound = res.body.items.find((i: { id: string }) => i.id === boundId);
+    expect(bound.title.id).toBe(titleId);
   });
 
   it('rejects a malformed region', async () => {

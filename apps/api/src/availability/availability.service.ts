@@ -1,4 +1,10 @@
-import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  OnApplicationShutdown,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { ConfigService } from '../config/config.module';
 import { PrismaService } from '../prisma/prisma.service';
@@ -6,6 +12,13 @@ import { AVAILABILITY_PROVIDER, AvailabilityProvider } from './availability.prov
 import { AvailabilityOffer, AvailabilitySnapshot } from './availability.types';
 
 const REGION_PATTERN = /^[A-Z]{2}$/;
+
+/**
+ * Ceiling on background refreshes started by reads. A cold board of twenty entries used to fire
+ * twenty simultaneous upstream calls, and ten readers of that board fired two hundred. The
+ * refresh job is the durable path — anything over this ceiling is simply left to it.
+ */
+export const MAX_IN_FLIGHT_REFRESHES = 8;
 
 export interface StoredAvailability {
   region: string;
@@ -15,14 +28,16 @@ export interface StoredAvailability {
 }
 
 @Injectable()
-export class AvailabilityService {
+export class AvailabilityService implements OnApplicationShutdown {
   private readonly logger = new Logger(AvailabilityService.name);
   /**
-   * In-flight background refreshes. Tracked so tests can await them and so shutdown does not
-   * abandon a write mid-flight — not a queue: the durable work belongs to the refresh job, and
-   * this is only the opportunistic top-up a read triggers.
+   * In-flight refreshes keyed by `titleId:region`. A map rather than a set of promises, because
+   * the point is de-duplication: concurrent readers of the same cold board must share one
+   * upstream call, not start one each.
    */
-  private readonly refreshes = new Set<Promise<void>>();
+  private readonly inFlight = new Map<string, Promise<boolean>>();
+  /** Set on shutdown so a draining process cannot be kept alive by newly queued work. */
+  private stopping = false;
 
   constructor(
     @Inject(AVAILABILITY_PROVIDER) private readonly provider: AvailabilityProvider,
@@ -40,6 +55,16 @@ export class AvailabilityService {
     if (!REGION_PATTERN.test(region)) {
       throw new BadRequestException('Region must be a two-letter ISO-3166-1 country code');
     }
+    // And it must be one we serve. The region is a free parameter on a VIEW-gated route, so an
+    // open set lets one caller create a row — and a permanent refresh-job obligation — for every
+    // country on earth.
+    if (!this.regions().has(region)) {
+      throw new BadRequestException('Availability is not offered for that region');
+    }
+  }
+
+  private regions(): Set<string> {
+    return new Set(this.config.get('AVAILABILITY_REGIONS').split(','));
   }
 
   private isStale(fetchedAt: Date): boolean {
@@ -64,8 +89,14 @@ export class AvailabilityService {
       return toStored(existing);
     }
 
-    const snapshot = await this.fetchAndStore(titleId, region);
-    return snapshot;
+    // A cold single read fetches synchronously — a client that asked specifically for
+    // availability wants an answer — but still shares an in-flight call with any concurrent
+    // reader of the same title.
+    await this.dedupedRefresh(titleId, region);
+    const row = await this.prisma.streamingAvailability.findUnique({
+      where: { titleId_region: { titleId, region } },
+    });
+    return row ? toStored(row) : null;
   }
 
   /**
@@ -110,7 +141,23 @@ export class AvailabilityService {
   async refresh(titleId: string, region: string): Promise<boolean> {
     this.assertRegion(region);
     if (!this.provider.isConfigured()) return false;
-    return (await this.fetchAndStore(titleId, region)) !== null;
+    return this.dedupedRefresh(titleId, region);
+  }
+
+  /** One upstream call per (title, region) at a time, shared by every concurrent caller. */
+  private dedupedRefresh(titleId: string, region: string): Promise<boolean> {
+    const key = `${titleId}:${region}`;
+    const existing = this.inFlight.get(key);
+    if (existing) return existing;
+
+    const task = this.fetchAndStore(titleId, region)
+      .then((stored) => stored !== null)
+      .catch(() => false)
+      .finally(() => {
+        this.inFlight.delete(key);
+      });
+    this.inFlight.set(key, task);
+    return task;
   }
 
   private async fetchAndStore(titleId: string, region: string): Promise<StoredAvailability | null> {
@@ -131,13 +178,12 @@ export class AvailabilityService {
       );
       return null;
     }
-    // The upstream does not know this title at all — distinct from knowing it and having no
-    // offers, which is an empty snapshot and does get stored.
-    if (!snapshot) return null;
-
+    // An unknown title is still an answer, and it is stored as one. Writing nothing would mean
+    // "never asked", and every board read would queue another doomed fetch for the same title
+    // forever — the failure this plan's own decision section forbids.
     const data = {
-      link: snapshot.link,
-      offers: snapshot.offers as unknown as Prisma.InputJsonValue,
+      link: snapshot?.link ?? null,
+      offers: (snapshot?.offers ?? []) as unknown as Prisma.InputJsonValue,
       fetchedAt: new Date(),
     };
     const row = await this.prisma.streamingAvailability.upsert({
@@ -149,20 +195,28 @@ export class AvailabilityService {
   }
 
   private queueRefresh(titleId: string, region: string): void {
-    const task = this.refresh(titleId, region)
-      .then(() => undefined)
-      .catch(() => undefined)
-      .finally(() => {
-        this.refreshes.delete(task);
-      });
-    this.refreshes.add(task);
+    if (this.stopping) return;
+    // Already being fetched, or the ceiling is reached — either way the refresh job will get to
+    // it. Background top-up is best-effort by design.
+    const key = `${titleId}:${region}`;
+    if (this.inFlight.has(key) || this.inFlight.size >= MAX_IN_FLIGHT_REFRESHES) return;
+    void this.dedupedRefresh(titleId, region);
   }
 
-  /** Awaits the background refreshes a read kicked off. For tests and for graceful shutdown. */
+  /**
+   * Awaits the refreshes reads kicked off. Bounded: `stopping` blocks new work during shutdown,
+   * and an unbounded `while (size > 0)` would otherwise never terminate under sustained traffic.
+   */
   async drainRefreshes(): Promise<void> {
-    while (this.refreshes.size > 0) {
-      await Promise.all([...this.refreshes]);
+    for (let pass = 0; pass < 10 && this.inFlight.size > 0; pass += 1) {
+      await Promise.all([...this.inFlight.values()]);
     }
+  }
+
+  async onApplicationShutdown(): Promise<void> {
+    // Without this the Prisma client disconnects underneath in-flight upserts on SIGTERM.
+    this.stopping = true;
+    await this.drainRefreshes();
   }
 }
 

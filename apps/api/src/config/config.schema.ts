@@ -45,6 +45,13 @@ export const configSchema = z.object({
     .default('US'),
   // How long a stored availability row is served without re-asking upstream.
   AVAILABILITY_TTL_HOURS: z.coerce.number().int().positive().default(24),
+  // The regions callers may ask for. Bounded on purpose: the region is a free parameter on a
+  // VIEW-gated route, so without a list one caller could drive 676 upstream lookups for a single
+  // title and leave 676 rows in the refresh job's working set forever.
+  AVAILABILITY_REGIONS: z
+    .string()
+    .regex(/^[A-Z]{2}(,[A-Z]{2})*$/, 'must be comma-separated ISO-3166-1 country codes')
+    .default('US,GB,CA,AU,IE,NZ,DE,FR,ES,IT,JP,BR,MX'),
 
   SUBMIT_LIMIT_PER_HOUR: z.coerce.number().int().positive().default(1),
   // Design §6 item 3: a looser cap across all creators, so a patron of twenty creators cannot

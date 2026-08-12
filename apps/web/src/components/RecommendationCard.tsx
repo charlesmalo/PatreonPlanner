@@ -8,7 +8,7 @@ const POSTER_BASE = 'https://image.tmdb.org/t/p/w92';
  * attacker input becomes an attribute, so a future API regression is not immediately exploitable
  * — React only warns on a javascript: href, it does not block it.
  */
-function isSafeHttpUrl(value: string): boolean {
+export function isSafeHttpUrl(value: string): boolean {
   try {
     const parsed = new URL(value);
     return parsed.protocol === 'http:' || parsed.protocol === 'https:';
