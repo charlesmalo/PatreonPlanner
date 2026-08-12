@@ -37,6 +37,14 @@ export const configSchema = z.object({
   // keeps working. Requiring it would mean no developer and no CI run could boot the API.
   TMDB_API_KEY: z.string().min(1).optional(),
   TMDB_API_BASE_URL: z.string().url().default('https://api.themoviedb.org/3'),
+  // ISO-3166-1 alpha-2. Availability is meaningless without a region, and guessing one from the
+  // request would answer the wrong question for anyone travelling or behind a VPN.
+  AVAILABILITY_REGION_DEFAULT: z
+    .string()
+    .regex(/^[A-Z]{2}$/, 'must be a two-letter ISO-3166-1 country code')
+    .default('US'),
+  // How long a stored availability row is served without re-asking upstream.
+  AVAILABILITY_TTL_HOURS: z.coerce.number().int().positive().default(24),
 
   SUBMIT_LIMIT_PER_HOUR: z.coerce.number().int().positive().default(1),
   // Design §6 item 3: a looser cap across all creators, so a patron of twenty creators cannot

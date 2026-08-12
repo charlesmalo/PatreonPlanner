@@ -49,6 +49,14 @@ enum RecommendationStatus {
   DELETED
 }
 
+enum OfferKind {
+  FLATRATE
+  FREE
+  ADS
+  RENT
+  BUY
+}
+
 enum FlagStatus {
   OPEN
   RESOLVED
@@ -333,9 +341,34 @@ model Title {
 
   aliases         TitleAlias[]
   recommendations Recommendation[]
+  availability    StreamingAvailability[]
 
   // TMDB ids are only unique within a media type: film 123 and series 123 are different works.
   @@unique([tmdbId, mediaType])
+}
+
+model StreamingAvailability {
+  id        String   @id @default(uuid()) @db.Uuid
+  titleId   String   @db.Uuid
+  // ISO-3166-1 alpha-2. An availability answer without its region answers the wrong question for
+  // every patron outside it.
+  region    String   @db.VarChar(2)
+  // The upstream's own watch page for this title and region. Null when it offers none.
+  link      String?
+  // Denormalized offers: read whole, never queried by field, and the shape is the provider's.
+  offers    Json
+  // When the upstream was last *asked* — not when the row last changed. Staleness is a property
+  // of the question, so an unchanged refresh still moves it forward and the row stops being
+  // retried on every pass.
+  fetchedAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  title Title @relation(fields: [titleId], references: [id], onDelete: Cascade)
+
+  @@unique([titleId, region])
+  // The refresh job walks the oldest first, across every title and region.
+  @@index([fetchedAt])
 }
 
 model TitleAlias {
