@@ -52,6 +52,13 @@ enum RecommendationStatus {
   DELETED
 }
 
+enum StrikeReason {
+  RATE_LIMIT
+  MODERATION_BLOCK
+  UPHELD_FLAG
+  DUPLICATE_FLOOD
+}
+
 enum RelationKind {
   SEASON_OF
   SEQUEL
@@ -113,9 +120,30 @@ model User {
   staffAssigned   CreatorStaff[]   @relation("StaffAssigner")
   recommendations Recommendation[]
   upvotes         Upvote[]
+  abuseRecord     AbuseRecord?
   flagsRaised     Flag[]             @relation("FlagAuthor")
   flagsResolved   Flag[]             @relation("FlagResolver")
   moderationActs  ModerationAction[] @relation("ModerationActor")
+}
+
+model AbuseRecord {
+  id           String        @id @default(uuid()) @db.Uuid
+  userId       String        @unique @db.Uuid
+  strikeCount  Int           @default(0)
+  // Null when never timed out. Left in place once it lapses, so the history stays readable.
+  timeoutUntil DateTime?
+  lastStrikeAt DateTime?
+  // Why the most recent strike was earned. For operators reading the table, never for the user:
+  // design §9 wants no probing of the rules.
+  lastReason   StrikeReason?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // The decay job walks the quietest first.
+  @@index([lastStrikeAt])
+  @@index([timeoutUntil])
 }
 
 model Creator {

@@ -41,6 +41,9 @@ describe('Franchise and watch-order submissions (integration)', () => {
   });
 
   beforeEach(async () => {
+    // This suite deliberately trips the moderation pipeline, which now earns strikes — two of
+    // them time the patron out and every later test 403s. The abuse curve has its own suite.
+    await ctx.prisma.abuseRecord.deleteMany();
     await ctx.prisma.recommendation.deleteMany({ where: { creatorId } });
     ctx.catalog.results = [
       {

@@ -27,6 +27,32 @@ export class RateLimitService {
     return count <= limit;
   }
 
+  /**
+   * Counts an event without a limit, for signals measured rather than enforced — repeated
+   * duplicate resubmissions, say. Returns the count within the window.
+   */
+  async count(key: string, windowSeconds: number): Promise<number> {
+    return (await this.redis.raw().eval(
+      `local c = redis.call('INCR', KEYS[1])
+       if c == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
+       return c`,
+      1,
+      `${PREFIX}${key}`,
+      windowSeconds,
+    )) as number;
+  }
+
+  /** Test seam: clears every window. Never called in production. */
+  async reset(): Promise<void> {
+    const keys = await this.redis.raw().keys(`${PREFIX}*`);
+    if (keys.length > 0) await this.redis.raw().del(...keys);
+  }
+
+  /** Test seam: drives a window past any plausible limit. Never called in production. */
+  async exhaust(key: string): Promise<void> {
+    await this.redis.raw().set(`${PREFIX}${key}`, '1000000', 'EX', 3600);
+  }
+
   /** Returns an allowance that was consumed for work that did not happen. Never goes below 0. */
   async refund(key: string): Promise<void> {
     await this.redis.raw().eval(

@@ -1,12 +1,20 @@
 import {
   BadRequestException,
+  ForbiddenException,
   HttpException,
   HttpStatus,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { MediaType, Prisma, RecommendationStatus, RelationKind } from '@prisma/client';
+import {
+  MediaType,
+  Prisma,
+  RecommendationStatus,
+  RelationKind,
+  StrikeReason,
+} from '@prisma/client';
+import { AbuseService } from '../abuse/abuse.service';
 import { AvailabilityService, StoredAvailability } from '../availability/availability.service';
 import { CatalogService } from '../catalog/catalog.service';
 import { ConfigService } from '../config/config.module';
@@ -18,6 +26,13 @@ import { PATRON_VISIBLE_STATUSES } from '../moderation/transitions';
 import { normalizeTitle } from './normalize-title';
 
 const MAX_PAGE = 50;
+
+/**
+ * How many de-duplicated resubmissions in an hour earn a strike. A refunded duplicate is free to
+ * the limiter but not to us: it already spent a moderation pass and a catalogue call before the
+ * de-dupe check saw it, so replaying one was unlimited and free.
+ */
+export const DUPLICATE_STRIKE_THRESHOLD = 5;
 
 /**
  * What the board projection adds and a single-entry response cannot compute: a parent depends on
@@ -143,6 +158,7 @@ export class RecommendationsService {
     private readonly config: ConfigService,
     private readonly catalog: CatalogService,
     private readonly availability: AvailabilityService,
+    private readonly abuse: AbuseService,
   ) {}
 
   /**
@@ -151,7 +167,19 @@ export class RecommendationsService {
    * precisely what the end-to-end suite caught.
    */
   async submit(creatorId: string, userId: string, dto: SubmitRecommendationDto) {
-    // Rate limit first: moderation is the expensive stage, and a flood must not be able to
+    // Before the limiter, so a timed-out request does the least possible work — and so a blocked
+    // caller does not also burn the hourly quota they will want when the timeout lifts.
+    const timeoutUntil = await this.abuse.timeoutFor(userId);
+    if (timeoutUntil) {
+      // Says when, never why: design §9 wants no probing of the rules, and explaining the curve
+      // invites gaming it.
+      throw new ForbiddenException({
+        message: 'You cannot suggest anything right now',
+        retryAt: timeoutUntil.toISOString(),
+      });
+    }
+
+    // Rate limit next: moderation is the expensive stage, and a flood must not be able to
     // drive that cost.
     const perCreatorKey = `submit:${userId}:${creatorId}`;
     const globalKey = `submit-global:${userId}`;
@@ -168,6 +196,7 @@ export class RecommendationsService {
       3600,
     );
     if (!allowed || !globallyAllowed) {
+      await this.recordStrike(userId, 'RATE_LIMIT');
       throw new HttpException('Too many submissions', HttpStatus.TOO_MANY_REQUESTS);
     }
 
@@ -184,6 +213,8 @@ export class RecommendationsService {
     if (moderation.verdict === 'BLOCK') {
       // Generic to the caller, specific in the log: design §9 wants no probing of the rules.
       this.logger.warn(`Blocked submission from user ${userId} to creator ${creatorId}`);
+      // Design §6.5: a BLOCK is a strike. This is the durable record §6.4 asks for.
+      await this.recordStrike(userId, 'MODERATION_BLOCK');
       throw new BadRequestException('Submission rejected');
     }
 
@@ -225,6 +256,7 @@ export class RecommendationsService {
       // Refund: nothing was created, and at 1/hour charging for it would lock a patron out for
       // an hour for doing exactly what design §5 wants them to do.
       await this.refund(perCreatorKey, globalKey);
+      await this.countDuplicate(userId);
       return { duplicate: true as const, recommendation: await this.withUpvoted(existing, userId) };
     }
 
@@ -253,6 +285,7 @@ export class RecommendationsService {
         // reporting it as a duplicate would refund the limit and lose the submission.
         if (!winner) throw error;
         await this.refund(perCreatorKey, globalKey);
+        await this.countDuplicate(userId);
         return { duplicate: true as const, recommendation: await this.withUpvoted(winner, userId) };
       }
       throw error;
@@ -272,6 +305,30 @@ export class RecommendationsService {
       select: { id: true },
     });
     return { ...recommendation, hasUpvoted: upvote !== null, ...BOARD_ONLY_DEFAULTS };
+  }
+
+  /**
+   * A strike is a side effect of a decision already made. It must never turn a 400 into a 500 —
+   * the caller's answer does not depend on whether we managed to write it down.
+   */
+  private async recordStrike(userId: string, reason: StrikeReason): Promise<void> {
+    try {
+      await this.abuse.strike(userId, reason);
+    } catch (error) {
+      this.logger.warn(`Could not record a strike for user ${userId}: ${String(error)}`);
+    }
+  }
+
+  /** Counted rather than limited: the first few duplicates are exactly what design §5 wants. */
+  private async countDuplicate(userId: string): Promise<void> {
+    try {
+      const seen = await this.limits.count(`duplicate:${userId}`, 3600);
+      if (seen >= DUPLICATE_STRIKE_THRESHOLD) {
+        await this.abuse.strike(userId, 'DUPLICATE_FLOOD');
+      }
+    } catch (error) {
+      this.logger.warn(`Could not count a duplicate for user ${userId}: ${String(error)}`);
+    }
   }
 
   private async refund(...keys: string[]): Promise<void> {

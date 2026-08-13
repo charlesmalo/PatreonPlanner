@@ -1,6 +1,7 @@
 import { Global, Logger, Module, OnApplicationShutdown, OnModuleInit } from '@nestjs/common';
 import { Queue, Worker } from 'bullmq';
 import { ConfigService } from '../config/config.module';
+import { AbuseDecayJob } from './abuse-decay.job';
 import { AvailabilityRefreshJob } from './availability-refresh.job';
 import { EnrichTitleJob } from './enrich-title.job';
 import { MembershipRefreshJob } from './membership-refresh.job';
@@ -10,8 +11,8 @@ const EVERY_MS = 15 * 60 * 1000;
 
 @Global()
 @Module({
-  providers: [MembershipRefreshJob, AvailabilityRefreshJob, EnrichTitleJob],
-  exports: [MembershipRefreshJob, AvailabilityRefreshJob, EnrichTitleJob],
+  providers: [MembershipRefreshJob, AvailabilityRefreshJob, EnrichTitleJob, AbuseDecayJob],
+  exports: [MembershipRefreshJob, AvailabilityRefreshJob, EnrichTitleJob, AbuseDecayJob],
 })
 export class JobsModule implements OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger(JobsModule.name);
@@ -23,6 +24,7 @@ export class JobsModule implements OnModuleInit, OnApplicationShutdown {
     private readonly job: MembershipRefreshJob,
     private readonly availabilityJob: AvailabilityRefreshJob,
     private readonly enrichJob: EnrichTitleJob,
+    private readonly abuseDecayJob: AbuseDecayJob,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -41,6 +43,7 @@ export class JobsModule implements OnModuleInit, OnApplicationShutdown {
         // second repeatable job is a second thing to get wrong for no gain at this scale.
         await this.availabilityJob.runOnce();
         await this.enrichJob.runOnce();
+        await this.abuseDecayJob.runOnce();
       },
       { connection },
     );
