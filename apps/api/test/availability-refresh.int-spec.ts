@@ -1,17 +1,16 @@
 import { PrismaClient } from '@prisma/client';
-import { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { AvailabilityService } from '../src/availability/availability.service';
 import { ConfigService } from '../src/config/config.module';
 import {
   AVAILABILITY_BATCH_SIZE,
   AvailabilityRefreshJob,
 } from '../src/jobs/availability-refresh.job';
-import { startDatabase } from './support/database';
+import { startDatabase, type TestDatabase } from './support/database';
 import { applyTestConfigDefaults } from './support/env';
 import { FakeAvailabilityProvider } from './support/fake-availability.provider';
 
 describe('AvailabilityRefreshJob (integration)', () => {
-  let pg: StartedPostgreSqlContainer;
+  let pg: TestDatabase;
   let prisma: PrismaClient;
   let provider: FakeAvailabilityProvider;
   let job: AvailabilityRefreshJob;

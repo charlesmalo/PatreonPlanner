@@ -1,12 +1,11 @@
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import Redis from 'ioredis';
 import { PrismaClient } from '@prisma/client';
-import { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
-import { RedisContainer, StartedRedisContainer } from '@testcontainers/redis';
 import { AppModule } from '../../src/app.module';
 import { configureApp } from '../../src/app.setup';
 import { PATREON_CLIENT } from '../../src/patreon/patreon.client';
-import { startDatabase } from './database';
+import { redisUrl, startDatabase } from './database';
 import { CATALOG_PROVIDER } from '../../src/catalog/catalog.provider';
 import { AVAILABILITY_PROVIDER } from '../../src/availability/availability.provider';
 import { AvailabilityService } from '../../src/availability/availability.service';
@@ -46,10 +45,15 @@ export interface AuthTestContext {
  * because three suites need the identical stack and drifting copies would hide differences.
  */
 export async function startAuthApp(): Promise<AuthTestContext> {
-  const pg: StartedPostgreSqlContainer = await startDatabase();
-  const redis: StartedRedisContainer = await new RedisContainer('redis:7-alpine').start();
+  const pg = await startDatabase();
   process.env.DATABASE_URL = pg.getConnectionUri();
-  process.env.REDIS_URL = redis.getConnectionUrl();
+  // One Redis for the whole run, flushed at suite start. Sharing it relies on suites running
+  // sequentially, which the test script pins with --runInBand; flushing at the start rather than
+  // at teardown means a crashed suite cannot leave keys for the next one.
+  process.env.REDIS_URL = redisUrl();
+  const flusher = new Redis(redisUrl());
+  await flusher.flushall();
+  await flusher.quit();
   applyTestConfigDefaults();
 
   const patreon = new FakePatreonClient();
@@ -85,7 +89,6 @@ export async function startAuthApp(): Promise<AuthTestContext> {
       await prisma.$disconnect();
       await app.close();
       await pg.stop();
-      await redis.stop();
     },
   };
 }

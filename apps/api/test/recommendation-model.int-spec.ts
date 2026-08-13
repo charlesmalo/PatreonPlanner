@@ -1,9 +1,8 @@
 import { PrismaClient } from '@prisma/client';
-import { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
-import { startDatabase } from './support/database';
+import { startDatabase, type TestDatabase } from './support/database';
 
 describe('Recommendation models (integration)', () => {
-  let pg: StartedPostgreSqlContainer;
+  let pg: TestDatabase;
   let prisma: PrismaClient;
   let creatorId: string;
   let userId: string;

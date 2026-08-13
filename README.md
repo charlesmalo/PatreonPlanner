@@ -204,6 +204,27 @@ dismiss with `PATCH /api/v1/creators/:slug/flags/:flagId`.
 Not yet built: ML moderation, abuse scoring, notifications, creator notes, kanban drag-and-drop
 and bulk actions — see the plan's Scope section for why each waits.
 
+## Test infrastructure
+
+`pnpm --filter @app/api test` runs **one** Postgres and **one** Redis for the whole run
+(`test/global-setup.ts`). Migrations are applied once into a template database, and each suite
+clones it with `CREATE DATABASE … TEMPLATE …` — a file copy. Isolation is unchanged: every suite
+still gets a private database built from the committed migrations, so a missing migration still
+fails the suite rather than passing against a shape that only exists in test code.
+
+Before this, every database-backed suite started its own container _and_ replayed the whole
+migration chain: 30 container starts and 30 migrations per run, about five seconds a suite before
+a single test ran. The run went from ~160s to ~28s, and the Docker contention it created was the
+cause of a long-running intermittent failure — Prisma connect and operation timeouts
+(`P1002`/`P1008`/`P1017`) surfacing as a bare 500 in whichever suite was unlucky.
+
+Two suites deliberately keep their own containers: `readiness.int-spec` stops Redis to prove
+`/readyz` degrades, and stopping the shared server would end the run.
+
+Sharing Redis relies on suites running sequentially, which the test script pins with
+`--runInBand`. It is flushed at suite start, not teardown, so a crashed suite cannot leave keys
+for the next one.
+
 ## Verification
 
 ```bash

@@ -16,6 +16,8 @@ describe('GET /readyz (integration)', () => {
   let redis: StartedRedisContainer;
   let redisStopped = false;
 
+  // Its own containers, not the shared pair: this suite stops Redis on purpose to prove /readyz
+  // degrades, and stopping the server every other suite depends on would end the run.
   beforeAll(async () => {
     pg = await new PostgreSqlContainer('pgvector/pgvector:pg16').start();
     redis = await new RedisContainer('redis:7-alpine').start();
