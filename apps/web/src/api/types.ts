@@ -10,6 +10,7 @@ export interface Capabilities {
   upvote: boolean;
   submit: boolean;
   moderate: boolean;
+  manage_staff: boolean;
 }
 
 export interface RecommendationLink {
@@ -57,6 +58,26 @@ export interface WatchOrderItem {
   customTitle: string | null;
   note: string | null;
   title: TitleSummary | null;
+}
+
+export interface StaffMember {
+  userId: string;
+  role: string;
+  fullName: string | null;
+  avatarUrl: string | null;
+  createdAt: string;
+}
+
+export interface StaffInviteSummary {
+  id: string;
+  role: string;
+  expiresAt: string;
+  createdAt: string;
+}
+
+export interface StaffList {
+  members: StaffMember[];
+  invites: StaffInviteSummary[];
 }
 
 export interface ThemeSummary {
