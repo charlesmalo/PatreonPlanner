@@ -3,7 +3,9 @@ import { useSession } from './api/hooks';
 import { Layout } from './components/Layout';
 import { CreatorBoard } from './routes/CreatorBoard';
 import { LandingPage } from './routes/LandingPage';
+import { AcceptInvite } from './routes/AcceptInvite';
 import { ReviewQueue } from './routes/ReviewQueue';
+import { StaffPage } from './routes/StaffPage';
 
 export default function App() {
   const { user, loading, signOut } = useSession();
@@ -15,6 +17,8 @@ export default function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/c/:slug" element={<CreatorBoard />} />
           <Route path="/c/:slug/review" element={<ReviewQueue />} />
+          <Route path="/c/:slug/staff" element={<StaffPage />} />
+          <Route path="/invite" element={<AcceptInvite user={user} />} />
           <Route path="*" element={<p>Page not found.</p>} />
         </Routes>
       </Layout>

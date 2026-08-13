@@ -1,4 +1,6 @@
-export type Capability = 'VIEW' | 'UPVOTE' | 'SUBMIT' | 'MODERATE';
+export type Capability = 'VIEW' | 'UPVOTE' | 'SUBMIT' | 'MODERATE' | 'ADMINISTER';
+
+export type StaffRoleValue = 'OWNER' | 'MOD';
 
 export type ViewVisibilityValue = 'PUBLIC' | 'ANY_PATREON_USER' | 'SUBSCRIBERS_ONLY';
 
@@ -14,7 +16,12 @@ export interface Viewer {
    * retained for display only.
    */
   pledgeAmountCents: number | null;
-  isStaff: boolean;
+  /**
+   * Null when the viewer is not staff of this creator. A role rather than a boolean, because
+   * appointing and removing moderators is the owner's alone — this is the `StaffRole` the
+   * comment below has asked for since Plan 03.
+   */
+  staffRole: StaffRoleValue | null;
 }
 
 export interface Policy {
@@ -29,14 +36,24 @@ export interface Policy {
  * testable without a database standing behind them.
  */
 export function can(capability: Capability, viewer: Viewer, policy: Policy): boolean {
+  const isStaff = viewer.isAuthenticated && viewer.staffRole !== null;
+
+  // Design §7's "Creator admin" bucket: staff, policy, the webhook secret. Owner only.
+  //
+  // A mod who could appoint mods could appoint an accomplice, and one who could remove staff
+  // could remove the owner. The same reasoning bites harder on policy: a mod who could edit it
+  // could make a subscribers-only board public and drop every tier gate. That was academic while
+  // staff rows had to be written by hand; an invite link makes MOD reachable by anyone who
+  // receives one.
+  if (capability === 'ADMINISTER') return viewer.isAuthenticated && viewer.staffRole === 'OWNER';
+
   // Design §3: moderation power derives only from a CreatorStaff row, so no amount of pledging
-  // reaches it. Plan 06's staff management is OWNER-only and will need StaffRole here, not just
-  // the boolean.
-  if (capability === 'MODERATE') return viewer.isAuthenticated && viewer.isStaff;
+  // reaches it.
+  if (capability === 'MODERATE') return isStaff;
 
   // Staff bypass the patron gates: a creator's own moderators must be able to work the board
   // they moderate without also pledging to it.
-  if (viewer.isAuthenticated && viewer.isStaff) return true;
+  if (isStaff) return true;
 
   switch (capability) {
     case 'VIEW':

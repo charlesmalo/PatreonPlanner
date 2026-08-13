@@ -58,6 +58,9 @@ describe('Abuse enforcement (integration)', () => {
   });
 
   beforeEach(async () => {
+    // A board read queues background availability refreshes that outlive the test; draining
+    // first stops one writing into the next test's fixtures.
+    await ctx.availabilityService.drainRefreshes();
     await ctx.prisma.abuseRecord.deleteMany();
     await ctx.prisma.recommendation.deleteMany({ where: { creatorId } });
     await ctx.limits.reset();

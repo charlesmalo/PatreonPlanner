@@ -121,6 +121,8 @@ model User {
   recommendations Recommendation[]
   upvotes         Upvote[]
   abuseRecord     AbuseRecord?
+  invitesSent     StaffInvite[]      @relation("InviteAuthor")
+  invitesAccepted StaffInvite[]      @relation("InviteAcceptor")
   flagsRaised     Flag[]             @relation("FlagAuthor")
   flagsResolved   Flag[]             @relation("FlagResolver")
   moderationActs  ModerationAction[] @relation("ModerationActor")
@@ -170,6 +172,7 @@ model Creator {
   policy          CreatorPolicy?
   recommendations Recommendation[]
   themes          Theme[]
+  staffInvites    StaffInvite[]
 
   // Postgres does not index foreign keys automatically, and the cascade from Creator scans them.
   @@index([ownerUserId])
@@ -234,6 +237,31 @@ model CreatorStaff {
   @@index([creatorId])
   @@index([userId])
   @@index([assignedByUserId])
+}
+
+model StaffInvite {
+  id               String    @id @default(uuid()) @db.Uuid
+  creatorId        String    @db.Uuid
+  // SHA-256 of the opaque token. The plaintext is returned once and never stored, so a database
+  // read cannot recover a live invite — the rule the session token already follows.
+  tokenHash        String    @unique
+  role             StaffRole
+  invitedByUserId  String    @db.Uuid
+  expiresAt        DateTime
+  // Set when consumed. Single-use: an invite that could be replayed is a standing credential.
+  acceptedAt       DateTime?
+  acceptedByUserId String?   @db.Uuid
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+
+  creator    Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  invitedBy  User    @relation("InviteAuthor", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+  acceptedBy User?   @relation("InviteAcceptor", fields: [acceptedByUserId], references: [id])
+
+  @@index([creatorId])
+  @@index([expiresAt])
+  @@index([invitedByUserId])
+  @@index([acceptedByUserId])
 }
 
 model CreatorPolicy {

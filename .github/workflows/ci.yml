@@ -15,6 +15,9 @@ concurrency:
 jobs:
   build-test:
     runs-on: ubuntu-latest
+    # The suite takes ~5 minutes. Without this a genuine deadlock burns GitHub's six-hour
+    # default before anyone hears about it — which matters more now the per-test timeout is 30s.
+    timeout-minutes: 25
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -60,6 +63,7 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

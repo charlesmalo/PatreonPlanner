@@ -19,6 +19,7 @@ import { RecommendationsModule } from './recommendations/recommendations.module'
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
 import { SessionModule } from './session/session.module';
+import { StaffModule } from './staff/staff.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { HealthModule } from './health/health.module';
 
@@ -31,6 +32,7 @@ import { HealthModule } from './health/health.module';
     PrismaModule,
     RedisModule,
     SessionModule,
+    StaffModule,
     PatreonModule,
     MembershipsModule,
     JobsModule,

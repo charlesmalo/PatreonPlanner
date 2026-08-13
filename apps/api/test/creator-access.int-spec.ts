@@ -188,7 +188,13 @@ describe('CreatorAccessGuard (integration)', () => {
       .get('/api/v1/creators/guarded/capabilities')
       .set('Cookie', cookie)
       .expect(200);
-    expect(res.body).toEqual({ view: true, upvote: true, submit: true, moderate: false });
+    expect(res.body).toEqual({
+      view: true,
+      upvote: true,
+      submit: true,
+      moderate: false,
+      administer: false,
+    });
 
     await ctx.prisma.creatorPolicy.update({
       where: { creatorId },
@@ -201,7 +207,13 @@ describe('CreatorAccessGuard (integration)', () => {
     const res = await request(ctx.app.getHttpServer())
       .get('/api/v1/creators/guarded/capabilities')
       .expect(200);
-    expect(res.body).toEqual({ view: true, upvote: false, submit: false, moderate: false });
+    expect(res.body).toEqual({
+      view: true,
+      upvote: false,
+      submit: false,
+      moderate: false,
+      administer: false,
+    });
   });
 
   it('does not treat staff of one creator as staff of another', async () => {
