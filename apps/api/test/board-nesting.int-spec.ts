@@ -86,6 +86,10 @@ describe('Board nesting and theme filtering (integration)', () => {
   });
 
   beforeEach(async () => {
+    // Every test here reads the board, and a board read queues background availability refreshes
+    // that outlive it. Draining first is the same isolation fix the availability suite needed
+    // once review pointed out that a queued refresh can write *after* the next test's deletes.
+    await ctx.availabilityService.drainRefreshes();
     await ctx.prisma.recommendation.deleteMany();
     await ctx.prisma.titleRelation.deleteMany();
     await ctx.prisma.titleTheme.deleteMany();

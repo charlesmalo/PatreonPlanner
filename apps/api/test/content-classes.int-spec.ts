@@ -43,6 +43,9 @@ describe('Franchise and watch-order submissions (integration)', () => {
   beforeEach(async () => {
     // This suite deliberately trips the moderation pipeline, which now earns strikes — two of
     // them time the patron out and every later test 403s. The abuse curve has its own suite.
+    // A board read queues background availability refreshes that outlive the test; draining
+    // first stops one writing into the next test's fixtures.
+    await ctx.availabilityService.drainRefreshes();
     await ctx.prisma.abuseRecord.deleteMany();
     await ctx.prisma.recommendation.deleteMany({ where: { creatorId } });
     ctx.catalog.results = [
