@@ -14,6 +14,7 @@ import {
   RelationKind,
   StrikeReason,
 } from '@prisma/client';
+import type { StaffRoleValue } from '../access/capability';
 import { AbuseService } from '../abuse/abuse.service';
 import { AvailabilityService, StoredAvailability } from '../availability/availability.service';
 import { CatalogService } from '../catalog/catalog.service';
@@ -73,7 +74,7 @@ const HIDDEN_STATUSES: RecommendationStatus[] = ['DELETED', 'REJECTED'];
  */
 function visibilityWhere(
   creator: { hidePendingFromPublic: boolean },
-  viewer: { userId: string | null; staffRole: string | null },
+  viewer: { userId: string | null; staffRole: StaffRoleValue | null },
 ): Prisma.RecommendationWhereInput {
   if (viewer.staffRole !== null) return {};
   if (!creator.hidePendingFromPublic) return { status: { in: PATRON_VISIBLE_STATUSES } };
@@ -641,7 +642,7 @@ export class RecommendationsService {
     creator: { id: string; hidePendingFromPublic: boolean },
     rawCursor: string | undefined,
     limit: number | undefined,
-    viewer: { userId: string | null; staffRole: string | null },
+    viewer: { userId: string | null; staffRole: StaffRoleValue | null },
     themeId?: string,
   ) {
     const take = Math.min(Math.max(limit ?? 20, 1), MAX_PAGE);

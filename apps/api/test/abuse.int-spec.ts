@@ -103,17 +103,20 @@ describe('AbuseService (integration)', () => {
       // Reading the count and writing the timeout in two statements let both requests compute
       // from the same stale snapshot; whichever committed last won, so hitting twice at once
       // bought a *shorter* penalty than hitting twice in sequence.
+      // Compared as durations *from the moment each is read*, never as absolute instants: the
+      // two runs are seconds apart under container contention, so comparing the timestamps
+      // measures how slow the machine is rather than what the lock guarantees.
       await strikeTimes(userId, 5);
-      const sequential = (await abuse.timeoutFor(userId)) as Date;
+      const sequential = ((await abuse.timeoutFor(userId)) as Date).getTime() - Date.now();
 
       await prisma.abuseRecord.deleteMany();
       await strikeTimes(userId, 3);
       await Promise.all([abuse.strike(userId, 'RATE_LIMIT'), abuse.strike(userId, 'RATE_LIMIT')]);
+      const concurrent = ((await abuse.timeoutFor(userId)) as Date).getTime() - Date.now();
 
-      const concurrent = (await abuse.timeoutFor(userId)) as Date;
       expect((await record(userId)).strikeCount).toBe(5);
-      // Within a second of the sequential answer, not half of it.
-      expect(Math.abs(concurrent.getTime() - sequential.getTime())).toBeLessThan(5000);
+      // The same penalty, not half of it: five strikes is eight hours, four is four.
+      expect(concurrent).toBeGreaterThan(sequential * 0.75);
     });
 
     it('keeps users apart', async () => {

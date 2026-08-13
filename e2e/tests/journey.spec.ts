@@ -435,7 +435,9 @@ test('an owner invites a moderator, who accepts and can then be removed', async 
   await page.getByRole('button', { name: /invite a moderator/i }).click();
 
   const link = await page.getByLabel(/send this link/i).inputValue();
-  expect(link).toContain('/invite/');
+  // The token lives in the fragment, which browsers never send to a server — so it stays out of
+  // the access log a path would have written it to.
+  expect(link).toMatch(/\/invite#[A-Za-z0-9_-]{32,}$/);
 
   // A second browser context, so the invitee is a genuinely different session rather than the
   // same one wearing a different identity — which is what made an earlier two-identity journey
@@ -443,7 +445,8 @@ test('an owner invites a moderator, who accepts and can then be removed', async 
   const invitee = await context.browser()!.newContext();
   const inviteePage = await invitee.newPage();
   await signIn(inviteePage, 500, 'patreon-invitee-e2e');
-  await inviteePage.goto(new URL(link).pathname);
+  const inviteUrl = new URL(link);
+  await inviteePage.goto(`${inviteUrl.pathname}${inviteUrl.hash}`);
   await inviteePage.getByRole('button', { name: /accept/i }).click();
   await expect(inviteePage.getByRole('heading', { name: /you now moderate/i })).toBeVisible();
 

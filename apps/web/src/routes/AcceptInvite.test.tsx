@@ -6,9 +6,9 @@ import { fakeApi } from '../test-support';
 
 function renderPage(user: { id: string } | null = { id: 'u9' }) {
   return render(
-    <MemoryRouter initialEntries={['/invite/tok_abc']}>
+    <MemoryRouter initialEntries={['/invite#tok_abc']}>
       <Routes>
-        <Route path="/invite/:token" element={<AcceptInvite user={user as never} />} />
+        <Route path="/invite" element={<AcceptInvite user={user as never} />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -42,7 +42,7 @@ describe('AcceptInvite', () => {
     );
   });
 
-  it('sends the token from the path', async () => {
+  it('sends the token from the fragment, which never reaches a server log', async () => {
     const fetchMock = fakeApi({
       'POST /api/v1/staff/invites/accept': {
         role: 'MOD',

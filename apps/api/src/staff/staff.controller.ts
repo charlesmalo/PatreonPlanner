@@ -23,7 +23,7 @@ import { StaffService } from './staff.service';
 // Everything here is owner-only, so the capability is declared once on the class and the guard
 // throws if a handler is ever added without one.
 @Controller('creators/:slug/staff')
-@RequireCapability('MANAGE_STAFF')
+@RequireCapability('ADMINISTER')
 @UseGuards(CreatorAccessGuard, SessionGuard)
 export class StaffController {
   constructor(private readonly staff: StaffService) {}

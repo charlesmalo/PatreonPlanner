@@ -51,9 +51,25 @@ describe('StaffPage', () => {
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: /invite a moderator/i }));
 
-    const link = await screen.findByDisplayValue(/\/invite\/tok_abc123$/);
+    const link = await screen.findByDisplayValue(/\/invite#tok_abc123$/);
     expect(link).toBeInTheDocument();
     expect(screen.getByText(/not be shown again/i)).toBeInTheDocument();
+  });
+
+  it('lists pending invitations and revokes one', async () => {
+    // The 409 message tells an owner to revoke one first; without this there was nothing to
+    // revoke with, and invites live a week.
+    global.fetch = fakeApi({
+      'GET /api/v1/creators/ada-writes': creator,
+      'GET /api/v1/creators/ada-writes/staff': {
+        members,
+        invites: [{ id: 'i1', role: 'MOD', expiresAt: '2026-02-01', createdAt: '2026-01-01' }],
+      },
+      'DELETE /api/v1/creators/ada-writes/staff/invites/i1': null,
+    });
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: /revoke the invitation/i }));
+    expect(await screen.findByText(/no longer valid/i)).toBeInTheDocument();
   });
 
   it('offers no remove control for the owner', async () => {

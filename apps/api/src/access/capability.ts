@@ -1,4 +1,4 @@
-export type Capability = 'VIEW' | 'UPVOTE' | 'SUBMIT' | 'MODERATE' | 'MANAGE_STAFF';
+export type Capability = 'VIEW' | 'UPVOTE' | 'SUBMIT' | 'MODERATE' | 'ADMINISTER';
 
 export type StaffRoleValue = 'OWNER' | 'MOD';
 
@@ -38,9 +38,14 @@ export interface Policy {
 export function can(capability: Capability, viewer: Viewer, policy: Policy): boolean {
   const isStaff = viewer.isAuthenticated && viewer.staffRole !== null;
 
-  // Owner only. A mod who could appoint mods could appoint an accomplice, and a mod who could
-  // remove staff could remove the owner: both are privilege escalation dressed as convenience.
-  if (capability === 'MANAGE_STAFF') return viewer.isAuthenticated && viewer.staffRole === 'OWNER';
+  // Design §7's "Creator admin" bucket: staff, policy, the webhook secret. Owner only.
+  //
+  // A mod who could appoint mods could appoint an accomplice, and one who could remove staff
+  // could remove the owner. The same reasoning bites harder on policy: a mod who could edit it
+  // could make a subscribers-only board public and drop every tier gate. That was academic while
+  // staff rows had to be written by hand; an invite link makes MOD reachable by anyone who
+  // receives one.
+  if (capability === 'ADMINISTER') return viewer.isAuthenticated && viewer.staffRole === 'OWNER';
 
   // Design §3: moderation power derives only from a CreatorStaff row, so no amount of pledging
   // reaches it.

@@ -14,7 +14,7 @@ const NO_CAPABILITIES: Capabilities = {
   upvote: false,
   submit: false,
   moderate: false,
-  manage_staff: false,
+  administer: false,
 };
 
 export function useSession() {

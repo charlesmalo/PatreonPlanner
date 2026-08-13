@@ -50,26 +50,30 @@ export class CreatorsController {
       upvote: can('UPVOTE', viewer, policy),
       submit: can('SUBMIT', viewer, policy),
       moderate: can('MODERATE', viewer, policy),
-      manage_staff: can('MANAGE_STAFF', viewer, policy),
+      administer: can('ADMINISTER', viewer, policy),
     };
   }
 
   @Get(':creatorId/policy')
-  @RequireCapability('MODERATE')
+  @RequireCapability('ADMINISTER')
   @UseGuards(CreatorAccessGuard)
   policy(@CurrentCreator() creator: ResolvedCreator) {
     return this.creators.getPolicy(creator.id);
   }
 
+  // ADMINISTER, not MODERATE: whoever holds this secret can forge membership events, minting
+  // active-patron status at any pledge for anyone on the campaign.
   @Put(':creatorId/webhook-secret')
-  @RequireCapability('MODERATE')
+  @RequireCapability('ADMINISTER')
   @UseGuards(CreatorAccessGuard)
   setWebhookSecret(@CurrentCreator() creator: ResolvedCreator, @Body() dto: SetWebhookSecretDto) {
     return this.creators.setWebhookSecret(creator.id, dto.secret);
   }
 
+  // ADMINISTER, not MODERATE: this is the paywall switch. Design §7 files policy under Creator
+  // admin alongside staff, and a moderator arriving by invite link must not hold it.
   @Patch(':creatorId/policy')
-  @RequireCapability('MODERATE')
+  @RequireCapability('ADMINISTER')
   @UseGuards(CreatorAccessGuard)
   updatePolicy(@CurrentCreator() creator: ResolvedCreator, @Body() dto: UpdatePolicyDto) {
     return this.creators.updatePolicy(creator.id, dto);

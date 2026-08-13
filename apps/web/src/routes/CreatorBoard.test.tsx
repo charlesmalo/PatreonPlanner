@@ -361,3 +361,44 @@ describe('CreatorBoard nesting resilience', () => {
     expect(screen.getByText('Two')).toBeInTheDocument();
   });
 });
+
+describe('CreatorBoard admin link', () => {
+  const originalFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  function boardWith(capabilities: unknown) {
+    global.fetch = fakeApi({
+      'GET /api/v1/creators/ada-writes': creator,
+      'GET /api/v1/creators/ada-writes/capabilities': capabilities,
+      'GET /api/v1/creators/ada-writes/recommendations': { items: [], nextCursor: null },
+      'GET /api/v1/creators/ada-writes/themes': { items: [] },
+    });
+  }
+
+  it('offers the moderators page to an owner', async () => {
+    boardWith({ ...viewOnly, moderate: true, administer: true });
+    renderBoard();
+    expect(await screen.findByRole('link', { name: 'Moderators' })).toHaveAttribute(
+      'href',
+      '/c/ada-writes/staff',
+    );
+  });
+
+  it('hides it from a moderator', async () => {
+    // Staff management is owner-only; a link that 403s is a lie. Nothing covered this, so
+    // swapping the gate to `moderate` — or deleting it — left the suite green.
+    boardWith({ ...viewOnly, moderate: true, administer: false });
+    renderBoard();
+    await screen.findByRole('link', { name: /review queue/i });
+    expect(screen.queryByRole('link', { name: 'Moderators' })).not.toBeInTheDocument();
+  });
+
+  it('hides it from a patron', async () => {
+    boardWith(viewOnly);
+    renderBoard();
+    await screen.findByRole('heading', { name: 'Ada Writes' });
+    expect(screen.queryByRole('link', { name: 'Moderators' })).not.toBeInTheDocument();
+  });
+});

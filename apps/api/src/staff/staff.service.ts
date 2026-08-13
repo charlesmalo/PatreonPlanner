@@ -116,12 +116,16 @@ export class StaffService {
       throw new NotFoundException(REDEEM_FAILURE);
     }
 
-    const existing = await this.prisma.creatorStaff.findUnique({
-      where: { creatorId_userId: { creatorId: invite.creatorId, userId } },
-      select: { role: true },
-    });
-
     return this.prisma.$transaction(async (tx) => {
+      // Read inside the transaction. Outside it, two invites redeemed at once both saw "not
+      // staff" and both inserted, turning an idempotent accept into a 409 — and a removal
+      // landing between the read and the write left the invite spent, no row created, and the
+      // SPA cheerfully announcing "you now moderate this board".
+      const existing = await tx.creatorStaff.findUnique({
+        where: { creatorId_userId: { creatorId: invite.creatorId, userId } },
+        select: { role: true },
+      });
+
       // Conditional on it still being unspent: two people following the same link at once would
       // otherwise both be appointed, which is not what single-use means.
       const { count } = await tx.staffInvite.updateMany({
@@ -146,18 +150,25 @@ export class StaffService {
   }
 
   async removeMember(creatorId: string, userId: string): Promise<void> {
-    const member = await this.prisma.creatorStaff.findUnique({
-      where: { creatorId_userId: { creatorId, userId } },
-      select: { id: true, role: true },
-    });
+    const [member, creator] = await Promise.all([
+      this.prisma.creatorStaff.findUnique({
+        where: { creatorId_userId: { creatorId, userId } },
+        select: { id: true, role: true },
+      }),
+      this.prisma.creator.findUniqueOrThrow({
+        where: { id: creatorId },
+        select: { ownerUserId: true },
+      }),
+    ]);
     if (!member) throw new NotFoundException();
 
-    if (member.role === 'OWNER') {
-      const owners = await this.prisma.creatorStaff.count({
-        where: { creatorId, role: 'OWNER' },
-      });
-      // A board with no owner is unadministrable, and no endpoint can put one back.
-      if (owners <= 1) throw new ConflictException('A creator must keep an owner');
+    // Anchored on the creator's own owner, not on a count of OWNER rows. A count is a TOCTOU —
+    // two concurrent removals both read two and both delete — and it measures the wrong thing:
+    // if a second OWNER row ever exists, the count would happily remove the person the Creator
+    // row actually points at, leaving someone who cannot administer their own board and no
+    // endpoint able to put the row back.
+    if (userId === creator.ownerUserId) {
+      throw new ConflictException('A creator must keep an owner');
     }
 
     await this.prisma.creatorStaff.delete({ where: { id: member.id } });

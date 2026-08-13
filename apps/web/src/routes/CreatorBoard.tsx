@@ -63,7 +63,7 @@ export function CreatorBoard() {
     <section>
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <h1 className="text-2xl font-semibold tracking-tight">{creator?.displayName}</h1>
-        {capabilities.manage_staff ? (
+        {capabilities.administer ? (
           <Link
             to={`/c/${encodeURIComponent(slug)}/staff`}
             className="text-sm text-sky-700 underline focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:text-sky-400"

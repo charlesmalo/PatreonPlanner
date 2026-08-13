@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { ApiError, api } from '../api/client';
 import type { SessionUser } from '../api/types';
 
@@ -9,7 +9,9 @@ interface Accepted {
 }
 
 export function AcceptInvite({ user }: { user: SessionUser | null }) {
-  const { token = '' } = useParams();
+  // From the fragment, not the path: a fragment is never sent to the server, so the token stays
+  // out of access logs and Referer headers.
+  const token = useLocation().hash.replace(/^#/, '');
   const [accepted, setAccepted] = useState<Accepted | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

@@ -18,7 +18,7 @@ export default function App() {
           <Route path="/c/:slug" element={<CreatorBoard />} />
           <Route path="/c/:slug/review" element={<ReviewQueue />} />
           <Route path="/c/:slug/staff" element={<StaffPage />} />
-          <Route path="/invite/:token" element={<AcceptInvite user={user} />} />
+          <Route path="/invite" element={<AcceptInvite user={user} />} />
           <Route path="*" element={<p>Page not found.</p>} />
         </Routes>
       </Layout>

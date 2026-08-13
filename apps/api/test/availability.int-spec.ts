@@ -214,7 +214,9 @@ describe('AvailabilityService (integration)', () => {
     // scheduling, and it duly failed on CI's timing rather than on any behaviour.
     await Promise.all(Array.from({ length: 10 }, () => service.forTitles([titleId], 'GB')));
     await service.drainRefreshes();
-    expect(provider.calls).toBeLessThan(10);
+    // Two, not ten: one shared refresh, plus at most one from a reader whose own read finished
+    // before that refresh's write landed. Ten means the de-dupe is gone entirely.
+    expect(provider.calls).toBeLessThanOrEqual(2);
   });
 
   it('bounds how many refreshes a single board read can start', async () => {

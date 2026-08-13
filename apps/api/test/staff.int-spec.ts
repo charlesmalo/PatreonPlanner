@@ -90,6 +90,13 @@ describe('Staff management (integration)', () => {
 
   type Auth = Awaited<ReturnType<typeof loginAs>>;
 
+  /** A CSRF pair with no session, so a request reaches the guards instead of the middleware. */
+  async function anonymousCsrf() {
+    const res = await request(ctx.app.getHttpServer()).get('/api/v1/creators/staff-co').expect(200);
+    const csrf = pickCookie(res, 'pp_csrf').split(';')[0];
+    return { csrf, csrfToken: csrf.split('=').slice(1).join('=') };
+  }
+
   const post = (auth: Auth, path: string, body: object = {}) =>
     request(ctx.app.getHttpServer())
       .post(`/api/v1${path}`)
@@ -137,9 +144,14 @@ describe('Staff management (integration)', () => {
 
     it('refuses a stranger and an anonymous caller', async () => {
       await invite(stranger).expect(403);
+      // With a valid anonymous CSRF pair, so the request actually reaches the guards rather
+      // than stopping at the middleware — otherwise this asserts nothing about authorization.
+      const anon = await anonymousCsrf();
       await request(ctx.app.getHttpServer())
         .post('/api/v1/creators/staff-co/staff/invites')
-        .expect(403); // CSRF first
+        .set('Cookie', [anon.csrf])
+        .set('x-csrf-token', anon.csrfToken)
+        .expect(401);
     });
 
     it('caps how many invites can be outstanding', async () => {
@@ -160,14 +172,19 @@ describe('Staff management (integration)', () => {
   });
 
   describe('listing and revoking', () => {
-    it('lists members with their roles and pending invites', async () => {
+    it('lists exactly this creator members and pending invites', async () => {
+      // Asserted as an exact set with the other creator populated, because arrayContaining
+      // tolerates extras — dropping the creatorId filter would leak every tenant's roster,
+      // names and all, and the looser assertion passed anyway.
+      await ctx.prisma.creatorStaff.create({
+        data: { creatorId: otherCreatorId, userId: strangerUserId, role: 'MOD' },
+      });
       await invite().expect(201);
+      await invite(owner, 'st-other').expect(201);
+
       const res = await get(owner, '/creators/staff-co/staff').expect(200);
-      expect(res.body.members).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ userId: ownerUserId, role: 'OWNER' }),
-          expect.objectContaining({ userId: modUserId, role: 'MOD' }),
-        ]),
+      expect(res.body.members.map((m: { userId: string }) => m.userId).sort()).toEqual(
+        [ownerUserId, modUserId].sort(),
       );
       expect(res.body.invites).toHaveLength(1);
     });
@@ -256,12 +273,17 @@ describe('Staff management (integration)', () => {
     });
 
     it('refuses an anonymous accepter', async () => {
-      // Consent means an authenticated action; there is nobody to appoint otherwise.
+      // Consent means an authenticated action; there is nobody to appoint otherwise. Carries a
+      // valid anonymous CSRF pair so the assertion is about the session guard, not the
+      // middleware in front of it.
       const { token } = (await invite().expect(201)).body;
+      const anon = await anonymousCsrf();
       await request(ctx.app.getHttpServer())
         .post('/api/v1/staff/invites/accept')
+        .set('Cookie', [anon.csrf])
+        .set('x-csrf-token', anon.csrfToken)
         .send({ token })
-        .expect(403); // CSRF first
+        .expect(401);
     });
 
     it('is idempotent for someone who is already staff', async () => {
@@ -300,6 +322,15 @@ describe('Staff management (integration)', () => {
       await get(mod, '/creators/staff-co/review-queue').expect(200);
       await del(owner, `/creators/staff-co/staff/${modUserId}`).expect(204);
       await get(mod, '/creators/staff-co/review-queue').expect(403);
+    });
+
+    it('refuses to remove the creator own owner even beside a second OWNER row', async () => {
+      // The guard anchors on Creator.ownerUserId, not on how many OWNER rows exist.
+      await ctx.prisma.creatorStaff.create({
+        data: { creatorId, userId: strangerUserId, role: 'OWNER' },
+      });
+      await del(owner, `/creators/staff-co/staff/${ownerUserId}`).expect(409);
+      expect(await roleOf(ownerUserId)).toBe('OWNER');
     });
 
     it('refuses to remove the last owner', async () => {

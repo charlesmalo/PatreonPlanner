@@ -193,7 +193,7 @@ describe('CreatorAccessGuard (integration)', () => {
       upvote: true,
       submit: true,
       moderate: false,
-      manage_staff: false,
+      administer: false,
     });
 
     await ctx.prisma.creatorPolicy.update({
@@ -212,7 +212,7 @@ describe('CreatorAccessGuard (integration)', () => {
       upvote: false,
       submit: false,
       moderate: false,
-      manage_staff: false,
+      administer: false,
     });
   });
 

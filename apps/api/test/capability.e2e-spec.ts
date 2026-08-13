@@ -108,7 +108,7 @@ describe('can()', () => {
   });
 });
 
-describe('can(MANAGE_STAFF)', () => {
+describe('can(ADMINISTER)', () => {
   const policy: Policy = {
     viewVisibility: 'PUBLIC',
     submitMinTierAmountCents: null,
@@ -123,23 +123,23 @@ describe('can(MANAGE_STAFF)', () => {
   };
 
   it('lets an owner manage staff', () => {
-    expect(can('MANAGE_STAFF', { ...base, staffRole: 'OWNER' }, policy)).toBe(true);
+    expect(can('ADMINISTER', { ...base, staffRole: 'OWNER' }, policy)).toBe(true);
   });
 
   it('refuses a mod', () => {
     // A mod who could appoint mods could appoint an accomplice; one who could remove staff could
     // remove the owner. Both are privilege escalation dressed as convenience.
-    expect(can('MANAGE_STAFF', { ...base, staffRole: 'MOD' }, policy)).toBe(false);
+    expect(can('ADMINISTER', { ...base, staffRole: 'MOD' }, policy)).toBe(false);
   });
 
   it('refuses a patron however much they pledge', () => {
     expect(
-      can('MANAGE_STAFF', { ...base, isActivePatron: true, pledgeAmountCents: 100_000 }, policy),
+      can('ADMINISTER', { ...base, isActivePatron: true, pledgeAmountCents: 100_000 }, policy),
     ).toBe(false);
   });
 
   it('refuses an unauthenticated viewer', () => {
-    expect(can('MANAGE_STAFF', { ...base, userId: null, isAuthenticated: false }, policy)).toBe(
+    expect(can('ADMINISTER', { ...base, userId: null, isAuthenticated: false }, policy)).toBe(
       false,
     );
   });

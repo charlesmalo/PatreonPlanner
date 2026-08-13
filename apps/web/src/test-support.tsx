@@ -13,7 +13,7 @@ export const allCapabilities: Capabilities = {
   upvote: true,
   submit: true,
   moderate: false,
-  manage_staff: false,
+  administer: false,
 };
 
 export const viewOnly: Capabilities = {
@@ -21,7 +21,7 @@ export const viewOnly: Capabilities = {
   upvote: false,
   submit: false,
   moderate: false,
-  manage_staff: false,
+  administer: false,
 };
 
 export function recommendation(overrides: Partial<Recommendation> = {}): Recommendation {

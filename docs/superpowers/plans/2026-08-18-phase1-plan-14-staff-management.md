@@ -358,6 +358,37 @@ docker-compose -f docker-compose.e2e.yml up -d --build && pnpm --filter e2e e2e
 - `StaffRole` reaching the capability resolver, as `capability.ts` has asked for since Plan 03 → Task 1. ✅
 - Emailing invites, ownership transfer, more roles, finer capabilities → **deferred**, each with its reason in Scope. ✅
 
+## Found in review (fixed)
+
+1. **Critical — an invited moderator inherited creator admin.** `PATCH /creators/:id/policy` and
+   `PUT /creators/:id/webhook-secret` were gated on `MODERATE`. That was academic while staff rows
+   had to be written into the database by hand — this plan is precisely what makes `MOD` reachable
+   by anyone who receives a link. A moderator could therefore make a subscribers-only board
+   public, drop every tier gate, and install a webhook secret they know, then forge membership
+   events minting active-patron status for anyone on the campaign. The capability is renamed
+   `ADMINISTER` (design §7's whole "Creator admin" bucket) and now gates all three.
+2. **Important — the token travelled in the URL path**, so nginx logged a live, redeemable
+   credential in plaintext on every use, for its whole seven-day life. Storing only the hash was
+   pointless against a log holding the plaintext. It moves to the fragment, which browsers never
+   send to a server.
+3. **Important — the staff roster's creator scoping survived mutation.** Deleting
+   `where: { creatorId }` leaked every tenant's roster — names, avatars, ids — and the whole suite
+   stayed green, because the assertion used `arrayContaining` and the fixture had no other rows to
+   leak. Now an exact set, with the other creator populated.
+4. **Important — the SPA told owners to "revoke one first" with nothing to revoke with.** The
+   endpoint existed and was API-tested; the page never listed invites. Ten invites over a week
+   locked inviting for seven days with no recourse.
+5. **Important — the `administer` gate on the board had no coverage.** Swapping it to `moderate`
+   left the suite green while every moderator saw a link to a page that 403s.
+6. **Minor, also fixed:** `acceptInvite` read "is this user already staff?" outside its
+   transaction, so two concurrent redemptions turned an idempotent accept into a 409 and a
+   concurrent removal could consume an invite while announcing a role the user did not get; the
+   last-owner guard counted `OWNER` rows (a TOCTOU, and the wrong measure) instead of anchoring on
+   `Creator.ownerUserId`; `staffRole` was widened to `string | null` at the recommendations
+   boundary, where any non-null string would have granted unfiltered board visibility; and two
+   "anonymous is refused" tests were satisfied by the CSRF middleware without ever reaching the
+   guards they were meant to assert.
+
 **Known risks:**
 
 1. **The invite link is a bearer credential in whatever channel the creator uses.** Anyone who sees it can become a moderator of that board until it is used or expires. Single-use and expiry bound it; nothing else does, because there is no second factor to bind it to.

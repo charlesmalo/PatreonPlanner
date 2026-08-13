@@ -10,7 +10,7 @@ export interface Capabilities {
   upvote: boolean;
   submit: boolean;
   moderate: boolean;
-  manage_staff: boolean;
+  administer: boolean;
 }
 
 export interface RecommendationLink {

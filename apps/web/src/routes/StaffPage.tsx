@@ -33,15 +33,44 @@ export function StaffPage() {
     setMessage(null);
     try {
       const created = await api.post<{ token: string }>(`${path}/invites`);
-      // Built here rather than returned by the API: the API does not know what origin the SPA is
-      // served from, and a link is what the creator actually needs to send.
-      setInviteLink(`${window.location.origin}/invite/${created.token}`);
+      // Refresh the pending list so the new invite is revocable straight away.
+      api
+        .get<StaffList>(path)
+        .then(setStaff)
+        .catch(() => undefined);
+      // The token goes in the *fragment*, never the path. A fragment is not sent to the server,
+      // so it stays out of nginx's access log, out of any Referer header, and out of every proxy
+      // in between — otherwise storing only its hash would be pointless, since the log would hold
+      // a live, redeemable credential for the whole seven days.
+      setInviteLink(`${window.location.origin}/invite#${created.token}`);
     } catch (err) {
       setMessage(
         err instanceof ApiError && err.status === 409
           ? 'There are too many invitations outstanding. Revoke one first.'
           : 'Could not create an invitation. Try again.',
       );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * Without this the 409 above tells an owner to "revoke one first" with nothing anywhere to
+   * revoke with — and since invites live seven days, ten of them locks inviting for a week.
+   */
+  async function revoke(inviteId: string) {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await api.del(`${path}/invites/${inviteId}`);
+      setStaff((current) =>
+        current
+          ? { ...current, invites: current.invites.filter((i) => i.id !== inviteId) }
+          : current,
+      );
+      setMessage('That invitation is no longer valid.');
+    } catch {
+      setMessage('Could not revoke that invitation. Try again.');
     } finally {
       setBusy(false);
     }
@@ -126,6 +155,33 @@ export function StaffPage() {
       >
         Invite a moderator
       </button>
+
+      {staff.invites.length > 0 ? (
+        <div className="mt-6">
+          <h2 className="text-sm font-medium">Pending invitations</h2>
+          <ul className="mt-2 space-y-2">
+            {staff.invites.map((pending) => (
+              <li
+                key={pending.id}
+                className="flex items-center justify-between rounded border border-slate-200 px-3 py-2 text-xs dark:border-slate-800"
+              >
+                <span>Expires {new Date(pending.expiresAt).toLocaleDateString()}</span>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => revoke(pending.id)}
+                  aria-label={`Revoke the invitation expiring ${new Date(
+                    pending.expiresAt,
+                  ).toLocaleDateString()}`}
+                  className="rounded border border-slate-300 px-2 py-0.5 disabled:opacity-50 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-slate-700 dark:hover:bg-slate-800"
+                >
+                  Revoke
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {inviteLink ? (
         <div className="mt-3 rounded border border-slate-200 p-3 dark:border-slate-800">
