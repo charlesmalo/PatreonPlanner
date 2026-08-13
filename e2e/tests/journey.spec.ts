@@ -2,11 +2,13 @@ import { expect, test } from '@playwright/test';
 import {
   CREATOR,
   resetRateLimits,
+  clearAbuse,
   clearIntelligence,
   makeStaff,
   seedCreator,
   seedRelation,
   seedTheme,
+  timeOutPatron,
   seedEntryFrom,
   setHidePending,
   setPatreonIdentity,
@@ -22,6 +24,8 @@ import {
 
 test.beforeEach(() => {
   seedCreator();
+  // Strikes outlive a test otherwise, and a timed-out patron cannot submit anything.
+  clearAbuse();
   // Every test starts from the same state regardless of what ran before, including CI retries.
   resetRateLimits();
 });
@@ -385,4 +389,32 @@ test('a patron can narrow the board to one theme', async ({ page }) => {
   // Clicking again clears it.
   await page.getByRole('button', { name: /Anime \(1\)/ }).click();
   await expect(page.getByRole('heading', { name: 'An unthemed link' })).toBeVisible();
+});
+
+test('a timed-out patron can still read and upvote, but not suggest', async ({ page }) => {
+  // Design §6.4: a timeout blocks submission only. Losing a board you paid for would be a
+  // punishment out of all proportion to a blocked word.
+  await signIn(page, 500);
+  await page.goto(`/c/${CREATOR.slug}`);
+  await page.getByLabel(/catalogue does not have/i).fill('Before the timeout');
+  await page.getByRole('button', { name: 'Suggest', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Before the timeout' })).toBeVisible();
+
+  timeOutPatron('patreon-user-e2e');
+  await page.reload();
+
+  // Reading still works.
+  await expect(page.getByRole('heading', { name: 'Before the timeout' })).toBeVisible();
+  // So does upvoting.
+  await page
+    .getByRole('button', { name: /upvote/i })
+    .first()
+    .click();
+  await expect(page.getByRole('button', { name: /1 upvote/i })).toBeVisible();
+
+  // Suggesting does not, and the refusal carries a time without explaining itself.
+  await page.getByLabel(/catalogue does not have/i).fill('During the timeout');
+  await page.getByRole('button', { name: 'Suggest', exact: true }).click();
+  await expect(page.getByText(/cannot suggest anything until/i)).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'During the timeout' })).toHaveCount(0);
 });
