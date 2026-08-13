@@ -237,9 +237,21 @@ export class ReviewQueueService {
 
     // Design §6.4: mod-upheld flags feed the abuse score. RESOLVED means the moderator agreed
     // with the report; DISMISSED means they did not, and must never cost the submitter anything.
+    //
+    // At most one strike per *entry*, not per report. Flags are one-per-reporter, so an entry
+    // with ten reporters produced ten strikes — and ten strikes is the cap, a seven-day lockout
+    // from every board the user pays for. Ten throwaway accounts reporting one entry, resolved
+    // in good faith one by one, was a denial-of-service against a patron: exactly what §6.4's
+    // cap exists to prevent, routed around by making the *count* attacker-controlled.
     if (status === 'RESOLVED') {
       try {
-        await this.abuse.strike(flag.recommendation.submittedByUserId, 'UPHELD_FLAG');
+        const alreadyStruck = await this.prisma.moderationAction.count({
+          where: { recommendationId: flag.recommendationId, action: 'FLAG_RESOLVED' },
+        });
+        // This resolution's own audit row is already written, so the first upheld flag sees 1.
+        if (alreadyStruck <= 1) {
+          await this.abuse.strike(flag.recommendation.submittedByUserId, 'UPHELD_FLAG');
+        }
       } catch (error) {
         // A side effect of a decision already recorded; it must not undo the resolution.
         this.logger.warn(`Could not record an upheld-flag strike: ${(error as Error).message}`);

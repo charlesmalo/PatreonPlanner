@@ -402,6 +402,38 @@ docker-compose -f docker-compose.e2e.yml up -d --build && pnpm --filter e2e e2e
 - "unless the abuse is upvote-based" → **not built**; nothing measures upvote velocity. The carve-out is where it would go.
 - `AbuseRecord` + **Redis mirror** → Postgres only; the mirror is **deferred** with its reason in Scope.
 
+## Found in review (fixed)
+
+1. **Critical — upheld flags struck per *report*, not per *offence*, making the strike count
+   attacker-controlled.** Flags are one-per-reporter, and flagging needs only `VIEW` on a public
+   board with no rate limit. Ten throwaway accounts reporting one entry, resolved one by one in
+   good faith, landed ten strikes — the cap — locking a patron out of **every board they pay
+   for** for seven days. The cap bounds the duration; nothing bounded the count, so §6.4's whole
+   defence against denial-of-service-by-lockout was routed around. Now at most one `UPHELD_FLAG`
+   strike per entry.
+2. **Important — every 429 was a strike, against a 1/hour cap.** §6.4 says *repeated* hits. A
+   patron with a second idea ten minutes later got a strike; three impatient clicks timed them
+   out of every board. Now thresholded.
+3. **Important — `strike` was not atomic.** The increment and the timeout write were separate
+   statements, so two concurrent strikes computed from the same stale snapshot and the later
+   commit won: hitting twice at once bought a *shorter* penalty than hitting twice in sequence.
+   Now one transaction with `SELECT … FOR UPDATE`. Note the test does not reliably reproduce the
+   interleaving — the correctness comes from the lock, not from the test.
+4. **Important — the duplicate counter struck on every request past the threshold, and its
+   window was global.** Six duplicates earned two strikes and an hour's lockout, and a patron of
+   six creators suggesting one popular title to each — six 200s, exactly what design §5 asks for
+   — tripped it. Now strikes once, keyed per creator.
+5. **Important — two tests could not fail.** "Costs a timed-out user no rate-limit quota" ran
+   against a limit of 50, so it passed with the ordering reversed; it now runs against one
+   remaining allowance. "Strikes after repeated duplicates" asserted `>= 1`, which the bug in (4)
+   also satisfied; it now asserts exactly one.
+6. **Minor, also fixed:** a `BLOCK` on a *flag note* did not strike, leaving a free oracle for
+   binary-searching the blocklist before crafting a submission that would cost something; decay
+   sat last in an unguarded job chain, so any upstream failure skipped the only mechanism that
+   ever reduces a strike count — it now runs first, and each job is isolated; and `reset`/
+   `exhaust` were public methods on an app-wide service, one careless controller from letting
+   anyone lock anyone out.
+
 **Known risks:**
 
 1. **Strikes are per user, not per creator.** Someone abusing one board is blocked from submitting to every board they patronise. That is what "per-user abuse score" in §6.4 means, and it is the right default for a shared moderation signal — but a creator with an unusually strict wordlist can effectively time a patron out of somebody else's board.

@@ -99,6 +99,23 @@ describe('AbuseService (integration)', () => {
       expect((await record(userId)).strikeCount).toBe(2);
     });
 
+    it('gives concurrent strikes the timeout the higher count earned', async () => {
+      // Reading the count and writing the timeout in two statements let both requests compute
+      // from the same stale snapshot; whichever committed last won, so hitting twice at once
+      // bought a *shorter* penalty than hitting twice in sequence.
+      await strikeTimes(userId, 5);
+      const sequential = (await abuse.timeoutFor(userId)) as Date;
+
+      await prisma.abuseRecord.deleteMany();
+      await strikeTimes(userId, 3);
+      await Promise.all([abuse.strike(userId, 'RATE_LIMIT'), abuse.strike(userId, 'RATE_LIMIT')]);
+
+      const concurrent = (await abuse.timeoutFor(userId)) as Date;
+      expect((await record(userId)).strikeCount).toBe(5);
+      // Within a second of the sequential answer, not half of it.
+      expect(Math.abs(concurrent.getTime() - sequential.getTime())).toBeLessThan(5000);
+    });
+
     it('keeps users apart', async () => {
       await strikeTimes(userId, 3);
       expect(await abuse.timeoutFor(otherUserId)).toBeNull();

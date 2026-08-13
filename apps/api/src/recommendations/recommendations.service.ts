@@ -35,6 +35,14 @@ const MAX_PAGE = 50;
 export const DUPLICATE_STRIKE_THRESHOLD = 5;
 
 /**
+ * How many 429s in an hour earn a strike. Design §6.4 says strikes come from *repeated*
+ * rate-limit hits, and the submission cap is one an hour: a patron with a second idea ten
+ * minutes later is not an abuser, and striking their first 429 timed them out of every board
+ * they pay for after three impatient clicks.
+ */
+export const RATE_LIMIT_STRIKE_THRESHOLD = 5;
+
+/**
  * What the board projection adds and a single-entry response cannot compute: a parent depends on
  * what else is on the board, and themes arrive with enrichment. Both resolve on the next read;
  * what matters here is that the shape matches, so a prepended card is not a different kind of
@@ -196,7 +204,12 @@ export class RecommendationsService {
       3600,
     );
     if (!allowed || !globallyAllowed) {
-      await this.recordStrike(userId, 'RATE_LIMIT');
+      await this.countTowardStrike(
+        `ratelimited:${userId}`,
+        RATE_LIMIT_STRIKE_THRESHOLD,
+        'RATE_LIMIT',
+        userId,
+      );
       throw new HttpException('Too many submissions', HttpStatus.TOO_MANY_REQUESTS);
     }
 
@@ -256,7 +269,7 @@ export class RecommendationsService {
       // Refund: nothing was created, and at 1/hour charging for it would lock a patron out for
       // an hour for doing exactly what design §5 wants them to do.
       await this.refund(perCreatorKey, globalKey);
-      await this.countDuplicate(userId);
+      await this.countDuplicate(userId, creatorId);
       return { duplicate: true as const, recommendation: await this.withUpvoted(existing, userId) };
     }
 
@@ -285,7 +298,7 @@ export class RecommendationsService {
         // reporting it as a duplicate would refund the limit and lose the submission.
         if (!winner) throw error;
         await this.refund(perCreatorKey, globalKey);
-        await this.countDuplicate(userId);
+        await this.countDuplicate(userId, creatorId);
         return { duplicate: true as const, recommendation: await this.withUpvoted(winner, userId) };
       }
       throw error;
@@ -319,15 +332,38 @@ export class RecommendationsService {
     }
   }
 
-  /** Counted rather than limited: the first few duplicates are exactly what design §5 wants. */
-  private async countDuplicate(userId: string): Promise<void> {
+  /**
+   * Counted rather than limited: the first few duplicates are exactly what design §5 wants.
+   *
+   * Keyed per creator, because a patron suggesting one popular title to each of six boards they
+   * follow produces six duplicates in a session — every one of them a 200 and the behaviour §5
+   * asks for. Only replaying at *one* board is the flood this guards against.
+   */
+  private countDuplicate(userId: string, creatorId: string): Promise<void> {
+    return this.countTowardStrike(
+      `duplicate:${userId}:${creatorId}`,
+      DUPLICATE_STRIKE_THRESHOLD,
+      'DUPLICATE_FLOOD',
+      userId,
+    );
+  }
+
+  /**
+   * Strikes exactly once, on the request that crosses the threshold. `>=` struck on every
+   * request past it, so six duplicates — a cheap, sanctioned path — earned two strikes and an
+   * hour's lockout.
+   */
+  private async countTowardStrike(
+    key: string,
+    threshold: number,
+    reason: StrikeReason,
+    userId: string,
+  ): Promise<void> {
     try {
-      const seen = await this.limits.count(`duplicate:${userId}`, 3600);
-      if (seen >= DUPLICATE_STRIKE_THRESHOLD) {
-        await this.abuse.strike(userId, 'DUPLICATE_FLOOD');
-      }
+      const seen = await this.limits.count(key, 3600);
+      if (seen === threshold) await this.abuse.strike(userId, reason);
     } catch (error) {
-      this.logger.warn(`Could not count a duplicate for user ${userId}: ${String(error)}`);
+      this.logger.warn(`Could not count ${reason} for user ${userId}: ${String(error)}`);
     }
   }
 

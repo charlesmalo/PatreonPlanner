@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { FlagReason, Prisma } from '@prisma/client';
+import { AbuseService } from '../abuse/abuse.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ModerationService } from './moderation.service';
 
@@ -17,6 +18,7 @@ export class FlagsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly moderation: ModerationService,
+    private readonly abuse: AbuseService,
   ) {}
 
   /**
@@ -43,6 +45,14 @@ export class FlagsService {
     const verdict = await this.moderation.review([note]);
     if (verdict.verdict === 'BLOCK') {
       this.logger.warn(`Blocked flag note from user ${userId} on recommendation ${rec.id}`);
+      // Design §6.5: a BLOCK is a strike wherever the pipeline runs. Without this, flag notes
+      // were a free oracle — an abuser could binary-search the blocklist here at no cost, then
+      // craft a submission that passes the check that *does* cost them.
+      try {
+        await this.abuse.strike(userId, 'MODERATION_BLOCK');
+      } catch (error) {
+        this.logger.warn(`Could not record a strike for user ${userId}: ${String(error)}`);
+      }
       throw new BadRequestException('Report rejected');
     }
 

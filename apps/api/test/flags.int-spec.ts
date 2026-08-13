@@ -44,6 +44,11 @@ describe('Community flags (integration)', () => {
     await ctx.teardown();
   });
 
+  beforeEach(async () => {
+    // This suite trips the pipeline on purpose; strikes would otherwise time the patron out.
+    await ctx.prisma.abuseRecord.deleteMany();
+  });
+
   async function loginAs(patreonUserId: string) {
     ctx.patreon.identity = { ...ctx.patreon.identity, patreonUserId, memberships: [] };
     const start = await request(ctx.app.getHttpServer()).get('/auth/patreon/login').expect(302);
@@ -122,6 +127,16 @@ describe('Community flags (integration)', () => {
   it('rejects an unknown reason', async () => {
     const rec = await makeEntry();
     await flag(patron, rec.id, { reason: 'VIBES' }).expect(400);
+  });
+
+  it('strikes the reporter when their note is blocked', async () => {
+    // Design §6.5: a BLOCK is a strike wherever the pipeline runs. Flag notes were a free
+    // oracle — binary-search the blocklist here at no cost, then craft a submission that passes
+    // the check that *does* cost you.
+    const rec = await makeEntry();
+    await flag(patron, rec.id, { reason: 'OTHER', note: 'this is shit' }).expect(400);
+    const record = await ctx.prisma.abuseRecord.findUnique({ where: { userId: patronUserId } });
+    expect(record?.strikeCount).toBe(1);
   });
 
   it('runs the note through moderation', async () => {

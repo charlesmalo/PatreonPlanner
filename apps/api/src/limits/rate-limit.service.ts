@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { RedisService } from '../redis/redis.service';
 
-const PREFIX = 'ratelimit:';
+export const RATE_LIMIT_PREFIX = 'ratelimit:';
+const PREFIX = RATE_LIMIT_PREFIX;
 
 @Injectable()
 export class RateLimitService {
@@ -40,17 +41,6 @@ export class RateLimitService {
       `${PREFIX}${key}`,
       windowSeconds,
     )) as number;
-  }
-
-  /** Test seam: clears every window. Never called in production. */
-  async reset(): Promise<void> {
-    const keys = await this.redis.raw().keys(`${PREFIX}*`);
-    if (keys.length > 0) await this.redis.raw().del(...keys);
-  }
-
-  /** Test seam: drives a window past any plausible limit. Never called in production. */
-  async exhaust(key: string): Promise<void> {
-    await this.redis.raw().set(`${PREFIX}${key}`, '1000000', 'EX', 3600);
   }
 
   /** Returns an allowance that was consumed for work that did not happen. Never goes below 0. */

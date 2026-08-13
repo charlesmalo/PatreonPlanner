@@ -37,13 +37,16 @@ export class JobsModule implements OnModuleInit, OnApplicationShutdown {
     this.worker = new Worker(
       QUEUE,
       async () => {
-        await this.job.runOnce();
-        await this.job.resyncTiers();
-        // Same tick rather than its own queue: both are bounded, both are idempotent, and a
-        // second repeatable job is a second thing to get wrong for no gain at this scale.
-        await this.availabilityJob.runOnce();
-        await this.enrichJob.runOnce();
-        await this.abuseDecayJob.runOnce();
+        // Each isolated, and decay first. Sharing one tick is fine — all of these are bounded
+        // and idempotent — but an unguarded chain meant a failure in any job skipped the rest,
+        // and decay is the *only* thing that ever reduces a strike count. A persistently
+        // failing upstream job would have quietly turned a capped, decaying penalty into an
+        // accumulating one, which design §6.4 forbids.
+        await this.runJob('abuse decay', () => this.abuseDecayJob.runOnce());
+        await this.runJob('membership refresh', () => this.job.runOnce());
+        await this.runJob('tier resync', () => this.job.resyncTiers());
+        await this.runJob('availability refresh', () => this.availabilityJob.runOnce());
+        await this.runJob('title enrichment', () => this.enrichJob.runOnce());
       },
       { connection },
     );
@@ -67,6 +70,14 @@ export class JobsModule implements OnModuleInit, OnApplicationShutdown {
         removeOnFail: 48,
       },
     );
+  }
+
+  private async runJob(name: string, run: () => Promise<unknown>): Promise<void> {
+    try {
+      await run();
+    } catch (error) {
+      this.logger.error(`Job "${name}" failed: ${(error as Error).message}`);
+    }
   }
 
   async onApplicationShutdown(): Promise<void> {

@@ -18,27 +18,43 @@ export class AbuseService {
    * starting count — a lost update there would be a discount for hitting harder.
    */
   async strike(userId: string, reason: StrikeReason): Promise<void> {
-    const now = new Date();
-    const record = await this.prisma.abuseRecord.upsert({
-      where: { userId },
-      create: { userId, strikeCount: 1, lastStrikeAt: now, lastReason: reason },
-      update: { strikeCount: { increment: 1 }, lastStrikeAt: now, lastReason: reason },
-      select: { strikeCount: true, timeoutUntil: true },
-    });
+    // One transaction with a row lock, not an increment followed by a separate update. Read and
+    // write split across two statements let two concurrent strikes compute from the same stale
+    // snapshot and the later commit win — so hitting twice at once bought a *shorter* penalty
+    // than hitting twice in sequence, which is a discount for hitting harder.
+    await this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      // Ensures the row exists without disturbing an existing one, so the lock below always has
+      // something to take.
+      await tx.$executeRaw`
+        INSERT INTO "AbuseRecord" ("id", "userId", "strikeCount", "createdAt", "updatedAt")
+        VALUES (gen_random_uuid(), ${userId}::uuid, 0, ${now}, ${now})
+        ON CONFLICT ("userId") DO NOTHING
+      `;
+      const [locked] = await tx.$queryRaw<
+        Array<{ strikeCount: number; timeoutUntil: Date | null }>
+      >`
+        SELECT "strikeCount", "timeoutUntil" FROM "AbuseRecord"
+        WHERE "userId" = ${userId}::uuid
+        FOR UPDATE
+      `;
+      // The row was deleted between the insert and the lock — a decay pass, or the account went.
+      if (!locked) return;
 
-    const penalty = penaltyFor(record.strikeCount);
-    if (penalty === 0) return;
+      const strikeCount = locked.strikeCount + 1;
+      const penalty = penaltyFor(strikeCount);
+      const earned = penalty > 0 ? new Date(now.getTime() + penalty) : null;
+      // Never shorten a running timeout: after a decay lowers the count, the next strike's
+      // penalty can be smaller than the time remaining, and that would reward reoffending.
+      const timeoutUntil =
+        locked.timeoutUntil && (!earned || locked.timeoutUntil > earned)
+          ? locked.timeoutUntil
+          : earned;
 
-    const until = new Date(now.getTime() + penalty);
-    // Never shorten a running timeout. After a decay pass lowers the count, the next strike's
-    // penalty can be smaller than the time remaining, and `now + penalty` would be a reprieve
-    // for reoffending.
-    const existing = record.timeoutUntil;
-    if (existing && existing > until) return;
-
-    await this.prisma.abuseRecord.update({
-      where: { userId },
-      data: { timeoutUntil: until },
+      await tx.abuseRecord.update({
+        where: { userId },
+        data: { strikeCount, lastStrikeAt: now, lastReason: reason, timeoutUntil },
+      });
     });
   }
 
