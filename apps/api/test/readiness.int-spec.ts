@@ -27,6 +27,8 @@ describe('GET /readyz (integration)', () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
+    // One listener for the suite; see the note in support/auth-app.ts.
+    await app.listen(0);
   }, 120_000);
 
   afterAll(async () => {
