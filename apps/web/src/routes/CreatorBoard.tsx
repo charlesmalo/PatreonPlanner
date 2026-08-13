@@ -38,13 +38,26 @@ export function CreatorBoard() {
   // an accepted one would move it out of the column its status says it belongs to.
   const columns = COLUMNS.map(([status, label]) => {
     const inColumn = board.items.filter((item) => item.status === status);
-    const ids = new Set(inColumn.map((item) => item.id));
-    const roots = inColumn.filter((item) => !item.parentId || !ids.has(item.parentId));
-    const childrenOf = (id: string) => inColumn.filter((item) => item.parentId === id);
-    return [status, label, roots, childrenOf] as const;
+    return [status, label, buildTree(inColumn)] as const;
     // An empty column renders nothing at all: four headings over three empty lists reads as a
     // broken page rather than an empty one.
   }).filter(([, , roots]) => roots.length > 0);
+
+  // Recursive, so an entry nested more than one deep is rendered rather than silently dropped.
+  // Nested markup rather than a margin, so the containment reaches a screen reader too.
+  const renderNode = (node: TreeNode): JSX.Element => (
+    <RecommendationCard
+      key={node.item.id}
+      slug={slug}
+      recommendation={node.item}
+      canUpvote={capabilities.upvote}
+      canModerate={capabilities.moderate}
+      onCount={board.applyUpvote}
+      onStatusChanged={board.applyStatus}
+    >
+      {node.children.map((child) => renderNode(child))}
+    </RecommendationCard>
+  );
 
   return (
     <section>
@@ -88,35 +101,10 @@ export function CreatorBoard() {
         </>
       ) : (
         <>
-          {columns.map(([status, label, roots, childrenOf]) => (
+          {columns.map(([status, label, roots]) => (
             <div key={status}>
               <h2 className="mt-8 text-lg font-medium">{label}</h2>
-              <ul className="mt-3 space-y-3">
-                {roots.map((item) => (
-                  <RecommendationCard
-                    key={item.id}
-                    slug={slug}
-                    recommendation={item}
-                    canUpvote={capabilities.upvote}
-                    canModerate={capabilities.moderate}
-                    onCount={board.applyUpvote}
-                    onStatusChanged={board.applyStatus}
-                    // Nested markup rather than a margin, so the containment is there for a
-                    // screen reader as well as for the eye.
-                    children={childrenOf(item.id).map((child) => (
-                      <RecommendationCard
-                        key={child.id}
-                        slug={slug}
-                        recommendation={child}
-                        canUpvote={capabilities.upvote}
-                        canModerate={capabilities.moderate}
-                        onCount={board.applyUpvote}
-                        onStatusChanged={board.applyStatus}
-                      />
-                    ))}
-                  />
-                ))}
-              </ul>
+              <ul className="mt-3 space-y-3">{roots.map((node) => renderNode(node))}</ul>
             </div>
           ))}
           {/* Kept mounted and disabled rather than unmounted: removing a focused button drops
@@ -140,6 +128,50 @@ export function CreatorBoard() {
       )}
     </section>
   );
+}
+
+interface TreeNode {
+  item: Recommendation;
+  children: TreeNode[];
+}
+
+/**
+ * Groups a column's entries into a tree by `parentId`.
+ *
+ * Defensive on purpose. The API only ever produces one level today, but rendering just roots and
+ * their direct children *dropped* anything deeper, and a cycle left no roots at all and made the
+ * whole column disappear. Losing entries is far worse than rendering them flat, so anything the
+ * walk cannot place is promoted to the top level.
+ */
+function buildTree(items: Recommendation[]): TreeNode[] {
+  const nodes = new Map(items.map((item) => [item.id, { item, children: [] as TreeNode[] }]));
+  const roots: TreeNode[] = [];
+
+  for (const node of nodes.values()) {
+    const parent = node.item.parentId ? nodes.get(node.item.parentId) : undefined;
+    // A parent outside this column, or a cycle, means this entry stands on its own.
+    if (parent && parent !== node && !descendsFrom(parent, node, nodes)) {
+      parent.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+  return roots;
+}
+
+function descendsFrom(
+  candidate: TreeNode,
+  ancestor: TreeNode,
+  nodes: Map<string, TreeNode>,
+): boolean {
+  const seen = new Set<string>();
+  let current: TreeNode | undefined = candidate;
+  while (current && !seen.has(current.item.id)) {
+    if (current === ancestor) return true;
+    seen.add(current.item.id);
+    current = current.item.parentId ? nodes.get(current.item.parentId) : undefined;
+  }
+  return false;
 }
 
 export type { Recommendation };

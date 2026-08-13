@@ -214,6 +214,124 @@ describe('Relation and theme enrichment (integration)', () => {
       await themes.seedFor(film.id, creatorId, ['Animation']);
       expect(await prisma.titleTheme.count()).toBe(1);
     });
+
+    it('attaches to an existing theme when a rename freed its label', async () => {
+      // The creator renames "Animation" to "Anime". Later a title carrying the TMDB keyword
+      // "anime" is seeded: no row matches on sourceKey, so the insert collides on the *slug*
+      // index — a P2002 that aborted the whole title, for every creator after it in the loop,
+      // permanently, because enrichedAt is stamped regardless.
+      const film = await makeTitle(129, 'MOVIE');
+      const other = await makeTitle(8392, 'MOVIE');
+      await themes.seedFor(film.id, creatorId, ['Animation']);
+      await prisma.theme.updateMany({
+        where: { creatorId },
+        data: { name: 'Anime', slug: 'anime' },
+      });
+
+      await expect(themes.seedFor(other.id, creatorId, ['anime'])).resolves.toBeUndefined();
+      expect(await prisma.theme.count({ where: { creatorId } })).toBe(1);
+      // And the title is attached to the theme that now owns that name.
+      expect(await prisma.titleTheme.count({ where: { titleId: other.id } })).toBe(1);
+    });
+  });
+
+  describe('enrichment end to end', () => {
+    // The relations tests above never create a Recommendation, so `enrich()` finds no creators
+    // and never calls seedFor at all — which is exactly where both critical bugs lived.
+    async function suggest(titleId: string, targetCreatorId = creatorId) {
+      const user = await prisma.user.findFirstOrThrow();
+      return prisma.recommendation.create({
+        data: {
+          creatorId: targetCreatorId,
+          submittedByUserId: user.id,
+          type: 'MOVIE',
+          titleId,
+          customTitle: `Entry ${titleId}`,
+          normalizedTitle: `entry ${titleId}`,
+        },
+      });
+    }
+
+    /** What resolveTitle's upsert does on a re-bind, exercised through the submit suite. */
+    const rebind = (titleId: string) =>
+      prisma.title.update({ where: { id: titleId }, data: { enrichedAt: null } });
+
+    it('seeds themes for the creator whose board the title is on', async () => {
+      const film = await makeTitle(129, 'MOVIE');
+      await suggest(film.id);
+      catalog.structures.set('129:MOVIE', {
+        collection: null,
+        parts: [],
+        similar: [],
+        labels: ['Animation'],
+      });
+
+      await relations.enrich(film.id);
+      expect(await prisma.theme.count({ where: { creatorId } })).toBe(1);
+      expect(await prisma.titleTheme.count({ where: { titleId: film.id } })).toBe(1);
+    });
+
+    it('seeds themes for a creator who adds the title after it was already enriched', async () => {
+      // A title is enriched once globally. Without clearing the stamp when it lands on a new
+      // board, every creator but the first loses theme chips on that entry — forever.
+      const film = await makeTitle(129, 'MOVIE');
+      const owner = await prisma.user.findFirstOrThrow();
+      const second = await prisma.creator.create({
+        data: {
+          patreonCampaignId: 'en-second',
+          ownerUserId: owner.id,
+          displayName: 'Second',
+          slug: 'en-second',
+        },
+      });
+      catalog.structures.set('129:MOVIE', {
+        collection: null,
+        parts: [],
+        similar: [],
+        labels: ['Animation'],
+      });
+
+      await suggest(film.id);
+      await job.runOnce();
+      expect(await prisma.theme.count({ where: { creatorId: second.id } })).toBe(0);
+
+      // The second creator's patron suggests the same film. Binding it must put the title back
+      // in the queue — nothing here clears the stamp by hand, which is what hid this before.
+      await suggest(film.id, second.id);
+      await rebind(film.id);
+      await job.runOnce();
+      expect(await prisma.theme.count({ where: { creatorId: second.id } })).toBe(1);
+    });
+
+    it('keeps seeding the remaining creators when one of them fails', async () => {
+      const film = await makeTitle(129, 'MOVIE');
+      const owner = await prisma.user.findFirstOrThrow();
+      const second = await prisma.creator.create({
+        data: {
+          patreonCampaignId: 'en-third',
+          ownerUserId: owner.id,
+          displayName: 'Third',
+          slug: 'en-third',
+        },
+      });
+      await suggest(film.id);
+      await suggest(film.id, second.id);
+      // The first creator has renamed a theme onto the label about to be seeded.
+      await themes.seedFor(film.id, creatorId, ['Animation']);
+      await prisma.theme.updateMany({
+        where: { creatorId },
+        data: { name: 'Anime', slug: 'anime' },
+      });
+      catalog.structures.set('129:MOVIE', {
+        collection: null,
+        parts: [],
+        similar: [],
+        labels: ['anime'],
+      });
+
+      await relations.enrich(film.id);
+      expect(await prisma.theme.count({ where: { creatorId: second.id } })).toBe(1);
+    });
   });
 
   describe('the job', () => {

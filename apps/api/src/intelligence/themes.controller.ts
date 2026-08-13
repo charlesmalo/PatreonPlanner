@@ -23,8 +23,13 @@ import { RequireCapability } from '../access/require-capability.decorator';
 import { ModerationService } from '../moderation/moderation.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionGuard } from '../session/session.guard';
+import { PATRON_VISIBLE_STATUSES } from '../moderation/transitions';
 import { RenameThemeDto } from './dto/rename-theme.dto';
 import { themeSlug } from './themes.service';
+
+// The statuses a count may include. Rejected and deleted entries are gone as far as a reader is
+// concerned, and counting them would advertise their existence.
+const COUNTED_STATUSES = PATRON_VISIBLE_STATUSES;
 
 @Controller('creators/:slug/themes')
 export class ThemesController {
@@ -42,10 +47,26 @@ export class ThemesController {
   async list(@CurrentCreator() creator: ResolvedCreator) {
     const rows = await this.prisma.theme.findMany({
       where: { creatorId: creator.id },
-      select: { id: true, name: true, _count: { select: { titles: true } } },
+      select: { id: true, name: true, titles: { select: { titleId: true } } },
       orderBy: { name: 'asc' },
     });
-    return { items: rows.map(({ _count, ...theme }) => ({ ...theme, titleCount: _count.titles })) };
+
+    // Counted over *board entries*, not TitleTheme rows. A TitleTheme survives its entry being
+    // rejected or deleted, so counting rows advertised "Anime (7)" on a filter that returned
+    // three — and leaked how many hidden entries a theme covers.
+    const counts = await this.prisma.recommendation.groupBy({
+      by: ['titleId'],
+      where: { creatorId: creator.id, status: { in: COUNTED_STATUSES }, titleId: { not: null } },
+      _count: { _all: true },
+    });
+    const byTitle = new Map(counts.map((row) => [row.titleId as string, row._count._all]));
+
+    return {
+      items: rows.map(({ titles, ...theme }) => ({
+        ...theme,
+        entryCount: titles.reduce((total, t) => total + (byTitle.get(t.titleId) ?? 0), 0),
+      })),
+    };
   }
 
   @Patch(':id')

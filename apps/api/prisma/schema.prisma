@@ -386,6 +386,8 @@ model Title {
 
   // TMDB ids are only unique within a media type: film 123 and series 123 are different works.
   @@unique([tmdbId, mediaType])
+  // The enrichment job walks the un-enriched oldest first.
+  @@index([enrichedAt])
 }
 
 model StreamingAvailability {
@@ -441,6 +443,8 @@ model Theme {
   slug      String
   // The TMDB label this was seeded from, so re-seeding matches the source rather than the
   // display name — otherwise every re-seed would resurrect a theme the creator renamed.
+  // Nullable, and Postgres treats NULLs as distinct in a unique index: a creator may invent any
+  // number of themes with no source label, and those stay unique by `slug` alone.
   sourceKey String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

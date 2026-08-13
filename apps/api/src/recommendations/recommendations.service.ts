@@ -319,8 +319,16 @@ export class RecommendationsService {
         posterPath: result.posterPath,
         overview: result.overview,
       },
-      // Refreshed on each binding: posters and overviews change upstream.
-      update: { name: result.name, year: result.year, posterPath: result.posterPath },
+      update: {
+        // Refreshed on each binding: posters and overviews change upstream.
+        name: result.name,
+        year: result.year,
+        posterPath: result.posterPath,
+        // Back into the enrichment queue. Themes are per creator and seeded from whoever holds
+        // the title *at enrichment time*, so a title enriched for creator A and later suggested
+        // on creator B's board would otherwise leave B without theme chips forever.
+        enrichedAt: null,
+      },
       select: { id: true, name: true },
     });
   }
@@ -412,7 +420,13 @@ export class RecommendationsService {
           posterPath: result.posterPath,
           overview: result.overview,
         },
-        update: { name: result.name, year: result.year, posterPath: result.posterPath },
+        update: {
+          name: result.name,
+          year: result.year,
+          posterPath: result.posterPath,
+          // Same reason as above: a step's title may be new to this creator's board.
+          enrichedAt: null,
+        },
         select: { id: true },
       });
       resolved.push({ position, titleId: title.id, note: item.note?.trim() || null });

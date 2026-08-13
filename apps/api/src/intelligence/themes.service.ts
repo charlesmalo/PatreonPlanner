@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 /** Case-insensitive identity for a theme. Two spellings of "anime" are one theme. */
@@ -19,10 +20,26 @@ export class ThemesService {
    * would resurrect a renamed theme the next time another title carried the same genre.
    */
   async seedFor(titleId: string, creatorId: string, labels: string[]): Promise<void> {
+    const themeIds: string[] = [];
     for (const label of labels) {
-      const sourceKey = themeSlug(label);
-      if (sourceKey.length === 0) continue;
+      const id = await this.resolveTheme(creatorId, label);
+      if (id) themeIds.push(id);
+    }
+    if (themeIds.length === 0) return;
 
+    // One statement rather than an upsert per label: a popular film carries dozens of keywords,
+    // and a per-row round trip inside a job loop multiplies by every creator holding the title.
+    await this.prisma.titleTheme.createMany({
+      data: themeIds.map((themeId) => ({ titleId, themeId })),
+      skipDuplicates: true,
+    });
+  }
+
+  private async resolveTheme(creatorId: string, label: string): Promise<string | null> {
+    const sourceKey = themeSlug(label);
+    if (sourceKey.length === 0) return null;
+
+    try {
       const theme = await this.prisma.theme.upsert({
         where: { creatorId_sourceKey: { creatorId, sourceKey } },
         create: { creatorId, name: label.trim(), slug: sourceKey, sourceKey },
@@ -31,12 +48,21 @@ export class ThemesService {
         update: {},
         select: { id: true },
       });
-
-      await this.prisma.titleTheme.upsert({
-        where: { titleId_themeId: { titleId, themeId: theme.id } },
-        create: { titleId, themeId: theme.id },
-        update: {},
-      });
+      return theme.id;
+    } catch (error) {
+      // `Theme` is unique on *two* columns. A creator who renamed "Animation" to "Anime" owns the
+      // `anime` slug with sourceKey `animation`, so seeding the TMDB label "anime" misses on
+      // sourceKey and then collides on slug. That P2002 used to abort the title mid-loop, costing
+      // every remaining label and every remaining creator their themes — permanently, because
+      // enrichedAt is stamped regardless. The creator's theme already means this label; attach it.
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const existing = await this.prisma.theme.findFirst({
+          where: { creatorId, slug: sourceKey },
+          select: { id: true },
+        });
+        return existing?.id ?? null;
+      }
+      throw error;
     }
   }
 }

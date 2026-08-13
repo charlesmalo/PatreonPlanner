@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make a board understand that its entries are related — a season belongs to its show, a film belongs to its franchise, and everything carries themes you can filter by.
+**Goal:** Make a board understand that its entries are related — a film belongs to its franchise, and everything carries themes you can filter by.
 
 **Architecture:** Relations and themes are **global facts about titles**, derived from TMDB's structured data and stored once. *Nesting* is a **per-board projection** computed at read time, because whether an entry has a parent depends on what else is on that board — a fact that changes every time someone submits. Building relations is a background job triggered by binding, so a submit never waits on three extra TMDB calls.
 
@@ -19,7 +19,7 @@
 
 ## Scope
 
-**In scope:** the `TitleRelation` graph built from TMDB collections, TV seasons and similar-title data; the `Theme`/`TitleTheme` taxonomy seeded from TMDB genres and keywords; creator curation of theme names and assignments; nesting and theme filtering on the board; the SPA for both.
+**In scope:** the `TitleRelation` graph built from TMDB collections and similar-title data; the `Theme`/`TitleTheme` taxonomy seeded from TMDB genres and keywords; creator curation of theme names and assignments; nesting and theme filtering on the board; the SPA for both.
 
 **Out of scope — deliberately deferred, with the reason:**
 
@@ -27,6 +27,7 @@
 - **Theme merging** → renaming and reassigning cover the correction cases. Merging needs a conflict policy for entries carrying both themes, and that policy is easier to choose once creators have used themes for a while.
 - **Embedding-driven theme expansion** (design §5) → same dependency, same plan.
 - **Cross-page nesting** → see Known Risks. A child whose parent is on another page renders unnested rather than wrongly nested.
+- **`SEASON_OF` (TV season nesting)** → **moved here during review, having been claimed as in scope.** A TMDB season is not addressable in the `Title` model: `Title` is keyed on `(tmdbId, mediaType)`, and a season has no id in that namespace — it is `/tv/{showId}/season/{n}`. Representing one needs a `Title` shape change, which is a bigger decision than this plan should make on the way past. The read model already nests on `SEASON_OF` the moment a producer exists; nothing writes it today.
 
 ## Decisions this plan settles
 
@@ -452,7 +453,8 @@ docker-compose -f docker-compose.e2e.yml up -d --build && pnpm --filter e2e e2e
 
 **Spec coverage (design §5 catalog intelligence, §7 grouped views and creator admin):**
 
-- `TitleRelation` with `SEASON_OF`/`SAME_FRANCHISE` from TMDB structure → Tasks 1–3. ✅
+- `TitleRelation` with `SAME_FRANCHISE` from TMDB structure → Tasks 1–3. ✅
+- `SEASON_OF` → **not built.** The read model nests on it and the enum carries it, but nothing writes it, for the reason now in Scope. The original Self-Review ticked this box because the *nesting* test passes — with a hand-inserted relation row. A green test on the read side said nothing about the producer, and I did not check.
 - "Submitting Season 2 of an existing show nests it under the existing entry/franchise" → Task 4. ✅
 - `RELATED` from TMDB similar → Task 3. Partially: design §5 also wants embedding proximity, **deferred** with the embedding plan. ✅
 - `Theme`/`TitleTheme` seeded from TMDB genres + keywords → Task 3. ✅
@@ -460,6 +462,39 @@ docker-compose -f docker-compose.e2e.yml up -d --build && pnpm --filter e2e e2e
 - "Enables nested/grouped board views" → Tasks 4, 6. ✅
 - Embeddings, semantic de-dupe, personalised ranking, embedding-driven theme expansion → **deferred to a plan written once an embedding provider is chosen**, for the reason in Scope. ✅
 - `SEQUEL`/`PREQUEL` → the enum carries them; nothing writes them. TMDB exposes no reliable sequel edge outside collection ordering, and inferring one from `ordinal` would be a guess. Stated, not pretended.
+
+## Found in review (fixed)
+
+1. **Critical — theme seeding crashed permanently once a creator renamed a theme.** `Theme` is
+   unique on *two* columns. A creator who renames "Animation" to "Anime" owns the `anime` slug
+   with `sourceKey = animation`; seeding the TMDB label `anime` then misses on `sourceKey` and
+   collides on `slug`. That P2002 escaped `seedFor`, escaped `enrich()` mid-loop, and was
+   swallowed by the job — which stamps `enrichedAt` regardless, so every remaining label and
+   every remaining creator lost their themes **forever**, triggered by the exact curation action
+   the feature exists for. Now caught and resolved to the existing theme, and per-creator
+   failures are isolated so one namespace cannot cost the rest.
+2. **Critical — a title is enriched once globally, so every creator after the first got no
+   themes, ever.** Task 3 of this plan listed `Modify: recommendations.service.ts (mark a title
+   for enrichment)`. **I never made that modification, and never noticed**, because no test
+   created a `Recommendation` before calling `enrich()` — so `seedFor` was never once called
+   through the code path that uses it. Binding a title now clears `enrichedAt`.
+3. **Important — `enrich()` was unbounded in three dimensions.** `similar` was capped; `labels`,
+   `parts` and `creators` were not, and `seedFor` did two round trips per label. One popular
+   title on fifty boards with forty keywords was ~4,000 sequential queries inside one job tick.
+   Labels and parts are now capped and `TitleTheme` rows are written in one statement.
+4. **Important — `SEASON_OF` has no producer**, while Scope claimed TV seasons were in and the
+   Self-Review ticked it. Moved to the deferred list with the real reason (a season is not
+   addressable in the `Title` model). The nesting test passed because it inserts the relation by
+   hand — a green test on the read side that said nothing about the writer.
+5. **Important — the SPA silently deleted any entry nested more than one level**, and a cycle
+   emptied the whole column. Now a real tree walk with a cycle guard: anything unplaceable is
+   promoted to the top level, because losing entries is far worse than rendering them flat.
+6. **Minor, also fixed:** `ordinal` was clobbered to null whenever the film side was enriched
+   after the collection side; `Title_enrichedAt_idx` existed in the migration but not the schema,
+   so the next `migrate dev` would have dropped it; `titleCount` counted `TitleTheme` rows, so a
+   filter promised "Anime (7)" and returned three — and leaked how many hidden entries a theme
+   covered; and the SPA's theme-filter test asserted only that the URL carried `theme=`, which
+   would have passed with the response ignored.
 
 **Known risks:**
 

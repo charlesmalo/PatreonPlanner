@@ -3,8 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { ThemeFilter } from './ThemeFilter';
 
 const themes = [
-  { id: 't1', name: 'Anime', titleCount: 3 },
-  { id: 't2', name: 'Fantasy', titleCount: 1 },
+  { id: 't1', name: 'Anime', entryCount: 3 },
+  { id: 't2', name: 'Fantasy', entryCount: 1 },
 ];
 
 describe('ThemeFilter', () => {
@@ -46,7 +46,7 @@ describe('ThemeFilter', () => {
   it('renders a theme name containing markup as text', () => {
     const { container } = render(
       <ThemeFilter
-        themes={[{ id: 't1', name: '<img src=x>', titleCount: 1 }]}
+        themes={[{ id: 't1', name: '<img src=x>', entryCount: 1 }]}
         selected={null}
         onSelect={vi.fn()}
       />,

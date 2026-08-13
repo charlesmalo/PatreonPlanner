@@ -62,6 +62,7 @@ describe('Theme curation (integration)', () => {
   });
 
   beforeEach(async () => {
+    await ctx.prisma.recommendation.deleteMany();
     await ctx.prisma.titleTheme.deleteMany();
     await ctx.prisma.theme.deleteMany();
     await ctx.prisma.title.deleteMany();
@@ -112,9 +113,39 @@ describe('Theme curation (integration)', () => {
       .set('Cookie', [auth.session, auth.csrf])
       .set('x-csrf-token', auth.csrfToken);
 
-  it('lists the creator themes with how many titles carry each', async () => {
+  it('lists the creator themes with how many board entries carry each', async () => {
+    const user = await ctx.prisma.user.findFirstOrThrow({ where: { patreonUserId: 'th-patron' } });
+    await ctx.prisma.recommendation.create({
+      data: {
+        creatorId,
+        submittedByUserId: user.id,
+        type: 'MOVIE',
+        titleId,
+        customTitle: 'A Film',
+        normalizedTitle: 'a film',
+      },
+    });
     const res = await list(patron).expect(200);
-    expect(res.body.items).toEqual([{ id: themeId, name: 'Anime', titleCount: 1 }]);
+    expect(res.body.items).toEqual([{ id: themeId, name: 'Anime', entryCount: 1 }]);
+  });
+
+  it('does not count entries a reader cannot see', async () => {
+    // A TitleTheme survives its entry being rejected, so counting rows advertised a filter that
+    // returned fewer results than it promised — and leaked how many hidden entries it covered.
+    const user = await ctx.prisma.user.findFirstOrThrow({ where: { patreonUserId: 'th-patron' } });
+    await ctx.prisma.recommendation.create({
+      data: {
+        creatorId,
+        submittedByUserId: user.id,
+        type: 'MOVIE',
+        titleId,
+        customTitle: 'A Film',
+        normalizedTitle: 'a film',
+        status: 'REJECTED',
+      },
+    });
+    const res = await list(patron).expect(200);
+    expect(res.body.items[0].entryCount).toBe(0);
   });
 
   it('never lists another creator themes', async () => {

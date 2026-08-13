@@ -110,6 +110,33 @@ describe('Recommendations (integration)', () => {
   });
 
   describe('submitting', () => {
+    it('puts a bound title back in the enrichment queue', async () => {
+      // Themes are seeded from whoever holds the title *at enrichment time*. A title enriched
+      // for creator A and later suggested on B's board would otherwise leave B without any
+      // theme chips, forever, because nothing else ever clears the stamp.
+      const auth = await loginAs('enqueue-patron');
+      await makePatron('enqueue-patron', 1000);
+      ctx.catalog.results = [
+        {
+          tmdbId: 4242,
+          mediaType: 'MOVIE',
+          name: 'Enqueue Me',
+          year: 2001,
+          posterPath: null,
+          overview: null,
+        },
+      ];
+      await ctx.prisma.title.create({
+        data: { tmdbId: 4242, mediaType: 'MOVIE', name: 'Enqueue Me', enrichedAt: new Date() },
+      });
+
+      await submit(auth, { type: 'MOVIE', tmdbId: 4242 }).expect(201);
+      const title = await ctx.prisma.title.findUniqueOrThrow({
+        where: { tmdbId_mediaType: { tmdbId: 4242, mediaType: 'MOVIE' } },
+      });
+      expect(title.enrichedAt).toBeNull();
+    });
+
     it('returns a recommendation shaped exactly like a board entry', async () => {
       // A client prepends this result next to board entries. Every time the board projection has
       // gained a field, this response has silently lacked it and the SPA has crashed on the

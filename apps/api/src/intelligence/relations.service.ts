@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { MediaType, Prisma, RelationKind } from '@prisma/client';
 import { CATALOG_PROVIDER, CatalogProvider } from '../catalog/catalog.provider';
 import { PrismaService } from '../prisma/prisma.service';
@@ -6,6 +6,8 @@ import { ThemesService } from './themes.service';
 
 @Injectable()
 export class RelationsService {
+  private readonly logger = new Logger(RelationsService.name);
+
   constructor(
     @Inject(CATALOG_PROVIDER) private readonly catalog: CatalogProvider,
     private readonly prisma: PrismaService,
@@ -62,7 +64,17 @@ export class RelationsService {
       distinct: ['creatorId'],
     });
     for (const { creatorId } of creators) {
-      await this.themes.seedFor(title.id, creatorId, structure.labels);
+      try {
+        await this.themes.seedFor(title.id, creatorId, structure.labels);
+      } catch (error) {
+        // One creator's namespace must not cost every creator after them in this loop their
+        // themes — and the job stamps enrichedAt regardless, so a throw here is permanent.
+        this.logger.warn(
+          `Theme seeding failed for title ${title.id} on creator ${creatorId}: ${
+            (error as Error).message
+          }`,
+        );
+      }
     }
   }
 
@@ -86,7 +98,10 @@ export class RelationsService {
       await this.prisma.titleRelation.upsert({
         where: { fromId_toId_kind: { fromId, toId, kind } },
         create: { fromId, toId, kind, ordinal },
-        update: { ordinal },
+        // The same pair is written from both ends — from the collection with TMDB's ordering,
+        // from the film with none — so an unconditional update erases the ordering whenever the
+        // film is enriched second.
+        update: ordinal === null ? {} : { ordinal },
       });
     } catch (error) {
       // A concurrent enrich of the same pair is not worth failing the whole title for.

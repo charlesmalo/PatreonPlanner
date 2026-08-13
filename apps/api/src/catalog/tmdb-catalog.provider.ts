@@ -8,6 +8,10 @@ class TitleNotFound extends Error {}
 
 /** TMDB's similar list is long and weak; a cap keeps the relation table from bloating on noise. */
 export const SIMILAR_CAP = 12;
+/** TMDB returns dozens of keywords for a popular film; each becomes a Theme row per creator. */
+export const LABEL_CAP = 20;
+/** A large franchise has 30+ parts, and each is a sequential lookup in the builder. */
+export const PART_CAP = 50;
 
 const PATHS: Record<MediaType, string> = { MOVIE: 'movie', TV: 'tv', COLLECTION: 'collection' };
 
@@ -98,7 +102,7 @@ export class TmdbCatalogProvider implements CatalogProvider {
     if (mediaType === 'COLLECTION') {
       return {
         collection: null,
-        parts: (detail.parts ?? []).map((part, ordinal) => ({
+        parts: (detail.parts ?? []).slice(0, PART_CAP).map((part, ordinal) => ({
           tmdbId: part.id,
           mediaType: 'MOVIE' as const,
           ordinal,
@@ -181,5 +185,7 @@ function dedupeLabels(labels: string[]): string[] {
     const key = label.trim().toLowerCase();
     if (key.length > 0 && !seen.has(key)) seen.set(key, label.trim());
   }
-  return [...seen.values()];
+  // Capped: genres come first, so the cut falls on the long tail of keywords, and every label
+  // kept becomes a Theme row for every creator holding the title.
+  return [...seen.values()].slice(0, LABEL_CAP);
 }

@@ -30,7 +30,7 @@ interface RecommendationCardProps {
   onCount: (id: string, count: number, upvoted?: boolean) => void;
   onStatusChanged: (id: string, status: string) => void;
   /** Entries this one contains — a season under its show, a film under its franchise. */
-  children?: React.ReactNode[];
+  children?: React.ReactNode;
 }
 
 export function RecommendationCard({
@@ -123,7 +123,7 @@ export function RecommendationCard({
         <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
           Suggested by {recommendation.submittedBy.fullName ?? 'a patron'}
         </p>
-        {children && children.length > 0 ? (
+        {Array.isArray(children) && children.length > 0 ? (
           <ul className="mt-3 space-y-2 border-l border-slate-200 pl-3 dark:border-slate-700">
             {children}
           </ul>

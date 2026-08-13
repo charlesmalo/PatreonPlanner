@@ -32,7 +32,7 @@ export function ThemeFilter({ themes, selected, onSelect }: ThemeFilterProps) {
                 }`}
               >
                 {/* Text, never markup: theme names are creator-editable. */}
-                {theme.name} ({theme.titleCount})
+                {theme.name} ({theme.entryCount})
               </button>
             </li>
           );

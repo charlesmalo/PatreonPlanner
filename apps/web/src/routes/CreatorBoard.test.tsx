@@ -280,7 +280,7 @@ describe('CreatorBoard nesting and themes', () => {
         nextCursor: null,
       },
       'GET /api/v1/creators/ada-writes/themes': {
-        items: [{ id: 't1', name: 'Anime', titleCount: 1 }],
+        items: [{ id: 't1', name: 'Anime', entryCount: 1 }],
       },
     });
     global.fetch = fetchMock;
@@ -291,5 +291,73 @@ describe('CreatorBoard nesting and themes', () => {
       const urls = fetchMock.mock.calls.map(([input]) => String(input));
       expect(urls.some((u) => u.includes('theme=t1'))).toBe(true);
     });
+  });
+
+  it('renders the filtered response rather than the unfiltered one', async () => {
+    // Asserting only that the URL carried `theme=` would pass even if the response were ignored:
+    // the fake routes by pathname, so both requests return the same body.
+    let filtered = false;
+    global.fetch = fakeApi({
+      'GET /api/v1/creators/ada-writes': creator,
+      'GET /api/v1/creators/ada-writes/capabilities': viewOnly,
+      'GET /api/v1/creators/ada-writes/recommendations': () => ({
+        items: filtered
+          ? [recommendation({ id: 'b', customTitle: 'Only Themed' })]
+          : [recommendation({ id: 'a', customTitle: 'Everything' })],
+        nextCursor: null,
+      }),
+      'GET /api/v1/creators/ada-writes/themes': {
+        items: [{ id: 't1', name: 'Anime', entryCount: 1 }],
+      },
+    });
+    renderBoard();
+
+    expect(await screen.findByText('Everything')).toBeInTheDocument();
+    filtered = true;
+    await userEvent.click(screen.getByRole('button', { name: /Anime \(1\)/ }));
+
+    expect(await screen.findByText('Only Themed')).toBeInTheDocument();
+    expect(screen.queryByText('Everything')).not.toBeInTheDocument();
+  });
+});
+
+describe('CreatorBoard nesting resilience', () => {
+  const originalFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  function boardWith(items: unknown[]) {
+    global.fetch = fakeApi({
+      'GET /api/v1/creators/ada-writes': creator,
+      'GET /api/v1/creators/ada-writes/capabilities': viewOnly,
+      'GET /api/v1/creators/ada-writes/recommendations': { items, nextCursor: null },
+      'GET /api/v1/creators/ada-writes/themes': { items: [] },
+    });
+  }
+
+  it('renders a grandchild rather than dropping it', async () => {
+    // Only roots and their direct children were rendered, so anything deeper vanished from the
+    // board entirely — a far worse failure than rendering it flat.
+    boardWith([
+      recommendation({ id: 'a', customTitle: 'Franchise' }),
+      recommendation({ id: 'b', customTitle: 'Show', parentId: 'a' }),
+      recommendation({ id: 'c', customTitle: 'Season 2', parentId: 'b' }),
+    ]);
+    renderBoard();
+    expect(await screen.findByText('Franchise')).toBeInTheDocument();
+    expect(screen.getByText('Show')).toBeInTheDocument();
+    expect(screen.getByText('Season 2')).toBeInTheDocument();
+  });
+
+  it('renders every entry even if the relations form a cycle', async () => {
+    // A cycle left no roots, so the column was filtered away and the board read as empty.
+    boardWith([
+      recommendation({ id: 'a', customTitle: 'One', parentId: 'b' }),
+      recommendation({ id: 'b', customTitle: 'Two', parentId: 'a' }),
+    ]);
+    renderBoard();
+    expect(await screen.findByText('One')).toBeInTheDocument();
+    expect(screen.getByText('Two')).toBeInTheDocument();
   });
 });

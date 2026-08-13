@@ -62,7 +62,7 @@ export interface WatchOrderItem {
 export interface ThemeSummary {
   id: string;
   name: string;
-  titleCount: number;
+  entryCount: number;
 }
 
 export interface Recommendation {
