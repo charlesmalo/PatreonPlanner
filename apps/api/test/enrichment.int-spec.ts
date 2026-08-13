@@ -1,15 +1,14 @@
 import { PrismaClient } from '@prisma/client';
-import { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { ConfigService } from '../src/config/config.module';
 import { RelationsService } from '../src/intelligence/relations.service';
 import { ThemesService } from '../src/intelligence/themes.service';
 import { ENRICH_BATCH_SIZE, EnrichTitleJob } from '../src/jobs/enrich-title.job';
-import { startDatabase } from './support/database';
+import { startDatabase, type TestDatabase } from './support/database';
 import { applyTestConfigDefaults } from './support/env';
 import { FakeCatalogProvider } from './support/fake-catalog.provider';
 
 describe('Relation and theme enrichment (integration)', () => {
-  let pg: StartedPostgreSqlContainer;
+  let pg: TestDatabase;
   let prisma: PrismaClient;
   let catalog: FakeCatalogProvider;
   let relations: RelationsService;

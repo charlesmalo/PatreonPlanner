@@ -1,14 +1,13 @@
 import { PrismaClient } from '@prisma/client';
-import { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { AbuseService, DECAY_BATCH_SIZE } from '../src/abuse/abuse.service';
 import { DECAY_AFTER_MS, MAX_PENALTY_MS } from '../src/abuse/penalty';
-import { startDatabase } from './support/database';
+import { startDatabase, type TestDatabase } from './support/database';
 import { applyTestConfigDefaults } from './support/env';
 
 const HOUR = 60 * 60 * 1000;
 
 describe('AbuseService (integration)', () => {
-  let pg: StartedPostgreSqlContainer;
+  let pg: TestDatabase;
   let prisma: PrismaClient;
   let abuse: AbuseService;
   let userId: string;

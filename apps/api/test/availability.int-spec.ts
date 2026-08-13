@@ -7,9 +7,8 @@ import {
 } from '../src/availability/availability.service';
 import { AvailabilitySnapshot } from '../src/availability/availability.types';
 import { PrismaClient } from '@prisma/client';
-import { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { ConfigService } from '../src/config/config.module';
-import { startDatabase } from './support/database';
+import { startDatabase, type TestDatabase } from './support/database';
 import { applyTestConfigDefaults } from './support/env';
 
 class FakeAvailabilityProvider implements AvailabilityProvider {
@@ -48,7 +47,7 @@ class FakeAvailabilityProvider implements AvailabilityProvider {
 }
 
 describe('AvailabilityService (integration)', () => {
-  let pg: StartedPostgreSqlContainer;
+  let pg: TestDatabase;
   let prisma: PrismaClient;
   let provider: FakeAvailabilityProvider;
   let service: AvailabilityService;

@@ -18,12 +18,15 @@ export class PrismaExceptionFilter implements ExceptionFilter {
     const response = host.switchToHttp().getResponse<Response>();
     const { status, message } = this.translate(exception);
 
-    // Log the code, never the message: Prisma includes query fragments and bound values.
-    this.logger.warn(
-      `Prisma error mapped to ${status}: ${
-        exception instanceof Prisma.PrismaClientKnownRequestError ? exception.code : 'validation'
-      }`,
-    );
+    const code =
+      exception instanceof Prisma.PrismaClientKnownRequestError ? exception.code : 'validation';
+    // Log the code, never the message: Prisma includes query fragments and bound values. An
+    // unmapped code is logged at error, because it is the one case where the caller gets a bare
+    // 500 and the code is the only thing that says why — a silent default branch is how an
+    // intermittent 500 stays undiagnosable across a dozen runs.
+    const logLine = `Prisma error mapped to ${status}: ${code}`;
+    if (status === HttpStatus.INTERNAL_SERVER_ERROR) this.logger.error(logLine);
+    else this.logger.warn(logLine);
     response.status(status).json({ statusCode: status, message });
   }
 
@@ -44,6 +47,15 @@ export class PrismaExceptionFilter implements ExceptionFilter {
         return { status: HttpStatus.NOT_FOUND, message: 'Not found' };
       case 'P2002':
         return { status: HttpStatus.CONFLICT, message: 'Already exists' };
+      // Capacity and connectivity, not a fault in the request: the pool was exhausted or the
+      // database was unreachable. A 500 tells the caller to give up and pages someone; a 503
+      // says what is true, and retrying is the right response to both.
+      case 'P2024':
+      case 'P1001':
+      case 'P1002':
+      case 'P1008':
+      case 'P1017':
+        return { status: HttpStatus.SERVICE_UNAVAILABLE, message: 'Service unavailable' };
       default:
         return { status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Internal server error' };
     }

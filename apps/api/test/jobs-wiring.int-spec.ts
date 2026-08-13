@@ -2,10 +2,9 @@ import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { Queue } from 'bullmq';
 import { RedisContainer, StartedRedisContainer } from '@testcontainers/redis';
-import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import { AppModule } from '../src/app.module';
 import { PATREON_CLIENT } from '../src/patreon/patreon.client';
-import { startDatabase } from './support/database';
+import { startDatabase, type TestDatabase } from './support/database';
 import { applyTestConfigDefaults } from './support/env';
 import { FakePatreonClient } from './support/fake-patreon.client';
 
@@ -18,7 +17,7 @@ import { FakePatreonClient } from './support/fake-patreon.client';
 describe('JobsModule wiring (integration)', () => {
   let app: INestApplication;
   let redis: StartedRedisContainer;
-  let pg: Awaited<ReturnType<typeof PostgreSqlContainer.prototype.start>>;
+  let pg: TestDatabase;
   let redisUrl: string;
 
   beforeAll(async () => {
