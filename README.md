@@ -75,6 +75,28 @@ nothing.
 State-changing requests need the `pp_csrf` cookie echoed in an `x-csrf-token` header. The token is
 signed and bound to the session, and is re-minted automatically on any safe request.
 
+## Relations & themes
+
+Titles carry a relation graph and a theme taxonomy, both built from TMDB's structured data by a
+background job (`enrich-title.job.ts`) — never in the submit path, which is already the slowest
+and most abusable one.
+
+- **`TitleRelation`** is directional, member → container: `SAME_FRANCHISE` from a film's
+  `belongs_to_collection` and a collection's `parts`, `RELATED` from TMDB's similar titles.
+- **Nesting is a per-board projection**, not a stored field. Whether an entry has a parent depends
+  on what else is on _that_ board, which changes with every submission and status change. Only
+  containment kinds nest — `RELATED` means "similar", and nesting on it would bury unrelated
+  entries.
+- **Themes are creator-scoped**, seeded from TMDB genres and keywords. Re-seeding matches on
+  `sourceKey` (the TMDB label), never the display name, so a creator's rename survives it.
+  `GET|PATCH|DELETE /creators/:slug/themes` and `?theme=<id>` on the board.
+
+Without `TMDB_API_KEY` there are no relations and no themes; the board renders unnested and
+unfiltered.
+
+Not built: embeddings, semantic de-dupe and personalised ranking — they need an embedding vendor,
+and that is a separate plan written once one is chosen.
+
 ## Content classes
 
 A suggestion is one of five kinds (design §5):

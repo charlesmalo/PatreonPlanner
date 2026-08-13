@@ -19,6 +19,18 @@ import { normalizeTitle } from './normalize-title';
 
 const MAX_PAGE = 50;
 
+/**
+ * What the board projection adds and a single-entry response cannot compute: a parent depends on
+ * what else is on the board, and themes arrive with enrichment. Both resolve on the next read;
+ * what matters here is that the shape matches, so a prepended card is not a different kind of
+ * object from the ones beside it.
+ */
+const BOARD_ONLY_DEFAULTS = {
+  availability: null,
+  parentId: null,
+  themes: [] as Array<{ id: string; name: string }>,
+};
+
 // Containment only. RELATED means "similar", and nesting on it would bury unrelated entries.
 const NESTING_KINDS: RelationKind[] = ['SEASON_OF', 'SAME_FRANCHISE'];
 
@@ -247,13 +259,19 @@ export class RecommendationsService {
     }
   }
 
-  /** A duplicate may already be upvoted by this viewer; a fresh one never is. */
+  /**
+   * A duplicate may already be upvoted by this viewer; a fresh one never is.
+   *
+   * Also fills the fields the *board* projection adds, because a client prepending this result
+   * renders it as a card alongside board entries — and a card missing them crashes. That lesson
+   * is already written above for `hasUpvoted`; nesting and themes joined it the same way.
+   */
   private async withUpvoted<T extends { id: string }>(recommendation: T, userId: string) {
     const upvote = await this.prisma.upvote.findUnique({
       where: { recommendationId_userId: { recommendationId: recommendation.id, userId } },
       select: { id: true },
     });
-    return { ...recommendation, hasUpvoted: upvote !== null };
+    return { ...recommendation, hasUpvoted: upvote !== null, ...BOARD_ONLY_DEFAULTS };
   }
 
   private async refund(...keys: string[]): Promise<void> {
@@ -335,7 +353,10 @@ export class RecommendationsService {
       select: RECOMMENDATION_FIELDS,
     });
     // Nothing can have upvoted a recommendation that did not exist a moment ago.
-    return { duplicate: false as const, recommendation: { ...recommendation, hasUpvoted: false } };
+    return {
+      duplicate: false as const,
+      recommendation: { ...recommendation, hasUpvoted: false, ...BOARD_ONLY_DEFAULTS },
+    };
   }
 
   /**

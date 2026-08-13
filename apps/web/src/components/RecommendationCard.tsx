@@ -105,9 +105,11 @@ export function RecommendationCard({
           availability={recommendation.availability}
           title={recommendation.customTitle}
         />
-        {recommendation.themes.length > 0 ? (
+        {/* Defensive `?? []`: a card is rendered from both the board projection and a submit
+            response, and a shape mismatch between them should cost a chip strip, not the page. */}
+        {(recommendation.themes ?? []).length > 0 ? (
           <ul className="mt-2 flex flex-wrap gap-1.5">
-            {recommendation.themes.map((theme) => (
+            {(recommendation.themes ?? []).map((theme) => (
               <li
                 key={theme.id}
                 className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] dark:bg-slate-800"

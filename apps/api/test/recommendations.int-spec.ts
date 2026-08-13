@@ -110,6 +110,30 @@ describe('Recommendations (integration)', () => {
   });
 
   describe('submitting', () => {
+    it('returns a recommendation shaped exactly like a board entry', async () => {
+      // A client prepends this result next to board entries. Every time the board projection has
+      // gained a field, this response has silently lacked it and the SPA has crashed on the
+      // prepended card — three times now.
+      const auth = await loginAs('shape-patron');
+      await makePatron('shape-patron', 1000);
+      const created = await submit(auth, {
+        type: 'EXTERNAL_LINK',
+        customTitle: 'Shape check',
+      }).expect(201);
+
+      const board = await request(ctx.app.getHttpServer())
+        .get('/api/v1/creators/board-co/recommendations?limit=50')
+        .set('Cookie', [auth.session, auth.csrf])
+        .expect(200);
+      const fromBoard = board.body.items.find(
+        (i: { id: string }) => i.id === created.body.recommendation.id,
+      );
+
+      expect(Object.keys(created.body.recommendation).sort()).toEqual(
+        Object.keys(fromBoard).sort(),
+      );
+    });
+
     it('refuses an anonymous submission', async () => {
       await request(ctx.app.getHttpServer())
         .post('/api/v1/creators/board-co/recommendations')

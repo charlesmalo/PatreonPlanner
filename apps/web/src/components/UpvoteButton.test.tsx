@@ -76,3 +76,29 @@ describe('UpvoteButton', () => {
     await waitFor(() => expect(onCount).toHaveBeenLastCalledWith('rec-1', 3, false));
   });
 });
+
+describe('RecommendationCard resilience', () => {
+  it('renders an entry that arrived without the board-only fields', async () => {
+    // The submit response has repeatedly lagged the board projection by a field. The API test
+    // now pins the shapes together; this makes the failure a missing chip rather than a blank
+    // page if they ever drift again.
+    const { RecommendationCard } = await import('./RecommendationCard');
+    const { recommendation } = await import('../test-support');
+    const entry = recommendation();
+    delete (entry as Partial<typeof entry>).themes;
+
+    render(
+      <ul>
+        <RecommendationCard
+          slug="s"
+          recommendation={entry}
+          canUpvote
+          canModerate={false}
+          onCount={vi.fn()}
+          onStatusChanged={vi.fn()}
+        />
+      </ul>,
+    );
+    expect(screen.getByText('Spirited Away')).toBeInTheDocument();
+  });
+});

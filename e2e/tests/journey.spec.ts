@@ -2,8 +2,11 @@ import { expect, test } from '@playwright/test';
 import {
   CREATOR,
   resetRateLimits,
+  clearIntelligence,
   makeStaff,
   seedCreator,
+  seedRelation,
+  seedTheme,
   seedEntryFrom,
   setHidePending,
   setPatreonIdentity,
@@ -328,4 +331,58 @@ test('a patron can compose, reorder and submit a watch order', async ({ page }) 
   const card = page.getByRole('listitem').filter({ hasText: 'Ghibli in release order' }).first();
   await expect(card).toContainText(/1\.\s*My Neighbour Totoro/);
   await expect(card).toContainText(/2\.\s*Castle in the Sky/);
+});
+
+test('a film nests under its franchise on the board', async ({ page }) => {
+  clearIntelligence();
+  await signIn(page, 500);
+  await page.goto(`/c/${CREATOR.slug}`);
+
+  // Both on the board first — nesting is a per-board projection, so it only appears once the
+  // container is there too.
+  await page.getByLabel(/search films and shows/i).fill('ghibli');
+  await page.getByRole('button', { name: /studio ghibli collection/i }).click();
+  await page.getByRole('button', { name: 'Suggest', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Studio Ghibli Collection' })).toBeVisible();
+
+  await page.getByLabel(/search films and shows/i).fill('spirited');
+  await page.getByRole('button', { name: /spirited away \(2001\)/i }).click();
+  await page.getByRole('button', { name: 'Suggest', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Spirited Away' })).toBeVisible();
+
+  seedRelation(129, 10, 'SAME_FRANCHISE');
+  await page.reload();
+
+  // The film is rendered *inside* the collection's card, not merely after it.
+  const franchise = page
+    .getByRole('listitem')
+    .filter({ hasText: 'Studio Ghibli Collection' })
+    .first();
+  await expect(franchise.getByRole('heading', { name: 'Spirited Away' })).toBeVisible();
+});
+
+test('a patron can narrow the board to one theme', async ({ page }) => {
+  clearIntelligence();
+  await signIn(page, 500);
+  await page.goto(`/c/${CREATOR.slug}`);
+
+  await page.getByLabel(/search films and shows/i).fill('spirited');
+  await page.getByRole('button', { name: /spirited away \(2001\)/i }).click();
+  await page.getByRole('button', { name: 'Suggest', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Spirited Away' })).toBeVisible();
+
+  await page.getByLabel(/catalogue does not have/i).fill('An unthemed link');
+  await page.getByRole('button', { name: 'Suggest', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'An unthemed link' })).toBeVisible();
+
+  seedTheme('Anime', [129]);
+  await page.reload();
+
+  await page.getByRole('button', { name: /Anime \(1\)/ }).click();
+  await expect(page.getByRole('heading', { name: 'Spirited Away' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'An unthemed link' })).toHaveCount(0);
+
+  // Clicking again clears it.
+  await page.getByRole('button', { name: /Anime \(1\)/ }).click();
+  await expect(page.getByRole('heading', { name: 'An unthemed link' })).toBeVisible();
 });
