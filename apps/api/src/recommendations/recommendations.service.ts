@@ -73,9 +73,9 @@ const HIDDEN_STATUSES: RecommendationStatus[] = ['DELETED', 'REJECTED'];
  */
 function visibilityWhere(
   creator: { hidePendingFromPublic: boolean },
-  viewer: { userId: string | null; isStaff: boolean },
+  viewer: { userId: string | null; staffRole: string | null },
 ): Prisma.RecommendationWhereInput {
-  if (viewer.isStaff) return {};
+  if (viewer.staffRole !== null) return {};
   if (!creator.hidePendingFromPublic) return { status: { in: PATRON_VISIBLE_STATUSES } };
   return {
     OR: [
@@ -641,7 +641,7 @@ export class RecommendationsService {
     creator: { id: string; hidePendingFromPublic: boolean },
     rawCursor: string | undefined,
     limit: number | undefined,
-    viewer: { userId: string | null; isStaff: boolean },
+    viewer: { userId: string | null; staffRole: string | null },
     themeId?: string,
   ) {
     const take = Math.min(Math.max(limit ?? 20, 1), MAX_PAGE);

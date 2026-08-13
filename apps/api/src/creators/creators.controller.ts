@@ -50,6 +50,7 @@ export class CreatorsController {
       upvote: can('UPVOTE', viewer, policy),
       submit: can('SUBMIT', viewer, policy),
       moderate: can('MODERATE', viewer, policy),
+      manage_staff: can('MANAGE_STAFF', viewer, policy),
     };
   }
 

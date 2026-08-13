@@ -119,7 +119,7 @@ export class CreatorAccessGuard implements CanActivate {
         isAuthenticated: false,
         isActivePatron: false,
         pledgeAmountCents: null,
-        isStaff: false,
+        staffRole: null,
       };
     }
     const [user, membership, staff] = await Promise.all([
@@ -130,7 +130,8 @@ export class CreatorAccessGuard implements CanActivate {
       }),
       this.prisma.creatorStaff.findUnique({
         where: { creatorId_userId: { creatorId, userId } },
-        select: { id: true },
+        // The role, not merely existence: managing staff is the owner's alone.
+        select: { role: true },
       }),
     ]);
     // A session can outlive its user. Falling back to anonymous keeps deleting the row
@@ -141,7 +142,7 @@ export class CreatorAccessGuard implements CanActivate {
         isAuthenticated: false,
         isActivePatron: false,
         pledgeAmountCents: null,
-        isStaff: false,
+        staffRole: null,
       };
     }
     return {
@@ -152,7 +153,7 @@ export class CreatorAccessGuard implements CanActivate {
       // mirrored Tier's price would be wrong whenever a tier exists on Patreon but has not been
       // imported here, denying a creator's highest-paying patrons.
       pledgeAmountCents: membership?.amountCents ?? null,
-      isStaff: staff !== null,
+      staffRole: staff?.role ?? null,
     };
   }
 }

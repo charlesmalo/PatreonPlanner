@@ -5,11 +5,11 @@ const anonymous: Viewer = {
   isAuthenticated: false,
   isActivePatron: false,
   pledgeAmountCents: null,
-  isStaff: false,
+  staffRole: null,
 };
 const loggedIn: Viewer = { ...anonymous, userId: 'user-1', isAuthenticated: true };
 const patron: Viewer = { ...loggedIn, isActivePatron: true, pledgeAmountCents: 500 };
-const staff: Viewer = { ...loggedIn, isStaff: true };
+const staff: Viewer = { ...loggedIn, staffRole: 'MOD' };
 
 const open: Policy = {
   viewVisibility: 'PUBLIC',
@@ -105,5 +105,51 @@ describe('can()', () => {
       expect(can('UPVOTE', staff, locked)).toBe(true);
       expect(can('SUBMIT', staff, locked)).toBe(true);
     });
+  });
+});
+
+describe('can(MANAGE_STAFF)', () => {
+  const policy: Policy = {
+    viewVisibility: 'PUBLIC',
+    submitMinTierAmountCents: null,
+    upvoteMinTierAmountCents: null,
+  };
+  const base: Viewer = {
+    userId: 'u1',
+    isAuthenticated: true,
+    isActivePatron: false,
+    pledgeAmountCents: null,
+    staffRole: null,
+  };
+
+  it('lets an owner manage staff', () => {
+    expect(can('MANAGE_STAFF', { ...base, staffRole: 'OWNER' }, policy)).toBe(true);
+  });
+
+  it('refuses a mod', () => {
+    // A mod who could appoint mods could appoint an accomplice; one who could remove staff could
+    // remove the owner. Both are privilege escalation dressed as convenience.
+    expect(can('MANAGE_STAFF', { ...base, staffRole: 'MOD' }, policy)).toBe(false);
+  });
+
+  it('refuses a patron however much they pledge', () => {
+    expect(
+      can('MANAGE_STAFF', { ...base, isActivePatron: true, pledgeAmountCents: 100_000 }, policy),
+    ).toBe(false);
+  });
+
+  it('refuses an unauthenticated viewer', () => {
+    expect(can('MANAGE_STAFF', { ...base, userId: null, isAuthenticated: false }, policy)).toBe(
+      false,
+    );
+  });
+
+  it('still gives a mod MODERATE', () => {
+    expect(can('MODERATE', { ...base, staffRole: 'MOD' }, policy)).toBe(true);
+  });
+
+  it('still lets staff bypass the patron gates', () => {
+    expect(can('SUBMIT', { ...base, staffRole: 'MOD' }, policy)).toBe(true);
+    expect(can('UPVOTE', { ...base, staffRole: 'MOD' }, policy)).toBe(true);
   });
 });
