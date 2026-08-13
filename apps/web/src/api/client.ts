@@ -1,9 +1,20 @@
 export class ApiError extends Error {
-  constructor(readonly status: number) {
+  /**
+   * When the caller may retry, for the one case where the status alone cannot say enough: a
+   * timed-out user needs to know *when*, and no status code carries a time. The rest of the
+   * body stays unread — design §9 wants generic messages.
+   */
+  retryAt?: string;
+
+  constructor(
+    readonly status: number,
+    retryAt?: string,
+  ) {
     // The server's body is deliberately not surfaced: design §9 wants generic messages, and the
     // status is the only part the UI branches on.
     super(`Request failed with status ${status}`);
     this.name = 'ApiError';
+    this.retryAt = retryAt;
   }
 }
 
@@ -41,7 +52,19 @@ async function request<T>(
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
 
-  if (!response.ok) throw new ApiError(response.status);
+  if (!response.ok) {
+    // Only `retryAt`, and only on a 403: everything else about the body is deliberately ignored.
+    let retryAt: string | undefined;
+    if (response.status === 403) {
+      try {
+        const body = (await response.json()) as { retryAt?: unknown };
+        if (typeof body?.retryAt === 'string') retryAt = body.retryAt;
+      } catch {
+        // A 403 with no JSON body is the ordinary "not allowed" case.
+      }
+    }
+    throw new ApiError(response.status, retryAt);
+  }
   // 204 has no body; calling json() on it throws.
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;

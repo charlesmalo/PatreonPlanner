@@ -324,6 +324,14 @@ export function SubmitForm({ slug, onCreated }: SubmitFormProps) {
 }
 
 function messageFor(error: unknown): string {
+  // A timeout is the one refusal that carries a time, and the time is the only part the user can
+  // act on. Nothing is said about why — design §9 wants no probing of the rules.
+  if (error instanceof ApiError && error.status === 403 && error.retryAt) {
+    const when = new Date(error.retryAt);
+    if (!Number.isNaN(when.getTime())) {
+      return `You cannot suggest anything until ${when.toLocaleString()}.`;
+    }
+  }
   if (!(error instanceof ApiError)) return 'Something went wrong. Try again.';
   switch (error.status) {
     case 429:

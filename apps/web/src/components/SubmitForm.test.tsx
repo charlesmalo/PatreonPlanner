@@ -265,3 +265,54 @@ describe('SubmitForm content classes', () => {
     expect(fetchMock.mock.calls.filter(([, i]) => i?.method === 'POST')).toHaveLength(0);
   }, 30_000);
 });
+
+describe('SubmitForm when the user is timed out', () => {
+  const originalFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  function timedOut(retryAt?: string) {
+    global.fetch = vi.fn(async () => ({
+      ok: false,
+      status: 403,
+      json: async () => (retryAt ? { message: 'no', retryAt } : { message: 'no' }),
+    })) as never;
+  }
+
+  async function attempt() {
+    render(<SubmitForm slug="ada-writes" onCreated={vi.fn()} />);
+    await userEvent.type(screen.getByLabelText(/catalogue does not have/i), 'Anything');
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest' }));
+  }
+
+  it('says when the user may suggest again', async () => {
+    timedOut(new Date(Date.now() + 60 * 60 * 1000).toISOString());
+    await attempt();
+    const status = await screen.findByRole('status');
+    expect(status).toHaveTextContent(/until/i);
+  });
+
+  it('says nothing about why', async () => {
+    // Design §9: explaining the rule invites gaming it.
+    timedOut(new Date(Date.now() + 60 * 60 * 1000).toISOString());
+    await attempt();
+    expect((await screen.findByRole('status')).textContent).not.toMatch(/strike|abuse|blocked/i);
+  });
+
+  it('falls back to the generic refusal when there is no time', async () => {
+    // A 403 also means "not allowed here", which is a different thing entirely.
+    timedOut();
+    await attempt();
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      /for patrons at the required tier/i,
+    );
+  });
+
+  it('leaves the form in place so the user is not left wondering where it went', async () => {
+    timedOut(new Date(Date.now() + 60 * 60 * 1000).toISOString());
+    await attempt();
+    await screen.findByRole('status');
+    expect(screen.getByRole('button', { name: 'Suggest' })).toBeInTheDocument();
+  });
+});
