@@ -4,6 +4,8 @@ import {
   resetRateLimits,
   clearAbuse,
   clearIntelligence,
+  clearStaff,
+  makeOwner,
   makeStaff,
   seedCreator,
   seedRelation,
@@ -26,6 +28,7 @@ test.beforeEach(() => {
   seedCreator();
   // Strikes outlive a test otherwise, and a timed-out patron cannot submit anything.
   clearAbuse();
+  clearStaff();
   // Every test starts from the same state regardless of what ran before, including CI retries.
   resetRateLimits();
 });
@@ -417,4 +420,46 @@ test('a timed-out patron can still read and upvote, but not suggest', async ({ p
   await page.getByRole('button', { name: 'Suggest', exact: true }).click();
   await expect(page.getByText(/cannot suggest anything until/i)).toBeVisible();
   await expect(page.getByRole('heading', { name: 'During the timeout' })).toHaveCount(0);
+});
+
+test('an owner invites a moderator, who accepts and can then be removed', async ({
+  page,
+  context,
+}) => {
+  await signIn(page, 500, 'patreon-owner-e2e');
+  makeOwner('patreon-owner-e2e');
+  await page.goto(`/c/${CREATOR.slug}`);
+
+  await page.getByRole('link', { name: 'Moderators' }).click();
+  await page.waitForURL((url) => url.pathname.endsWith('/staff'));
+  await page.getByRole('button', { name: /invite a moderator/i }).click();
+
+  const link = await page.getByLabel(/send this link/i).inputValue();
+  expect(link).toContain('/invite/');
+
+  // A second browser context, so the invitee is a genuinely different session rather than the
+  // same one wearing a different identity — which is what made an earlier two-identity journey
+  // flaky.
+  const invitee = await context.browser()!.newContext();
+  const inviteePage = await invitee.newPage();
+  await signIn(inviteePage, 500, 'patreon-invitee-e2e');
+  await inviteePage.goto(new URL(link).pathname);
+  await inviteePage.getByRole('button', { name: /accept/i }).click();
+  await expect(inviteePage.getByRole('heading', { name: /you now moderate/i })).toBeVisible();
+
+  // The power is real: the review queue is staff-only.
+  await inviteePage.goto(`/c/${CREATOR.slug}/review`);
+  await expect(inviteePage.getByRole('heading', { name: /review queue/i })).toBeVisible();
+
+  // And revocable.
+  await page.reload();
+  await page
+    .getByRole('button', { name: /^Remove/ })
+    .first()
+    .click();
+  await expect(page.getByText(/no longer a moderator/i)).toBeVisible();
+
+  await inviteePage.goto(`/c/${CREATOR.slug}/review`);
+  await expect(inviteePage.getByText(/do not moderate this board/i)).toBeVisible();
+  await invitee.close();
 });

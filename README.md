@@ -75,6 +75,26 @@ nothing.
 State-changing requests need the `pp_csrf` cookie echoed in an `x-csrf-token` header. The token is
 signed and bound to the session, and is re-minted automatically on any safe request.
 
+## Moderators
+
+A creator invites moderators with a single-use link and can remove them at any time.
+
+- `MANAGE_STAFF` is **owner-only** (`capability.ts`). A mod who could appoint mods could appoint
+  an accomplice; one who could remove staff could remove the owner.
+- `POST /creators/:slug/staff/invites` returns the token **once**; only its SHA-256 is stored, so
+  a database read cannot recover a live invite. Invites are single-use, expire in 7 days, and are
+  capped at 10 outstanding.
+- `POST /staff/invites/accept` is mounted outside `creators/:slug`: the invitee does not know
+  which board the token is for until they redeem it. Accepting is an authenticated action —
+  nobody becomes a moderator without doing it themselves.
+- Every failure to redeem answers identically. Distinguishing expired from spent from unknown
+  turns the endpoint into a token oracle.
+- `DELETE /creators/:slug/staff/:userId` refuses to remove the last owner: a board with no owner
+  is unadministrable and no endpoint can put one back.
+
+The invite link is a bearer credential in whatever channel the creator sends it through. Single
+use and expiry bound that; nothing else does.
+
 ## Abuse scoring
 
 A durable per-user strike count (`AbuseRecord`) drives an escalating, capped, decaying timeout

@@ -222,3 +222,20 @@ export function timeOutPatron(patreonUserId: string): void {
 export function clearAbuse(): void {
   seed(`DELETE FROM "AbuseRecord";`);
 }
+
+/** Makes the seeded creator's owner row point at a signed-in identity. */
+export function makeOwner(patreonUserId: string): void {
+  seed(`
+    INSERT INTO "CreatorStaff"(id,"creatorId","userId",role,"createdAt","updatedAt")
+      SELECT gen_random_uuid(),'${CREATOR.id}',u.id,'OWNER',now(),now()
+      FROM "User" u WHERE u."patreonUserId"=${sqlLiteral(patreonUserId)}
+      ON CONFLICT ("creatorId","userId") DO UPDATE SET role = 'OWNER';
+  `);
+}
+
+export function clearStaff(): void {
+  seed(`
+    DELETE FROM "StaffInvite" WHERE "creatorId" = '${CREATOR.id}';
+    DELETE FROM "CreatorStaff" WHERE "creatorId" = '${CREATOR.id}';
+  `);
+}
