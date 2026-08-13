@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { CreatorBoard } from './CreatorBoard';
@@ -214,5 +214,150 @@ describe('CreatorBoard columns', () => {
     expect(
       await screen.findByRole('button', { name: /report “Spirited Away”/i }),
     ).toBeInTheDocument();
+  });
+});
+
+describe('CreatorBoard nesting and themes', () => {
+  const originalFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  function boardWith(items: unknown[], themes: unknown[] = []) {
+    global.fetch = fakeApi({
+      'GET /api/v1/creators/ada-writes': creator,
+      'GET /api/v1/creators/ada-writes/capabilities': viewOnly,
+      'GET /api/v1/creators/ada-writes/recommendations': { items, nextCursor: null },
+      'GET /api/v1/creators/ada-writes/themes': { items: themes },
+    });
+  }
+
+  it('renders a child inside its parent as a nested list', async () => {
+    // Nested markup, not a margin: the containment has to be there for a screen reader too.
+    boardWith([
+      recommendation({ id: 'p', customTitle: 'A Show', status: 'PENDING' }),
+      recommendation({ id: 'c', customTitle: 'Season 2', status: 'PENDING', parentId: 'p' }),
+    ]);
+    renderBoard();
+
+    const parent = (await screen.findByText('A Show')).closest('li') as HTMLElement;
+    expect(within(parent).getByText('Season 2')).toBeInTheDocument();
+  });
+
+  it('renders a child at top level when its parent is absent from the page', async () => {
+    boardWith([
+      recommendation({ id: 'c', customTitle: 'Season 2', status: 'PENDING', parentId: 'missing' }),
+    ]);
+    renderBoard();
+    const child = (await screen.findByText('Season 2')).closest('li') as HTMLElement;
+    expect(child.parentElement?.closest('li')).toBeNull();
+  });
+
+  it('renders a child under a parent in a different column at top level', async () => {
+    // Columns are the lifecycle; nesting a pending entry inside an accepted one would move it
+    // out of the column its status says it belongs to.
+    boardWith([
+      recommendation({ id: 'p', customTitle: 'A Show', status: 'ACCEPTED' }),
+      recommendation({ id: 'c', customTitle: 'Season 2', status: 'PENDING', parentId: 'p' }),
+    ]);
+    renderBoard();
+    const child = (await screen.findByText('Season 2')).closest('li') as HTMLElement;
+    expect(child.parentElement?.closest('li')).toBeNull();
+  });
+
+  it('shows each entry themes as chips', async () => {
+    boardWith([recommendation({ id: 'a', themes: [{ id: 't1', name: 'Anime' }] })]);
+    renderBoard();
+    expect(await screen.findByText('Anime')).toBeInTheDocument();
+  });
+
+  it('filters the board by a theme', async () => {
+    const fetchMock = fakeApi({
+      'GET /api/v1/creators/ada-writes': creator,
+      'GET /api/v1/creators/ada-writes/capabilities': viewOnly,
+      'GET /api/v1/creators/ada-writes/recommendations': {
+        items: [recommendation()],
+        nextCursor: null,
+      },
+      'GET /api/v1/creators/ada-writes/themes': {
+        items: [{ id: 't1', name: 'Anime', entryCount: 1 }],
+      },
+    });
+    global.fetch = fetchMock;
+    renderBoard();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Anime \(1\)/ }));
+    await waitFor(() => {
+      const urls = fetchMock.mock.calls.map(([input]) => String(input));
+      expect(urls.some((u) => u.includes('theme=t1'))).toBe(true);
+    });
+  });
+
+  it('renders the filtered response rather than the unfiltered one', async () => {
+    // Asserting only that the URL carried `theme=` would pass even if the response were ignored:
+    // the fake routes by pathname, so both requests return the same body.
+    let filtered = false;
+    global.fetch = fakeApi({
+      'GET /api/v1/creators/ada-writes': creator,
+      'GET /api/v1/creators/ada-writes/capabilities': viewOnly,
+      'GET /api/v1/creators/ada-writes/recommendations': () => ({
+        items: filtered
+          ? [recommendation({ id: 'b', customTitle: 'Only Themed' })]
+          : [recommendation({ id: 'a', customTitle: 'Everything' })],
+        nextCursor: null,
+      }),
+      'GET /api/v1/creators/ada-writes/themes': {
+        items: [{ id: 't1', name: 'Anime', entryCount: 1 }],
+      },
+    });
+    renderBoard();
+
+    expect(await screen.findByText('Everything')).toBeInTheDocument();
+    filtered = true;
+    await userEvent.click(screen.getByRole('button', { name: /Anime \(1\)/ }));
+
+    expect(await screen.findByText('Only Themed')).toBeInTheDocument();
+    expect(screen.queryByText('Everything')).not.toBeInTheDocument();
+  });
+});
+
+describe('CreatorBoard nesting resilience', () => {
+  const originalFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  function boardWith(items: unknown[]) {
+    global.fetch = fakeApi({
+      'GET /api/v1/creators/ada-writes': creator,
+      'GET /api/v1/creators/ada-writes/capabilities': viewOnly,
+      'GET /api/v1/creators/ada-writes/recommendations': { items, nextCursor: null },
+      'GET /api/v1/creators/ada-writes/themes': { items: [] },
+    });
+  }
+
+  it('renders a grandchild rather than dropping it', async () => {
+    // Only roots and their direct children were rendered, so anything deeper vanished from the
+    // board entirely — a far worse failure than rendering it flat.
+    boardWith([
+      recommendation({ id: 'a', customTitle: 'Franchise' }),
+      recommendation({ id: 'b', customTitle: 'Show', parentId: 'a' }),
+      recommendation({ id: 'c', customTitle: 'Season 2', parentId: 'b' }),
+    ]);
+    renderBoard();
+    expect(await screen.findByText('Franchise')).toBeInTheDocument();
+    expect(screen.getByText('Show')).toBeInTheDocument();
+    expect(screen.getByText('Season 2')).toBeInTheDocument();
+  });
+
+  it('renders every entry even if the relations form a cycle', async () => {
+    // A cycle left no roots, so the column was filtered away and the board read as empty.
+    boardWith([
+      recommendation({ id: 'a', customTitle: 'One', parentId: 'b' }),
+      recommendation({ id: 'b', customTitle: 'Two', parentId: 'a' }),
+    ]);
+    renderBoard();
+    expect(await screen.findByText('One')).toBeInTheDocument();
+    expect(screen.getByText('Two')).toBeInTheDocument();
   });
 });

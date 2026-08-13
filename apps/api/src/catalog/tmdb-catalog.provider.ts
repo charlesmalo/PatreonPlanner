@@ -2,11 +2,30 @@ import { Injectable, Logger } from '@nestjs/common';
 import { MediaType } from '@prisma/client';
 import { ConfigService } from '../config/config.module';
 import { CatalogNotConfiguredError, CatalogProvider } from './catalog.provider';
-import { CatalogResult } from './catalog.types';
+import { CatalogResult, TitleStructure } from './catalog.types';
 
 class TitleNotFound extends Error {}
 
+/** TMDB's similar list is long and weak; a cap keeps the relation table from bloating on noise. */
+export const SIMILAR_CAP = 12;
+/** TMDB returns dozens of keywords for a popular film; each becomes a Theme row per creator. */
+export const LABEL_CAP = 20;
+/** A large franchise has 30+ parts, and each is a sequential lookup in the builder. */
+export const PART_CAP = 50;
+
 const PATHS: Record<MediaType, string> = { MOVIE: 'movie', TV: 'tv', COLLECTION: 'collection' };
+
+interface TmdbDetail {
+  id: number;
+  belongs_to_collection?: { id: number; name: string } | null;
+  genres?: Array<{ name: string }>;
+  parts?: Array<{ id: number }>;
+}
+
+interface TmdbKeywords {
+  keywords?: Array<{ name: string }>;
+  results?: Array<{ name: string }>;
+}
 
 interface TmdbItem {
   id: number;
@@ -74,6 +93,55 @@ export class TmdbCatalogProvider implements CatalogProvider {
     }
   }
 
+  async fetchStructure(tmdbId: number, mediaType: MediaType): Promise<TitleStructure> {
+    const path = PATHS[mediaType];
+    // Not degraded: without the title itself there is no structure to speak of, and an empty
+    // one would be written as fact.
+    const detail = await this.get<TmdbDetail>(`/${path}/${tmdbId}`);
+
+    if (mediaType === 'COLLECTION') {
+      return {
+        collection: null,
+        parts: (detail.parts ?? []).slice(0, PART_CAP).map((part, ordinal) => ({
+          tmdbId: part.id,
+          mediaType: 'MOVIE' as const,
+          ordinal,
+        })),
+        similar: [],
+        labels: dedupeLabels((detail.genres ?? []).map((g) => g.name)),
+      };
+    }
+
+    // Each degrades on its own: one failing endpoint must not cost the title its collection.
+    const [keywords, similar] = await Promise.all([
+      this.getOrNull<TmdbKeywords>(`/${path}/${tmdbId}/keywords`),
+      this.getOrNull<{ results?: Array<{ id: number }> }>(`/${path}/${tmdbId}/similar`),
+    ]);
+
+    // TMDB returns `keywords` for a film and `results` for a series, under the same path.
+    const keywordNames = (keywords?.keywords ?? keywords?.results ?? []).map((k) => k.name);
+
+    return {
+      collection: detail.belongs_to_collection
+        ? { tmdbId: detail.belongs_to_collection.id, name: detail.belongs_to_collection.name }
+        : null,
+      parts: [],
+      similar: (similar?.results ?? [])
+        .slice(0, SIMILAR_CAP)
+        .map((item) => ({ tmdbId: item.id, mediaType })),
+      labels: dedupeLabels([...(detail.genres ?? []).map((g) => g.name), ...keywordNames]),
+    };
+  }
+
+  /** For the optional parts of a structure, where a failure means "unknown", not "broken". */
+  private async getOrNull<T>(path: string): Promise<T | null> {
+    try {
+      return await this.get<T>(path);
+    } catch {
+      return null;
+    }
+  }
+
   private async get<T>(path: string): Promise<T> {
     const key = this.config.get('TMDB_API_KEY');
     if (!key) throw new CatalogNotConfiguredError();
@@ -108,4 +176,16 @@ export class TmdbCatalogProvider implements CatalogProvider {
       overview: item.overview ?? null,
     };
   }
+}
+
+/** Two labels differing only in case are one theme; the first spelling seen wins. */
+function dedupeLabels(labels: string[]): string[] {
+  const seen = new Map<string, string>();
+  for (const label of labels) {
+    const key = label.trim().toLowerCase();
+    if (key.length > 0 && !seen.has(key)) seen.set(key, label.trim());
+  }
+  // Capped: genres come first, so the cut falls on the long tail of keywords, and every label
+  // kept becomes a Theme row for every creator holding the title.
+  return [...seen.values()].slice(0, LABEL_CAP);
 }

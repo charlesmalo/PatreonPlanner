@@ -59,6 +59,12 @@ export interface WatchOrderItem {
   title: TitleSummary | null;
 }
 
+export interface ThemeSummary {
+  id: string;
+  name: string;
+  entryCount: number;
+}
+
 export interface Recommendation {
   id: string;
   type: string;
@@ -75,6 +81,9 @@ export interface Recommendation {
   availability: Availability | null;
   /** Empty for every type but WATCH_ORDER. */
   watchOrderItems: WatchOrderItem[];
+  /** The entry on this page that contains this one, if any. A per-board projection. */
+  parentId: string | null;
+  themes: Array<{ id: string; name: string }>;
   links: RecommendationLink[];
   submittedBy: { id: string; fullName: string | null; avatarUrl: string | null };
 }

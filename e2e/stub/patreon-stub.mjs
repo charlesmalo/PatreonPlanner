@@ -29,6 +29,9 @@ let catalog = [
     release_date: '2001-07-20',
     poster_path: '/spirited.jpg',
     overview: 'A girl wanders into a world of spirits.',
+    // Drives the relation builder: the film nests under this collection once enriched.
+    belongs_to_collection: { id: 10, name: 'Studio Ghibli Collection' },
+    genres: [{ name: 'Animation' }],
   },
   {
     id: 8392,
@@ -37,6 +40,8 @@ let catalog = [
     release_date: '1988-04-16',
     poster_path: '/totoro.jpg',
     overview: 'Two sisters meet a forest spirit.',
+    belongs_to_collection: { id: 10, name: 'Studio Ghibli Collection' },
+    genres: [{ name: 'Animation' }],
   },
 ];
 
@@ -173,6 +178,16 @@ const server = createServer(async (req, res) => {
         },
       },
     });
+  }
+
+  const keywords = url.pathname.match(/^\/3\/(movie|tv)\/(\d+)\/keywords$/);
+  if (keywords) {
+    return json(res, { keywords: [{ name: 'anime' }] });
+  }
+
+  const similar = url.pathname.match(/^\/3\/(movie|tv)\/(\d+)\/similar$/);
+  if (similar) {
+    return json(res, { results: [] });
   }
 
   const detail = url.pathname.match(/^\/3\/(movie|tv)\/(\d+)$/);

@@ -6,7 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { MediaType, Prisma, RecommendationStatus } from '@prisma/client';
+import { MediaType, Prisma, RecommendationStatus, RelationKind } from '@prisma/client';
 import { AvailabilityService, StoredAvailability } from '../availability/availability.service';
 import { CatalogService } from '../catalog/catalog.service';
 import { ConfigService } from '../config/config.module';
@@ -18,6 +18,21 @@ import { PATRON_VISIBLE_STATUSES } from '../moderation/transitions';
 import { normalizeTitle } from './normalize-title';
 
 const MAX_PAGE = 50;
+
+/**
+ * What the board projection adds and a single-entry response cannot compute: a parent depends on
+ * what else is on the board, and themes arrive with enrichment. Both resolve on the next read;
+ * what matters here is that the shape matches, so a prepended card is not a different kind of
+ * object from the ones beside it.
+ */
+const BOARD_ONLY_DEFAULTS = {
+  availability: null,
+  parentId: null,
+  themes: [] as Array<{ id: string; name: string }>,
+};
+
+// Containment only. RELATED means "similar", and nesting on it would bury unrelated entries.
+const NESTING_KINDS: RelationKind[] = ['SEASON_OF', 'SAME_FRANCHISE'];
 
 /** Which canonical media type each binding content class resolves against. */
 const MEDIA_TYPES: Record<'MOVIE' | 'SHOW' | 'FRANCHISE', MediaType> = {
@@ -244,13 +259,19 @@ export class RecommendationsService {
     }
   }
 
-  /** A duplicate may already be upvoted by this viewer; a fresh one never is. */
+  /**
+   * A duplicate may already be upvoted by this viewer; a fresh one never is.
+   *
+   * Also fills the fields the *board* projection adds, because a client prepending this result
+   * renders it as a card alongside board entries — and a card missing them crashes. That lesson
+   * is already written above for `hasUpvoted`; nesting and themes joined it the same way.
+   */
   private async withUpvoted<T extends { id: string }>(recommendation: T, userId: string) {
     const upvote = await this.prisma.upvote.findUnique({
       where: { recommendationId_userId: { recommendationId: recommendation.id, userId } },
       select: { id: true },
     });
-    return { ...recommendation, hasUpvoted: upvote !== null };
+    return { ...recommendation, hasUpvoted: upvote !== null, ...BOARD_ONLY_DEFAULTS };
   }
 
   private async refund(...keys: string[]): Promise<void> {
@@ -298,8 +319,16 @@ export class RecommendationsService {
         posterPath: result.posterPath,
         overview: result.overview,
       },
-      // Refreshed on each binding: posters and overviews change upstream.
-      update: { name: result.name, year: result.year, posterPath: result.posterPath },
+      update: {
+        // Refreshed on each binding: posters and overviews change upstream.
+        name: result.name,
+        year: result.year,
+        posterPath: result.posterPath,
+        // Back into the enrichment queue. Themes are per creator and seeded from whoever holds
+        // the title *at enrichment time*, so a title enriched for creator A and later suggested
+        // on creator B's board would otherwise leave B without theme chips forever.
+        enrichedAt: null,
+      },
       select: { id: true, name: true },
     });
   }
@@ -332,7 +361,10 @@ export class RecommendationsService {
       select: RECOMMENDATION_FIELDS,
     });
     // Nothing can have upvoted a recommendation that did not exist a moment ago.
-    return { duplicate: false as const, recommendation: { ...recommendation, hasUpvoted: false } };
+    return {
+      duplicate: false as const,
+      recommendation: { ...recommendation, hasUpvoted: false, ...BOARD_ONLY_DEFAULTS },
+    };
   }
 
   /**
@@ -388,12 +420,81 @@ export class RecommendationsService {
           posterPath: result.posterPath,
           overview: result.overview,
         },
-        update: { name: result.name, year: result.year, posterPath: result.posterPath },
+        update: {
+          name: result.name,
+          year: result.year,
+          posterPath: result.posterPath,
+          // Same reason as above: a step's title may be new to this creator's board.
+          enrichedAt: null,
+        },
         select: { id: true },
       });
       resolved.push({ position, titleId: title.id, note: item.note?.trim() || null });
     }
     return resolved;
+  }
+
+  /**
+   * Maps each page title to the recommendation on this page that contains it.
+   *
+   * Only containment kinds nest — RELATED means "similar", and nesting on it would bury
+   * unrelated entries under each other. Resolved within the page, so a child never nests under
+   * something the viewer cannot see: the page has already been filtered by visibility.
+   */
+  private async parentsFor(
+    page: Array<{ id: string; titleId: string | null }>,
+    titleIds: string[],
+    creatorId: string,
+  ): Promise<Map<string, string>> {
+    const parents = new Map<string, string>();
+    if (titleIds.length === 0) return parents;
+
+    const relations = await this.prisma.titleRelation.findMany({
+      where: {
+        kind: { in: NESTING_KINDS },
+        fromId: { in: titleIds },
+        toId: { in: titleIds },
+      },
+      select: { fromId: true, toId: true },
+    });
+    if (relations.length === 0) return parents;
+
+    const entryByTitle = new Map<string, string>();
+    for (const item of page) {
+      // First wins: two entries for one title cannot both be the parent, and the board's own
+      // de-duplication makes that pair impossible anyway.
+      if (item.titleId && !entryByTitle.has(item.titleId)) entryByTitle.set(item.titleId, item.id);
+    }
+
+    for (const relation of relations) {
+      const parentEntry = entryByTitle.get(relation.toId);
+      // Direction is member → container, so `toId` is always the parent.
+      if (parentEntry && !parents.has(relation.fromId)) {
+        parents.set(relation.fromId, parentEntry);
+      }
+    }
+    return parents;
+  }
+
+  private async themesFor(
+    titleIds: string[],
+    creatorId: string,
+  ): Promise<Map<string, Array<{ id: string; name: string }>>> {
+    const byTitle = new Map<string, Array<{ id: string; name: string }>>();
+    if (titleIds.length === 0) return byTitle;
+
+    const rows = await this.prisma.titleTheme.findMany({
+      // Scoped by creator: themes are per creator, and another creator's names must not appear.
+      where: { titleId: { in: titleIds }, theme: { creatorId } },
+      select: { titleId: true, theme: { select: { id: true, name: true } } },
+      orderBy: { theme: { name: 'asc' } },
+    });
+    for (const row of rows) {
+      const list = byTitle.get(row.titleId) ?? [];
+      list.push(row.theme);
+      byTitle.set(row.titleId, list);
+    }
+    return byTitle;
   }
 
   async toggleUpvote(creatorId: string, recommendationId: string, userId: string) {
@@ -448,14 +549,26 @@ export class RecommendationsService {
     rawCursor: string | undefined,
     limit: number | undefined,
     viewer: { userId: string | null; isStaff: boolean },
+    themeId?: string,
   ) {
     const take = Math.min(Math.max(limit ?? 20, 1), MAX_PAGE);
     const cursor = decodeCursor(rawCursor);
     const viewerUserId = viewer.userId;
 
+    // Scoped to this creator: a theme id from another board must not silently return an empty
+    // page, which reads as "no matches here" rather than "that is not your theme".
+    if (themeId) {
+      const theme = await this.prisma.theme.findFirst({
+        where: { id: themeId, creatorId: creator.id },
+        select: { id: true },
+      });
+      if (!theme) throw new NotFoundException();
+    }
+
     const items = (await this.prisma.recommendation.findMany({
       where: {
         creatorId: creator.id,
+        ...(themeId ? { title: { themes: { some: { themeId } } } } : {}),
         // Composed with AND, never spread: both clauses are disjunctions and want the `OR` key,
         // so spreading let the cursor overwrite the visibility filter outright — page one was
         // correct and every page after it returned rejected, deleted and other patrons' pending
@@ -488,8 +601,7 @@ export class RecommendationsService {
         ...RECOMMENDATION_FIELDS,
         upvoteCount: true,
         createdAt: true,
-        // Selected for the availability join, then dropped from the response: the internal id of
-        // a catalogue row is not something a board client has any use for.
+        // Selected for the availability and relation joins, then dropped from the response.
         titleId: true,
         // Whether *this* viewer upvoted. Without it a client cannot render the control's state
         // truthfully, and an optimistic toggle guesses the direction wrong.
@@ -524,12 +636,20 @@ export class RecommendationsService {
       this.logger.warn(`Availability lookup failed for board ${creator.id}: ${String(error)}`);
     }
 
+    const parents = await this.parentsFor(page, titleIds, creator.id);
+    const themes = await this.themesFor(titleIds, creator.id);
+
     return {
       items: page.map(({ upvotes, titleId, ...item }) => ({
         ...item,
         hasUpvoted: (upvotes ?? []).length > 0,
         // Null for an external link, which has no canonical identity to look up.
         availability: (titleId && availability.get(titleId)) || null,
+        // Nesting is a *per-board* projection, not a stored fact: whether an entry has a parent
+        // depends on what else is on this board, which changes with every submission and every
+        // status change.
+        parentId: (titleId && parents.get(titleId)) || null,
+        themes: (titleId && themes.get(titleId)) || [],
       })),
       nextCursor: hasMore && last ? encodeCursor(last) : null,
     };

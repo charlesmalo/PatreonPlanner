@@ -110,6 +110,57 @@ describe('Recommendations (integration)', () => {
   });
 
   describe('submitting', () => {
+    it('puts a bound title back in the enrichment queue', async () => {
+      // Themes are seeded from whoever holds the title *at enrichment time*. A title enriched
+      // for creator A and later suggested on B's board would otherwise leave B without any
+      // theme chips, forever, because nothing else ever clears the stamp.
+      const auth = await loginAs('enqueue-patron');
+      await makePatron('enqueue-patron', 1000);
+      ctx.catalog.results = [
+        {
+          tmdbId: 4242,
+          mediaType: 'MOVIE',
+          name: 'Enqueue Me',
+          year: 2001,
+          posterPath: null,
+          overview: null,
+        },
+      ];
+      await ctx.prisma.title.create({
+        data: { tmdbId: 4242, mediaType: 'MOVIE', name: 'Enqueue Me', enrichedAt: new Date() },
+      });
+
+      await submit(auth, { type: 'MOVIE', tmdbId: 4242 }).expect(201);
+      const title = await ctx.prisma.title.findUniqueOrThrow({
+        where: { tmdbId_mediaType: { tmdbId: 4242, mediaType: 'MOVIE' } },
+      });
+      expect(title.enrichedAt).toBeNull();
+    });
+
+    it('returns a recommendation shaped exactly like a board entry', async () => {
+      // A client prepends this result next to board entries. Every time the board projection has
+      // gained a field, this response has silently lacked it and the SPA has crashed on the
+      // prepended card — three times now.
+      const auth = await loginAs('shape-patron');
+      await makePatron('shape-patron', 1000);
+      const created = await submit(auth, {
+        type: 'EXTERNAL_LINK',
+        customTitle: 'Shape check',
+      }).expect(201);
+
+      const board = await request(ctx.app.getHttpServer())
+        .get('/api/v1/creators/board-co/recommendations?limit=50')
+        .set('Cookie', [auth.session, auth.csrf])
+        .expect(200);
+      const fromBoard = board.body.items.find(
+        (i: { id: string }) => i.id === created.body.recommendation.id,
+      );
+
+      expect(Object.keys(created.body.recommendation).sort()).toEqual(
+        Object.keys(fromBoard).sort(),
+      );
+    });
+
     it('refuses an anonymous submission', async () => {
       await request(ctx.app.getHttpServer())
         .post('/api/v1/creators/board-co/recommendations')

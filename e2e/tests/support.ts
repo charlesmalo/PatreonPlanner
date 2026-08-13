@@ -166,3 +166,45 @@ export function seedEntryFrom(
       FROM "User" u WHERE u."patreonUserId"=${sqlLiteral(patreonUserId)};
   `);
 }
+
+/**
+ * Seeds the relation graph directly. The enrichment job is disabled in this stack and ticks every
+ * fifteen minutes anyway, so waiting for it would test the scheduler rather than the board; the
+ * builder itself has its own integration suite. What these journeys exercise is the *read* path:
+ * that the SPA renders what the API projects.
+ */
+export function seedRelation(
+  fromTmdbId: number,
+  toTmdbId: number,
+  kind: 'SEASON_OF' | 'SAME_FRANCHISE' | 'RELATED',
+): void {
+  seed(`
+    INSERT INTO "TitleRelation"(id,"fromId","toId",kind,"createdAt")
+      SELECT gen_random_uuid(), f.id, t.id, '${kind}', now()
+      FROM "Title" f, "Title" t
+      WHERE f."tmdbId" = ${fromTmdbId} AND t."tmdbId" = ${toTmdbId} AND f.id <> t.id
+      ON CONFLICT ("fromId","toId",kind) DO NOTHING;
+  `);
+}
+
+export function seedTheme(name: string, tmdbIds: number[]): void {
+  const slug = name.toLowerCase();
+  seed(`
+    INSERT INTO "Theme"(id,"creatorId",name,slug,"sourceKey","createdAt","updatedAt")
+      VALUES (gen_random_uuid(),'${CREATOR.id}','${name}','${slug}','${slug}',now(),now())
+      ON CONFLICT ("creatorId",slug) DO NOTHING;
+    INSERT INTO "TitleTheme"("titleId","themeId")
+      SELECT t.id, th.id FROM "Title" t, "Theme" th
+      WHERE t."tmdbId" IN (${tmdbIds.join(',')}) AND th."creatorId" = '${CREATOR.id}'
+        AND th.slug = '${slug}'
+      ON CONFLICT DO NOTHING;
+  `);
+}
+
+export function clearIntelligence(): void {
+  seed(`
+    DELETE FROM "TitleRelation";
+    DELETE FROM "TitleTheme";
+    DELETE FROM "Theme" WHERE "creatorId" = '${CREATOR.id}';
+  `);
+}

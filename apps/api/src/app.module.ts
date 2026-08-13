@@ -8,6 +8,7 @@ import { CreatorsModule } from './creators/creators.module';
 import { CryptoModule } from './crypto/crypto.module';
 import { CsrfMiddleware } from './csrf/csrf.middleware';
 import { CsrfModule } from './csrf/csrf.module';
+import { IntelligenceModule } from './intelligence/intelligence.module';
 import { JobsModule } from './jobs/jobs.module';
 import { LimitsModule } from './limits/limits.module';
 import { ModerationModule } from './moderation/moderation.module';
@@ -37,6 +38,7 @@ import { HealthModule } from './health/health.module';
     AuthModule,
     AvailabilityModule,
     CatalogModule,
+    IntelligenceModule,
     CreatorsModule,
     RecommendationsModule,
     WebhooksModule,
