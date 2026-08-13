@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { FlagStatus, Prisma } from '@prisma/client';
+import { AbuseService } from '../abuse/abuse.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizeTitle } from '../recommendations/normalize-title';
 import { ModerationService } from './moderation.service';
@@ -19,6 +20,7 @@ export class ReviewQueueService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly moderation: ModerationService,
+    private readonly abuse: AbuseService,
   ) {}
 
   /**
@@ -195,7 +197,14 @@ export class ReviewQueueService {
     // A flag id alone says nothing about which board it belongs to; the join is what scopes it.
     const flag = await this.prisma.flag.findFirst({
       where: { id: flagId, recommendation: { creatorId } },
-      select: { id: true, status: true, recommendationId: true },
+      select: {
+        id: true,
+        status: true,
+        recommendationId: true,
+        // The submitter, never the reporter: striking the reporter would make reporting a
+        // weapon against the person who used it.
+        recommendation: { select: { submittedByUserId: true } },
+      },
     });
     if (!flag) throw new NotFoundException();
     if (flag.status !== 'OPEN') {
@@ -204,7 +213,7 @@ export class ReviewQueueService {
       throw new ConflictException('That report has already been handled');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const { count } = await tx.flag.updateMany({
         where: { id: flagId, status: 'OPEN' },
         data: { status, resolvedByUserId: actorUserId, resolvedAt: new Date() },
@@ -225,5 +234,29 @@ export class ReviewQueueService {
       });
       return updated;
     });
+
+    // Design §6.4: mod-upheld flags feed the abuse score. RESOLVED means the moderator agreed
+    // with the report; DISMISSED means they did not, and must never cost the submitter anything.
+    //
+    // At most one strike per *entry*, not per report. Flags are one-per-reporter, so an entry
+    // with ten reporters produced ten strikes — and ten strikes is the cap, a seven-day lockout
+    // from every board the user pays for. Ten throwaway accounts reporting one entry, resolved
+    // in good faith one by one, was a denial-of-service against a patron: exactly what §6.4's
+    // cap exists to prevent, routed around by making the *count* attacker-controlled.
+    if (status === 'RESOLVED') {
+      try {
+        const alreadyStruck = await this.prisma.moderationAction.count({
+          where: { recommendationId: flag.recommendationId, action: 'FLAG_RESOLVED' },
+        });
+        // This resolution's own audit row is already written, so the first upheld flag sees 1.
+        if (alreadyStruck <= 1) {
+          await this.abuse.strike(flag.recommendation.submittedByUserId, 'UPHELD_FLAG');
+        }
+      } catch (error) {
+        // A side effect of a decision already recorded; it must not undo the resolution.
+        this.logger.warn(`Could not record an upheld-flag strike: ${(error as Error).message}`);
+      }
+    }
+    return result;
   }
 }

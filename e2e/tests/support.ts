@@ -208,3 +208,17 @@ export function clearIntelligence(): void {
     DELETE FROM "Theme" WHERE "creatorId" = '${CREATOR.id}';
   `);
 }
+
+/** Times a signed-in identity out, as the abuse curve would after repeated strikes. */
+export function timeOutPatron(patreonUserId: string): void {
+  seed(`
+    INSERT INTO "AbuseRecord"(id,"userId","strikeCount","timeoutUntil","lastStrikeAt","createdAt","updatedAt")
+      SELECT gen_random_uuid(), u.id, 3, now() + interval '1 hour', now(), now(), now()
+      FROM "User" u WHERE u."patreonUserId" = ${sqlLiteral(patreonUserId)}
+      ON CONFLICT ("userId") DO UPDATE SET "timeoutUntil" = now() + interval '1 hour';
+  `);
+}
+
+export function clearAbuse(): void {
+  seed(`DELETE FROM "AbuseRecord";`);
+}

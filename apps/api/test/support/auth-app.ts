@@ -10,6 +10,8 @@ import { startDatabase } from './database';
 import { CATALOG_PROVIDER } from '../../src/catalog/catalog.provider';
 import { AVAILABILITY_PROVIDER } from '../../src/availability/availability.provider';
 import { AvailabilityService } from '../../src/availability/availability.service';
+import { RedisService } from '../../src/redis/redis.service';
+import { LimitsHarness } from './limits';
 import { FakeAvailabilityProvider } from './fake-availability.provider';
 import { FakeCatalogProvider } from './fake-catalog.provider';
 import { FakePatreonClient } from './fake-patreon.client';
@@ -34,6 +36,7 @@ export interface AuthTestContext {
   availability: FakeAvailabilityProvider;
   /** For awaiting the background refreshes a board read queues. */
   availabilityService: AvailabilityService;
+  limits: LimitsHarness;
   teardown: () => Promise<void>;
 }
 
@@ -77,6 +80,7 @@ export async function startAuthApp(): Promise<AuthTestContext> {
     catalog,
     availability,
     availabilityService: app.get(AvailabilityService),
+    limits: new LimitsHarness(app.get(RedisService).raw()),
     teardown: async () => {
       await prisma.$disconnect();
       await app.close();

@@ -75,6 +75,30 @@ nothing.
 State-changing requests need the `pp_csrf` cookie echoed in an `x-csrf-token` header. The token is
 signed and bound to the session, and is re-minted automatically on any safe request.
 
+## Abuse scoring
+
+A durable per-user strike count (`AbuseRecord`) drives an escalating, capped, decaying timeout
+(design §6.4).
+
+| Strikes | Timeout                                              |
+| ------- | ---------------------------------------------------- |
+| 1       | none — one blocked word is a mistake, not a campaign |
+| 2       | 1 hour                                               |
+| 3       | 2 hours                                              |
+| n       | doubling, capped at **7 days**                       |
+
+**Strikes come from** a moderation `BLOCK`, a rate-limit hit, a flag a moderator _upholds_ (never
+one they dismiss — that would make reporting a weapon against the person reported), and repeated
+de-duplicated resubmissions.
+
+**A timeout blocks submission only.** Viewing and upvoting continue: losing a board you paid for is
+out of proportion to a blocked word. The refusal is a `403` carrying `retryAt` and nothing else —
+explaining the rule invites gaming it.
+
+**No permanent lockouts.** The cap is the point: an uncapped penalty is a denial-of-service anyone
+can trigger on someone else's behalf. Strikes decay one per quiet day, and the record is deleted
+when the last one goes.
+
 ## Relations & themes
 
 Titles carry a relation graph and a theme taxonomy, both built from TMDB's structured data by a

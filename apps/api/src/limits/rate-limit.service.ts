@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { RedisService } from '../redis/redis.service';
 
-const PREFIX = 'ratelimit:';
+export const RATE_LIMIT_PREFIX = 'ratelimit:';
+const PREFIX = RATE_LIMIT_PREFIX;
 
 @Injectable()
 export class RateLimitService {
@@ -25,6 +26,21 @@ export class RateLimitService {
       windowSeconds,
     )) as number;
     return count <= limit;
+  }
+
+  /**
+   * Counts an event without a limit, for signals measured rather than enforced — repeated
+   * duplicate resubmissions, say. Returns the count within the window.
+   */
+  async count(key: string, windowSeconds: number): Promise<number> {
+    return (await this.redis.raw().eval(
+      `local c = redis.call('INCR', KEYS[1])
+       if c == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
+       return c`,
+      1,
+      `${PREFIX}${key}`,
+      windowSeconds,
+    )) as number;
   }
 
   /** Returns an allowance that was consumed for work that did not happen. Never goes below 0. */
