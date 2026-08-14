@@ -465,6 +465,11 @@ model Title {
   // When the relation/theme builder last *attempted* this title. Ordering on it stops a
   // permanently failing title from occupying the batch forever.
   enrichedAt      DateTime?
+  /// Which model produced the `embedding` column (added in raw SQL — Prisma has no vector type).
+  /// Compared against the configured model so a rotation re-embeds, rather than leaving two
+  /// incomparable vector spaces in one column with nothing to notice it.
+  embeddingModel  String?
+  embeddedAt      DateTime?
   aliases         TitleAlias[]
   recommendations Recommendation[]
   availability    StreamingAvailability[]
@@ -477,6 +482,8 @@ model Title {
   @@unique([tmdbId, mediaType])
   // The enrichment job walks the un-enriched oldest first.
   @@index([enrichedAt])
+  // The embedding job walks rows with no vector or a stale model.
+  @@index([embeddingModel])
 }
 
 model StreamingAvailability {

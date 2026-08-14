@@ -1,5 +1,6 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { EMBEDDING_PROVIDER, EmbeddingProvider } from '../embeddings/embedding.provider';
 import type { StaffRoleValue } from '../access/capability';
 import { ConfigService } from '../config/config.module';
 import { PrismaService } from '../prisma/prisma.service';
@@ -28,13 +29,25 @@ const MIN_QUERY_LENGTH = 2;
 /** Bounds the worst case on an endpoint reachable anonymously on a public board. */
 const STATEMENT_TIMEOUT_MS = 3000;
 
+/**
+ * Reciprocal-rank-fusion constant, from the original paper. A trigram similarity and a cosine
+ * distance have no relationship to each other, so any weighted sum of the two scores would be a
+ * number nobody could justify; fusing the *orderings* needs no normalisation and degrades to
+ * "whatever one arm returned" when the other is empty — exactly the behaviour wanted when the
+ * model is unavailable.
+ */
+const RRF_K = 60;
+
 type Viewer = { userId: string | null; staffRole: StaffRoleValue | null };
 
 @Injectable()
 export class SearchService {
+  private readonly logger = new Logger(SearchService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    @Inject(EMBEDDING_PROVIDER) private readonly embeddings: EmbeddingProvider,
   ) {}
 
   /**
@@ -58,7 +71,11 @@ export class SearchService {
       throw new BadRequestException('Search for at least two characters');
     }
 
-    const orderedIds = await this.rankCandidates(creator.id, normalized);
+    const [lexical, semantic] = await Promise.all([
+      this.rankCandidates(creator.id, normalized),
+      this.rankSemantic(creator.id, query),
+    ]);
+    const orderedIds = fuse(lexical, semantic);
     if (orderedIds.length === 0) return { items: [] };
 
     const rows = await this.prisma.recommendation.findMany({
@@ -95,6 +112,38 @@ export class SearchService {
         })
         .slice(0, MAX_SEARCH_RESULTS),
     };
+  }
+
+  /**
+   * Ids by descending semantic proximity, or none when embeddings are off or unavailable.
+   *
+   * Restricted to titles embedded by the *configured* model: a row still carrying an older
+   * model's vector lives in a different space, and comparing across them produces confident
+   * nonsense rather than an error.
+   */
+  private async rankSemantic(creatorId: string, query: string): Promise<string[]> {
+    if (!this.embeddings.isConfigured()) return [];
+    try {
+      const vector = await this.embeddings.embedQuery(query);
+      const literal = `[${vector.join(',')}]`;
+      const rows = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        SELECT r."id"
+        FROM "Recommendation" r
+        JOIN "Title" t ON t."id" = r."titleId"
+        WHERE r."creatorId" = ${creatorId}::uuid
+          AND t."embedding" IS NOT NULL
+          AND t."embeddingModel" = ${this.embeddings.modelId()}
+        ORDER BY t."embedding" <=> ${literal}::vector
+        LIMIT ${MAX_SEARCH_RESULTS * CANDIDATE_MULTIPLIER}
+      `);
+      return rows.map((row) => row.id);
+    } catch (error) {
+      // Semantic matching improves a working feature; it is never a dependency of one.
+      this.logger.warn(
+        `Semantic search unavailable, using trigram only: ${(error as Error).message}`,
+      );
+      return [];
+    }
   }
 
   /**
@@ -145,4 +194,18 @@ export class SearchService {
 
     return ranked.map((row) => row.id);
   }
+}
+
+/**
+ * Reciprocal rank fusion. An id appearing in both orderings outranks one appearing in either,
+ * without ever comparing a trigram score to a cosine distance.
+ */
+function fuse(...rankings: string[][]): string[] {
+  const scores = new Map<string, number>();
+  for (const ranking of rankings) {
+    ranking.forEach((id, index) => {
+      scores.set(id, (scores.get(id) ?? 0) + 1 / (RRF_K + index + 1));
+    });
+  }
+  return [...scores.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id);
 }

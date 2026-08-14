@@ -75,6 +75,36 @@ nothing.
 State-changing requests need the `pp_csrf` cookie echoed in an `x-csrf-token` header. The token is
 signed and bound to the session, and is re-minted automatically on any safe request.
 
+## Semantic search (optional, free)
+
+With `EMBEDDINGS_ENABLED=true`, titles are vectorised by a **local ONNX model** — no key, no
+vendor, no per-call cost, nothing leaving the box — and search gains a second candidate arm, so
+"bounty hunters in orbit" finds _Cowboy Bebop_ and 君の名は。 matches "Your Name" even without an
+alias.
+
+| Setting                | Default                                                                        |
+| ---------------------- | ------------------------------------------------------------------------------ |
+| `EMBEDDINGS_ENABLED`   | `false`                                                                        |
+| `EMBEDDING_MODEL`      | `Xenova/multilingual-e5-small` (384 dims, ~120MB on disk, ~250–400MB resident) |
+| `EMBEDDING_DIMENSIONS` | `384` — must match the `Title.embedding` column                                |
+
+**Rotating models.** Every row records the model that embedded it, and the job re-embeds anything
+whose recorded model no longer matches the configured one — so changing `EMBEDDING_MODEL` is a
+setting change plus a catch-up, not a column that quietly stops meaning one thing. Moving to a
+different _width_ (`multilingual-e5-base` is 768) additionally needs a migration altering the
+column and rebuilding the HNSW index; that is deliberately manual.
+
+**Lexical and semantic results are fused by reciprocal rank**, never by comparing scores: a
+trigram similarity and a cosine distance have no relationship to each other. With the model off or
+unloadable, fusion degrades to trigram-only — semantic matching improves a working feature and is
+never a dependency of one.
+
+**Verifying the model.** The suites use a fake, because downloading 120MB per CI run is not worth
+it. The real provider is checked by `pnpm --filter @app/api verify:embeddings`, which asserts the
+cross-language property against actual weights. **Run it before changing the provider** — a dropped
+e5 prefix or the wrong pooling strategy looks like a no-op everywhere else. It is not a jest suite
+because onnxruntime's tensors fail typed-array checks inside jest's VM realm.
+
 ## Board search
 
 `GET /creators/:slug/recommendations/similar?q=…` finds entries that look like what someone is

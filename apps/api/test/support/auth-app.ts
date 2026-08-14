@@ -11,7 +11,9 @@ import { AVAILABILITY_PROVIDER } from '../../src/availability/availability.provi
 import { AvailabilityService } from '../../src/availability/availability.service';
 import { RedisService } from '../../src/redis/redis.service';
 import { LimitsHarness } from './limits';
+import { EMBEDDING_PROVIDER } from '../../src/embeddings/embedding.provider';
 import { FakeAvailabilityProvider } from './fake-availability.provider';
+import { FakeEmbeddingProvider } from './fake-embedding.provider';
 import { FakeCatalogProvider } from './fake-catalog.provider';
 import { FakePatreonClient } from './fake-patreon.client';
 import { applyTestConfigDefaults } from './env';
@@ -33,6 +35,7 @@ export interface AuthTestContext {
   patreon: FakePatreonClient;
   catalog: FakeCatalogProvider;
   availability: FakeAvailabilityProvider;
+  embeddings: FakeEmbeddingProvider;
   /** For awaiting the background refreshes a board read queues. */
   availabilityService: AvailabilityService;
   limits: LimitsHarness;
@@ -59,6 +62,7 @@ export async function startAuthApp(): Promise<AuthTestContext> {
   const patreon = new FakePatreonClient();
   const catalog = new FakeCatalogProvider();
   const availability = new FakeAvailabilityProvider();
+  const embeddings = new FakeEmbeddingProvider();
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(PATREON_CLIENT)
     .useValue(patreon)
@@ -66,6 +70,8 @@ export async function startAuthApp(): Promise<AuthTestContext> {
     .useValue(catalog)
     .overrideProvider(AVAILABILITY_PROVIDER)
     .useValue(availability)
+    .overrideProvider(EMBEDDING_PROVIDER)
+    .useValue(embeddings)
     .compile();
 
   const app = moduleRef.createNestApplication({ rawBody: true });
@@ -88,6 +94,7 @@ export async function startAuthApp(): Promise<AuthTestContext> {
     patreon,
     catalog,
     availability,
+    embeddings,
     availabilityService: app.get(AvailabilityService),
     limits: new LimitsHarness(app.get(RedisService).raw()),
     teardown: async () => {

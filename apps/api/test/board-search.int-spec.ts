@@ -1,4 +1,5 @@
 import request from 'supertest';
+import { EmbedTitlesJob } from '../src/jobs/embed-titles.job';
 import { MAX_SEARCH_RESULTS } from '../src/recommendations/search.service';
 import { AuthTestContext, pickCookie, startAuthApp } from './support/auth-app';
 
@@ -271,6 +272,95 @@ describe('Board search (integration)', () => {
         where: { creatorId },
         data: { viewVisibility: 'PUBLIC' },
       });
+    });
+  });
+
+  describe('semantic matching', () => {
+    // The fake declares equivalences rather than modelling meaning; the real model is verified
+    // by `pnpm --filter @app/api verify:embeddings`, which asserts the cross-language property
+    // against actual weights.
+    async function embed() {
+      const job = ctx.app.get(EmbedTitlesJob);
+      await job.runOnce();
+    }
+
+    beforeEach(async () => {
+      ctx.embeddings.configured = true;
+      ctx.embeddings.synonyms.clear();
+    });
+
+    it('finds a title by meaning when no letters match', async () => {
+      const title = await ctx.prisma.title.create({
+        data: { tmdbId: 9001, mediaType: 'TV', name: 'Cowboy Bebop' },
+      });
+      const bebopId = (await entry('Cowboy Bebop', { titleId: title.id })).id;
+      // Deliberately shares no word and no trigram with the title. An earlier version used
+      // "space cowboys", which contains "cowboy" — so the trigram arm found it and the test
+      // passed with semantic search entirely disabled.
+      const query = 'bounty hunters in orbit';
+      expect(query).not.toMatch(/cowboy|bebop/i);
+      ctx.embeddings.near(query, 'cowboy bebop');
+
+      // Without the vector arm there is nothing to match on at all.
+      ctx.embeddings.configured = false;
+      expect(ids((await search(patron, query).expect(200)).body)).not.toContain(bebopId);
+
+      ctx.embeddings.configured = true;
+      await embed();
+      expect(ids((await search(patron, query).expect(200)).body)).toContain(bebopId);
+    });
+
+    it('still finds trigram matches when the model is unavailable', async () => {
+      // Semantic matching improves a working feature; it is never a dependency of one.
+      ctx.embeddings.configured = false;
+      expect(ids((await search(patron, 'sprited away').expect(200)).body)).toContain(spiritedId);
+    });
+
+    it('applies the same visibility rules to semantic candidates', async () => {
+      // A new candidate source is a new way to bypass the filter if the ids do not go through
+      // the same read model.
+      const title = await ctx.prisma.title.create({
+        data: { tmdbId: 9002, mediaType: 'MOVIE', name: 'Hidden Thing' },
+      });
+      const hidden = await entry('Hidden Thing', { titleId: title.id, status: 'REJECTED' });
+      ctx.embeddings.near('completely different words', 'hidden thing');
+      await embed();
+
+      const res = await search(patron, 'completely different words').expect(200);
+      expect(ids(res.body)).not.toContain(hidden.id);
+    });
+
+    it('never returns another creator entries by semantic match', async () => {
+      const title = await ctx.prisma.title.create({
+        data: { tmdbId: 9003, mediaType: 'MOVIE', name: 'Foreign Thing' },
+      });
+      const foreign = await entry('Foreign Thing', {
+        titleId: title.id,
+        creator: otherCreatorId,
+      });
+      ctx.embeddings.near('unrelated phrase', 'foreign thing');
+      await embed();
+
+      const res = await search(patron, 'unrelated phrase').expect(200);
+      expect(ids(res.body)).not.toContain(foreign.id);
+    });
+
+    it('ignores a vector written by a model this deployment no longer uses', async () => {
+      // A stale vector lives in a different space; comparing across them produces confident
+      // nonsense rather than an error.
+      const title = await ctx.prisma.title.create({
+        data: { tmdbId: 9004, mediaType: 'MOVIE', name: 'Stale Thing' },
+      });
+      const stale = await entry('Stale Thing', { titleId: title.id });
+      ctx.embeddings.near('nothing alike', 'stale thing');
+      await embed();
+      await ctx.prisma.title.update({
+        where: { id: title.id },
+        data: { embeddingModel: 'previous/model' },
+      });
+
+      const res = await search(patron, 'nothing alike').expect(200);
+      expect(ids(res.body)).not.toContain(stale.id);
     });
   });
 
