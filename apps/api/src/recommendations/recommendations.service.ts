@@ -16,6 +16,7 @@ import {
 } from '@prisma/client';
 import type { StaffRoleValue } from '../access/capability';
 import { AbuseService } from '../abuse/abuse.service';
+import { NOTE_FIELDS } from '../notes/notes.service';
 import { AvailabilityService, StoredAvailability } from '../availability/availability.service';
 import { CatalogService } from '../catalog/catalog.service';
 import { ConfigService } from '../config/config.module';
@@ -54,6 +55,16 @@ const BOARD_ONLY_DEFAULTS = {
   parentId: null,
   themes: [] as Array<{ id: string; name: string }>,
 };
+
+/**
+ * Renames the `creatorNotes` relation to the `notes` the contract uses, so a single-entry
+ * response is the same shape as a board entry. The relation had to dodge Recommendation's own
+ * `notes` scalar; the API does not have to inherit that.
+ */
+function present<T extends { creatorNotes?: unknown[] }>(row: T) {
+  const { creatorNotes, ...rest } = row;
+  return { ...rest, notes: creatorNotes ?? [] };
+}
 
 // Containment only. RELATED means "similar", and nesting on it would bury unrelated entries.
 const NESTING_KINDS: RelationKind[] = ['SEASON_OF', 'SAME_FRANCHISE'];
@@ -135,6 +146,14 @@ const RECOMMENDATION_FIELDS = {
     select: { id: true, tmdbId: true, mediaType: true, name: true, year: true, posterPath: true },
   },
   links: { select: { url: true, label: true } },
+  // TIMELINE only. A NOTE is editor commentary and must never reach the patron board — the kind
+  // is the whole point of the model, so the filter lives in the projection rather than in a
+  // caller who might forget it.
+  creatorNotes: {
+    where: { kind: 'TIMELINE' },
+    select: NOTE_FIELDS,
+    orderBy: { createdAt: 'asc' },
+  },
   watchOrderItems: {
     select: {
       position: true,
@@ -313,12 +332,15 @@ export class RecommendationsService {
    * renders it as a card alongside board entries — and a card missing them crashes. That lesson
    * is already written above for `hasUpvoted`; nesting and themes joined it the same way.
    */
-  private async withUpvoted<T extends { id: string }>(recommendation: T, userId: string) {
+  private async withUpvoted<T extends { id: string; creatorNotes?: unknown[] }>(
+    recommendation: T,
+    userId: string,
+  ) {
     const upvote = await this.prisma.upvote.findUnique({
       where: { recommendationId_userId: { recommendationId: recommendation.id, userId } },
       select: { id: true },
     });
-    return { ...recommendation, hasUpvoted: upvote !== null, ...BOARD_ONLY_DEFAULTS };
+    return { ...present(recommendation), hasUpvoted: upvote !== null, ...BOARD_ONLY_DEFAULTS };
   }
 
   /**
@@ -457,7 +479,7 @@ export class RecommendationsService {
     // Nothing can have upvoted a recommendation that did not exist a moment ago.
     return {
       duplicate: false as const,
-      recommendation: { ...recommendation, hasUpvoted: false, ...BOARD_ONLY_DEFAULTS },
+      recommendation: { ...present(recommendation), hasUpvoted: false, ...BOARD_ONLY_DEFAULTS },
     };
   }
 
@@ -709,6 +731,7 @@ export class RecommendationsService {
       createdAt: Date;
       titleId: string | null;
       upvotes?: Array<{ id: string }>;
+      creatorNotes?: unknown[];
     }>;
 
     const hasMore = items.length > take;
@@ -734,8 +757,11 @@ export class RecommendationsService {
     const themes = await this.themesFor(titleIds, creator.id);
 
     return {
-      items: page.map(({ upvotes, titleId, ...item }) => ({
+      items: page.map(({ upvotes, titleId, creatorNotes, ...item }) => ({
         ...item,
+        // `creatorNotes` is a schema artefact — the model had to dodge Recommendation's own
+        // `notes` scalar. The contract says what design §7 says.
+        notes: creatorNotes ?? [],
         hasUpvoted: (upvotes ?? []).length > 0,
         // Null for an external link, which has no canonical identity to look up.
         availability: (titleId && availability.get(titleId)) || null,

@@ -14,6 +14,7 @@ import { JobsModule } from './jobs/jobs.module';
 import { LimitsModule } from './limits/limits.module';
 import { ModerationModule } from './moderation/moderation.module';
 import { MembershipsModule } from './memberships/memberships.module';
+import { NotesModule } from './notes/notes.module';
 import { PatreonModule } from './patreon/patreon.module';
 import { RecommendationsModule } from './recommendations/recommendations.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -33,6 +34,7 @@ import { HealthModule } from './health/health.module';
     RedisModule,
     SessionModule,
     StaffModule,
+    NotesModule,
     PatreonModule,
     MembershipsModule,
     JobsModule,
