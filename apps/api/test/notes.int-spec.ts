@@ -181,6 +181,30 @@ describe('Creator notes (integration)', () => {
       await write({ kind: 'NOTE', body: '' }).expect(400);
       await write({ kind: 'NOTE', body: 'x'.repeat(2001) }).expect(400);
     });
+
+    it('rejects a body that is only whitespace', async () => {
+      // Trimmed before the length check: otherwise "   " passed and stored as "", which renders
+      // as an empty bullet — on the public board when the kind is TIMELINE.
+      await write({ kind: 'NOTE', body: '     ' }).expect(400);
+    });
+
+    it('accepts an explicit null date on commentary', async () => {
+      // "No date" is what a client naturally sends on a NOTE; it is not an error.
+      await write({ kind: 'NOTE', body: 'x', plannedFor: null }).expect(201);
+    });
+
+    it('keeps the cap under concurrent writes', async () => {
+      // A read-then-write cap does not survive a double-click.
+      for (let i = 0; i < MAX_NOTES_PER_ENTRY - 1; i += 1) {
+        await write({ kind: 'NOTE', body: `note ${i}` }).expect(201);
+      }
+      await Promise.all(
+        Array.from({ length: 6 }, (_unused, i) => write({ kind: 'NOTE', body: `race ${i}` })),
+      );
+      expect(await ctx.prisma.creatorNote.count({ where: { recommendationId: recId } })).toBe(
+        MAX_NOTES_PER_ENTRY,
+      );
+    });
   });
 
   describe('editing and deleting', () => {
@@ -190,6 +214,37 @@ describe('Creator notes (integration)', () => {
         body: 'second',
       }).expect(200);
       expect(res.body.body).toBe('second');
+    });
+
+    it('refuses a planned date when editing commentary', async () => {
+      // The only untested branch between a client and the CHECK constraint — removing the guard
+      // turns this into a 500.
+      const { body: note } = await write({ kind: 'NOTE', body: 'fine' }).expect(201);
+      await patch(staff, `/creators/notes-co/notes/${note.id}`, {
+        body: 'fine',
+        plannedFor: '2026-03-01T00:00:00.000Z',
+      }).expect(400);
+    });
+
+    it('clears a planned date with an explicit null, and leaves it alone when omitted', async () => {
+      // Omitting preserved the date and null wrote the Unix epoch, so there was no way to clear
+      // one — and the input a client would reach for was the one that corrupted it.
+      const { body: note } = await write({
+        kind: 'TIMELINE',
+        body: 'March',
+        plannedFor: '2026-03-01T00:00:00.000Z',
+      }).expect(201);
+
+      const kept = await patch(staff, `/creators/notes-co/notes/${note.id}`, {
+        body: 'March still',
+      }).expect(200);
+      expect(kept.body.plannedFor).toBe('2026-03-01T00:00:00.000Z');
+
+      const cleared = await patch(staff, `/creators/notes-co/notes/${note.id}`, {
+        body: 'sometime',
+        plannedFor: null,
+      }).expect(200);
+      expect(cleared.body.plannedFor).toBeNull();
     });
 
     it('moderates an edited body', async () => {
@@ -278,6 +333,16 @@ describe('Creator notes (integration)', () => {
         'Covering this in March',
         'third',
       ]);
+    });
+
+    it('never shows editor commentary in a submit response', async () => {
+      // The submit and board projections share one constant today; if they ever diverge this is
+      // what fails rather than a patron reading a moderator's private note.
+      const res = await post(patron, '/creators/notes-co/recommendations', {
+        type: 'EXTERNAL_LINK',
+        customTitle: 'Entry 1',
+      });
+      expect(JSON.stringify(res.body)).not.toContain(PRIVATE);
     });
 
     it('leaves an entry with no notes an empty array', async () => {

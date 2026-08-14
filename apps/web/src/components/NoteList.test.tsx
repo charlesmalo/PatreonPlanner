@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { NoteList } from './NoteList';
 import type { CreatorNote } from '../api/types';
 
@@ -39,6 +40,29 @@ describe('NoteList', () => {
     render(<NoteList notes={[note({ kind: 'NOTE', plannedFor: null }), note({ id: 'n2' })]} />);
     expect(screen.getByText(/private/i)).toBeInTheDocument();
     expect(screen.getByText(/public/i)).toBeInTheDocument();
+  });
+
+  it('offers no delete control unless a staff surface asks for one', () => {
+    render(<NoteList notes={[note()]} />);
+    expect(screen.queryByRole('button', { name: /delete/i })).not.toBeInTheDocument();
+  });
+
+  it('reports a deletion to its caller', async () => {
+    const onDelete = vi.fn();
+    render(<NoteList notes={[note()]} onDelete={onDelete} />);
+    await userEvent.click(screen.getByRole('button', { name: /delete this timeline note/i }));
+    expect(onDelete).toHaveBeenCalledWith(expect.objectContaining({ id: 'n1' }));
+  });
+
+  it('renders the planned date as it was picked, not shifted by the reader timezone', () => {
+    // Stored at UTC midnight from a plain date input; rendered locally, the author who chose
+    // 1 March reads 28 February back on their own machine.
+    render(<NoteList notes={[note({ plannedFor: '2026-03-01T00:00:00.000Z' })]} />);
+    // Asserted as a property, not a format: the rendered date is the reader's locale, and
+    // pinning "3/1/2026" tests the runtime's formatting rather than the timezone handling.
+    const rendered = screen.getByText((text) => /2026/.test(text) && /\b0?1\b|03-01/.test(text));
+    expect(rendered).toBeInTheDocument();
+    expect(rendered.textContent).not.toMatch(/28|02-2/);
   });
 
   it('renders a body containing markup as text', () => {

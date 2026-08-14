@@ -475,12 +475,13 @@ test('a moderator writes notes, and only the timeline one reaches the board', as
 
   await page.goto(`/c/${CREATOR.slug}/review`);
 
-  await page.getByLabel('Note').fill(PRIVATE);
+  // Exact: the delete control's accessible name also contains "note".
+  await page.getByLabel('Note', { exact: true }).fill(PRIVATE);
   await page.getByRole('button', { name: /add note/i }).click();
   await expect(page.getByText(PRIVATE)).toBeVisible();
 
   await page.getByLabel('Kind').selectOption('TIMELINE');
-  await page.getByLabel('Note').fill('Covering this in March');
+  await page.getByLabel('Note', { exact: true }).fill('Covering this in March');
   await page.getByRole('button', { name: /add note/i }).click();
   await expect(page.getByText('Covering this in March')).toBeVisible();
 

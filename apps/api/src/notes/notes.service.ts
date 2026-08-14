@@ -37,7 +37,7 @@ export class NotesService {
     authorUserId: string,
     kind: NoteKind,
     body: string,
-    plannedFor?: string,
+    plannedFor?: string | null,
   ) {
     // Scoped by creatorId: the guard proved access to this creator, not to this entry.
     const entry = await this.prisma.recommendation.findFirst({
@@ -47,26 +47,32 @@ export class NotesService {
     if (!entry) throw new NotFoundException();
 
     // A date on editor commentary has no meaning and nothing renders it. The check constraint
-    // agrees; this turns it into a 400 rather than a 500.
-    if (kind !== 'TIMELINE' && plannedFor !== undefined) {
+    // agrees; this turns it into a 400 rather than a 500. `null` is "no date", which is what a
+    // client naturally sends on commentary, so it is not an error.
+    if (kind !== 'TIMELINE' && plannedFor != null) {
       throw new BadRequestException('Only a timeline note can carry a planned date');
     }
     await this.assertClean(body, authorUserId);
 
-    const existing = await this.prisma.creatorNote.count({ where: { recommendationId } });
-    if (existing >= MAX_NOTES_PER_ENTRY) {
-      throw new ConflictException('That entry already has too many notes');
-    }
+    // Counted and written under a lock on the entry: a read-then-write cap does not survive a
+    // double-click, and the cap exists to stop an unpaginated wall of text on a board card.
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Recommendation" WHERE id = ${recommendationId}::uuid FOR UPDATE`;
+      const existing = await tx.creatorNote.count({ where: { recommendationId } });
+      if (existing >= MAX_NOTES_PER_ENTRY) {
+        throw new ConflictException('That entry already has too many notes');
+      }
 
-    return this.prisma.creatorNote.create({
-      data: {
-        recommendationId,
-        authorUserId,
-        kind,
-        body: body.trim(),
-        plannedFor: plannedFor ? new Date(plannedFor) : null,
-      },
-      select: NOTE_FIELDS,
+      return tx.creatorNote.create({
+        data: {
+          recommendationId,
+          authorUserId,
+          kind,
+          body: body.trim(),
+          plannedFor: plannedFor ? new Date(plannedFor) : null,
+        },
+        select: NOTE_FIELDS,
+      });
     });
   }
 
@@ -75,10 +81,10 @@ export class NotesService {
     noteId: string,
     actorUserId: string,
     body: string,
-    plannedFor?: string,
+    plannedFor?: string | null,
   ) {
     const note = await this.find(creatorId, noteId);
-    if (note.kind !== 'TIMELINE' && plannedFor !== undefined) {
+    if (note.kind !== 'TIMELINE' && plannedFor != null) {
       throw new BadRequestException('Only a timeline note can carry a planned date');
     }
     await this.assertClean(body, actorUserId);
@@ -87,7 +93,9 @@ export class NotesService {
       where: { id: note.id },
       data: {
         body: body.trim(),
-        ...(plannedFor === undefined ? {} : { plannedFor: new Date(plannedFor) }),
+        // Omitted leaves the existing date; `null` clears it. Without the distinction there was
+        // no way to unset one, and the input a client would try wrote the Unix epoch instead.
+        ...(plannedFor === undefined ? {} : { plannedFor: plannedFor && new Date(plannedFor) }),
       },
       select: NOTE_FIELDS,
     });
