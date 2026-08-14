@@ -65,7 +65,10 @@ export function seed(sql: string): void {
 const REDIS_CONTAINER = process.env.E2E_REDIS_CONTAINER ?? 'patreonplanner-e2e-redis-1';
 
 /**
- * Clears the submission rate-limit counters. Their window is an hour, so without this the suite
+ * Clears the submission rate-limit counters and the coarse token buckets.
+ *
+ * Every request in this suite comes from one address, so the per-IP bucket is shared by the
+ * whole run — without clearing it, a late journey fails on a ceiling an early one spent. Their window is an hour, so without this the suite
  * is not hermetic: counters survive between runs and CI retries, and a later run starts hitting
  * 429 on submissions that should succeed.
  */
@@ -78,7 +81,7 @@ export function resetRateLimits(): void {
       REDIS_CONTAINER,
       'sh',
       '-c',
-      "redis-cli --scan --pattern 'ratelimit:*' | xargs -r redis-cli del > /dev/null",
+      "redis-cli --scan --pattern 'ratelimit:*' | xargs -r redis-cli del > /dev/null; redis-cli --scan --pattern 'bucket:*' | xargs -r redis-cli del > /dev/null",
     ],
     { stdio: 'pipe' },
   );

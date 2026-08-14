@@ -57,6 +57,19 @@ export const configSchema = z.object({
   // more loosely than one of short ones — so it is operational rather than a constant.
   SEARCH_SIMILARITY_THRESHOLD: z.coerce.number().min(0.05).max(1).default(0.3),
 
+  /**
+   * How many proxies sit in front of the API. Getting this wrong is silent in both directions —
+   * too high and a client forges its address, too low and everyone behind the proxy shares one
+   * bucket — so it defaults to the safe-but-useless answer and warns at boot.
+   */
+  TRUSTED_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
+  // Generous velocity caps, not quotas (design §6.2): a person using the product normally must
+  // never reach them.
+  COARSE_LIMIT_BURST: z.coerce.number().int().positive().default(60),
+  COARSE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(120),
+  SEARCH_LIMIT_BURST: z.coerce.number().int().positive().default(30),
+  SEARCH_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(60),
+
   SUBMIT_LIMIT_PER_HOUR: z.coerce.number().int().positive().default(1),
   // Design §6 item 3: a looser cap across all creators, so a patron of twenty creators cannot
   // submit twenty an hour.

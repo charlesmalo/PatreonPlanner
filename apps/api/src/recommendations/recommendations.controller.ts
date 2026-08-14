@@ -26,6 +26,7 @@ import { FlagsService } from '../moderation/flags.service';
 import { ModerationActionsService } from '../moderation/moderation-actions.service';
 import { CurrentUser, CurrentUserPayload, SessionGuard } from '../session/session.guard';
 import { ListRecommendationsQuery, SimilarQuery } from './dto/list-recommendations.query';
+import { RateLimited } from '../limits/rate-limit.guard';
 import { SearchService } from './search.service';
 import { SubmitRecommendationDto } from './dto/submit-recommendation.dto';
 import { RecommendationsService } from './recommendations.service';
@@ -59,6 +60,8 @@ export class RecommendationsController {
    * Declared before the `:id` routes so `similar` is not swallowed as an id.
    */
   @Get('similar')
+  // The one read with a measured per-request cost, and reachable anonymously on a public board.
+  @RateLimited('search')
   @RequireCapability('VIEW')
   @UseGuards(CreatorAccessGuard)
   similar(
