@@ -32,6 +32,26 @@ describe('SimilarEntries', () => {
     expect(screen.getByRole('button', { name: /upvote/i })).toBeInTheDocument();
   });
 
+  it('reflects an upvote in its own list, not only in the board', async () => {
+    // UpvoteButton renders from its props: without updating this list's copy the count springs
+    // back on reconcile, and the control looks broken exactly where it is meant to be useful.
+    const onCount = vi.fn();
+    global.fetch = fakeApi({
+      'GET /api/v1/creators/ada-writes/recommendations/similar': match,
+      'POST /api/v1/creators/ada-writes/recommendations/existing/upvote': {
+        upvoted: true,
+        upvoteCount: 4,
+      },
+    });
+    renderIt('sprited away', onCount);
+    await userEvent.click(await screen.findByRole('button', { name: /^Upvote Spirited Away/i }));
+
+    expect(
+      await screen.findByRole('button', { name: /Remove upvote from Spirited Away — 4 upvotes/i }),
+    ).toBeInTheDocument();
+    expect(onCount).toHaveBeenCalledWith('existing', 4, true);
+  });
+
   it('renders nothing when there are no matches, rather than an empty box', async () => {
     global.fetch = fakeApi({
       'GET /api/v1/creators/ada-writes/recommendations/similar': { items: [] },

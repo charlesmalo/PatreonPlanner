@@ -75,6 +75,28 @@ nothing.
 State-changing requests need the `pp_csrf` cookie echoed in an `x-csrf-token` header. The token is
 signed and bound to the session, and is re-minted automatically on any safe request.
 
+## Board search
+
+`GET /creators/:slug/recommendations/similar?q=…` finds entries that look like what someone is
+typing, so a patron sees "already on the board — upvote instead?" before submitting a duplicate.
+
+Built on **`pg_trgm`** — a Postgres contrib extension, already in the image. No vendor, no key, no
+per-call cost.
+
+- Similarity runs over `normalizedTitle`, the same lowercased, punctuation-stripped string
+  de-duplication uses, so "The Matrix!" and "the matrix" are one target rather than two.
+- **`TitleAlias` is searched too**, so "Your Name" finds an entry named 君の名は。 — the one piece
+  of cross-language matching available without an embedding model.
+- `SEARCH_SIMILARITY_THRESHOLD` (default `0.3`, pg_trgm's own) tunes how loose a match is; the
+  right value is corpus-dependent.
+
+**Candidates come from SQL; visibility comes from the board's read model.** The raw query returns
+ids and scores only, and those ids then go through the same `visibilityWhere()` the board uses — so
+a change to the visibility rules cannot leave search behind. Writing the status filter into the SQL
+would have been shorter and would have diverged the first time those rules changed.
+
+Not built: semantic / cross-language matching beyond aliases, which needs an embedding model.
+
 ## Notes & timelines
 
 Staff can write two kinds of note on an entry (design §7):

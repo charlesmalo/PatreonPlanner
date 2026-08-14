@@ -62,7 +62,24 @@ export function SimilarEntries({ slug, query, canUpvote, onCount }: SimilarEntri
               upvoteCount={match.upvoteCount}
               hasUpvoted={match.hasUpvoted}
               canUpvote={canUpvote}
-              onCount={onCount}
+              // Applied here as well as forwarded: UpvoteButton renders from its props, so
+              // without updating this list's own copy the count springs back the moment the
+              // optimistic update reconciles — the control would look broken in the one place
+              // the feature exists to make useful.
+              onCount={(id, count, upvoted) => {
+                setMatches((current) =>
+                  current.map((item) =>
+                    item.id === id
+                      ? {
+                          ...item,
+                          upvoteCount: count,
+                          ...(upvoted === undefined ? {} : { hasUpvoted: upvoted }),
+                        }
+                      : item,
+                  ),
+                );
+                onCount(id, count, upvoted);
+              }}
             />
             {/* Text, never markup: a title is submitter-authored. */}
             <span className="min-w-0 break-words text-xs">{match.customTitle}</span>

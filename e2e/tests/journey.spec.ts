@@ -491,3 +491,31 @@ test('a moderator writes notes, and only the timeline one reaches the board', as
   await expect(page.getByText('Covering this in March')).toBeVisible();
   await expect(page.locator('body')).not.toContainText(PRIVATE);
 });
+
+test('a misspelling surfaces the existing entry, and upvoting it avoids a duplicate', async ({
+  page,
+}) => {
+  await signIn(page, 500);
+  await page.goto(`/c/${CREATOR.slug}`);
+
+  await page.getByLabel(/catalogue does not have/i).fill('Spirited Away');
+  await page.getByRole('button', { name: 'Suggest', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Spirited Away' })).toBeVisible();
+
+  // Typed badly, on purpose. Trigram search is here for exactly this.
+  await page.getByLabel(/catalogue does not have/i).fill('sprited away');
+  // Scoped to the suggestion box: the board card carries an upvote control for the same title,
+  // and the assertion is that *this* one works.
+  const suggestion = page
+    .locator('div')
+    .filter({ hasText: /already on the board/i })
+    .last();
+  await expect(suggestion).toBeVisible();
+
+  // Upvoting from the suggestion is the point: knowing it exists is useless without acting on it.
+  await suggestion.getByRole('button', { name: /^Upvote Spirited Away/i }).click();
+  await expect(suggestion.getByRole('button', { name: /1 upvotes/i })).toBeVisible();
+
+  // And no second entry was created.
+  await expect(page.getByRole('heading', { name: 'Spirited Away' })).toHaveCount(1);
+});
