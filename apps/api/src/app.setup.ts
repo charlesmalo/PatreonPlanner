@@ -1,6 +1,7 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { Logger, INestApplication, ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
 import { PrismaExceptionFilter } from './common/prisma-exception.filter';
+import { ConfigService } from './config/config.module';
 
 /**
  * The single definition of the request pipeline, shared by main.ts and the integration tests.
@@ -10,6 +11,15 @@ import { PrismaExceptionFilter } from './common/prisma-exception.filter';
 export function configureApp(app: INestApplication): void {
   app.use(cookieParser());
   app.useGlobalFilters(new PrismaExceptionFilter());
+
+  // Silence here is how a deployment ships a limiter that does nothing: behind a proxy, zero
+  // trusted hops means every caller presents the proxy's address and shares one bucket.
+  const hops = app.get(ConfigService).get('TRUSTED_PROXY_HOPS');
+  if (hops === 0) {
+    new Logger('RateLimit').warn(
+      'TRUSTED_PROXY_HOPS is 0 — if the API sits behind a proxy, per-IP limiting will treat all traffic as one client',
+    );
+  }
   // whitelist + forbidNonWhitelisted: unknown properties are rejected rather than silently
   // dropped, so a client cannot smuggle fields past a DTO.
   app.useGlobalPipes(

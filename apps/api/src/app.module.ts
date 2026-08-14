@@ -1,4 +1,5 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { AccessModule } from './access/access.module';
 import { AbuseModule } from './abuse/abuse.module';
 import { AuthModule } from './auth/auth.module';
@@ -12,6 +13,7 @@ import { CsrfModule } from './csrf/csrf.module';
 import { IntelligenceModule } from './intelligence/intelligence.module';
 import { JobsModule } from './jobs/jobs.module';
 import { LimitsModule } from './limits/limits.module';
+import { RateLimitGuard } from './limits/rate-limit.guard';
 import { ModerationModule } from './moderation/moderation.module';
 import { MembershipsModule } from './memberships/memberships.module';
 import { NotesModule } from './notes/notes.module';
@@ -50,6 +52,9 @@ import { HealthModule } from './health/health.module';
     WebhooksModule,
     HealthModule,
   ],
+  // Global, so a state-changing endpoint is covered by default rather than by remembering to
+  // decorate it — the same reasoning as the CSRF middleware below.
+  providers: [{ provide: APP_GUARD, useClass: RateLimitGuard }],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {

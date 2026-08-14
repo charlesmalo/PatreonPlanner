@@ -10,6 +10,13 @@ export function applyTestConfigDefaults(): void {
     PATREON_CLIENT_SECRET: 'test-client-secret',
     PATREON_REDIRECT_URI: 'http://localhost:3000/auth/patreon/callback',
     JOBS_ENABLED: 'false',
+    // The coarse limiter has its own suite. Everywhere else it is a ceiling nobody should reach:
+    // suites make hundreds of mutations from one address, and a limiter tripping mid-suite would
+    // fail assertions about something else entirely.
+    COARSE_LIMIT_BURST: '100000',
+    COARSE_LIMIT_PER_MINUTE: '100000',
+    SEARCH_LIMIT_BURST: '100000',
+    SEARCH_LIMIT_PER_MINUTE: '100000',
     // Non-zero: the config schema rejects an all-zero key so a placeholder cannot reach
     // production. Fixed rather than random so failures stay reproducible.
     ENCRYPTION_KEY: Buffer.alloc(32, 1).toString('base64'),

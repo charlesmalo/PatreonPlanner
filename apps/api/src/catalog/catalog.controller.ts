@@ -11,6 +11,7 @@ import { AvailabilityService } from '../availability/availability.service';
 import { ConfigService } from '../config/config.module';
 import { CreatorAccessGuard } from '../access/creator-access.guard';
 import { RequireCapability } from '../access/require-capability.decorator';
+import { RateLimited } from '../limits/rate-limit.guard';
 import { CatalogService } from './catalog.service';
 import { AvailabilityQuery } from './dto/availability.query';
 import { SearchCatalogQuery } from './dto/search-catalog.query';
@@ -25,7 +26,10 @@ export class CatalogController {
 
   // SUBMIT, not VIEW: this exists to feed the submit form and it spends a third-party quota, so
   // anyone who cannot submit has no reason to consume it.
+  // Metered: this is the read that actually spends money — a third-party quota per miss —
+  // while the trigram search next door is a local query with a statement timeout.
   @Get('search')
+  @RateLimited('search')
   @RequireCapability('SUBMIT')
   @UseGuards(CreatorAccessGuard)
   async search(@Query() query: SearchCatalogQuery) {

@@ -76,6 +76,9 @@ services:
       WEB_ORIGIN: http://localhost:8080
       ENCRYPTION_KEY: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=
       JOBS_ENABLED: 'false'
+      # One nginx in front of the API in this stack, so the real client address is the last
+      # X-Forwarded-For entry rather than nginx's own.
+      TRUSTED_PROXY_HOPS: '1'
       SUBMIT_LIMIT_PER_HOUR: '20'
       SUBMIT_LIMIT_PER_HOUR_GLOBAL: '50'
     healthcheck:

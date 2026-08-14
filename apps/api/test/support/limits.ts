@@ -1,5 +1,6 @@
 import type Redis from 'ioredis';
 import { RATE_LIMIT_PREFIX } from '../../src/limits/rate-limit.service';
+import { BUCKET_PREFIX } from '../../src/limits/token-bucket.service';
 
 /**
  * Rate-limit manipulation for tests, talking to Redis directly.
@@ -11,10 +12,12 @@ import { RATE_LIMIT_PREFIX } from '../../src/limits/rate-limit.service';
 export class LimitsHarness {
   constructor(private readonly redis: Redis) {}
 
-  /** Clears every window. */
+  /** Clears every window and every token bucket. */
   async reset(): Promise<void> {
-    const keys = await this.redis.keys(`${RATE_LIMIT_PREFIX}*`);
-    if (keys.length > 0) await this.redis.del(...keys);
+    for (const prefix of [RATE_LIMIT_PREFIX, BUCKET_PREFIX]) {
+      const keys = await this.redis.keys(`${prefix}*`);
+      if (keys.length > 0) await this.redis.del(...keys);
+    }
   }
 
   /** Drives a window past any plausible limit. */
