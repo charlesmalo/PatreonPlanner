@@ -466,3 +466,27 @@ test('an owner invites a moderator, who accepts and can then be removed', async 
   await expect(inviteePage.getByText(/do not moderate this board/i)).toBeVisible();
   await invitee.close();
 });
+
+test('a moderator writes notes, and only the timeline one reaches the board', async ({ page }) => {
+  const PRIVATE = 'internal thinking nobody outside should read';
+  await signIn(page, 500, 'patreon-mod-e2e');
+  makeStaff('patreon-mod-e2e');
+  seedEntryFrom('patreon-other-e2e', 'Princess Mononoke');
+
+  await page.goto(`/c/${CREATOR.slug}/review`);
+
+  await page.getByLabel('Note').fill(PRIVATE);
+  await page.getByRole('button', { name: /add note/i }).click();
+  await expect(page.getByText(PRIVATE)).toBeVisible();
+
+  await page.getByLabel('Kind').selectOption('TIMELINE');
+  await page.getByLabel('Note').fill('Covering this in March');
+  await page.getByRole('button', { name: /add note/i }).click();
+  await expect(page.getByText('Covering this in March')).toBeVisible();
+
+  // The board shows the timeline note and does not contain the commentary anywhere — asserted
+  // against the whole page, because the kind is the only thing keeping them apart.
+  await page.goto(`/c/${CREATOR.slug}`);
+  await expect(page.getByText('Covering this in March')).toBeVisible();
+  await expect(page.locator('body')).not.toContainText(PRIVATE);
+});

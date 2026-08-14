@@ -75,6 +75,24 @@ nothing.
 State-changing requests need the `pp_csrf` cookie echoed in an `x-csrf-token` header. The token is
 signed and bound to the session, and is re-minted automatically on any safe request.
 
+## Notes & timelines
+
+Staff can write two kinds of note on an entry (design §7):
+
+| Kind       | Who sees it                     | Carries a date |
+| ---------- | ------------------------------- | -------------- |
+| `NOTE`     | staff only, in the review queue | no             |
+| `TIMELINE` | **everyone**, on the board card | optional       |
+
+That split is the whole model. The visibility rule lives in the read projections — the board
+selects `kind: 'TIMELINE'` and the queue selects everything — so a `NOTE` cannot reach a patron by
+way of a caller who forgot to filter. Both directions are tested, and the E2E asserts the private
+body appears nowhere in the rendered page.
+
+A timeline note is public the moment it is written; there is no draft state, so the editor
+defaults to `NOTE` and warns before you switch. Notes are moderated like any other text, capped
+per entry, ordered oldest-first, and deleted outright rather than hidden.
+
 ## Moderators
 
 A creator invites moderators with a single-use link and can remove them at any time.
