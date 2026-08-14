@@ -6,7 +6,8 @@ generator client {
 datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
-  extensions = [vector]
+  // pg_trgm powers fuzzy board search; both are contrib extensions in the pgvector image.
+  extensions = [vector, pg_trgm]
 }
 
 enum StaffRole {

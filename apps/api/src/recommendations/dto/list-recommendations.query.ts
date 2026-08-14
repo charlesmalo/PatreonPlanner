@@ -20,3 +20,9 @@ export class ListRecommendationsQuery {
   @IsUUID()
   theme?: string;
 }
+
+export class SimilarQuery {
+  @IsString()
+  @Length(1, 200)
+  q!: string;
+}

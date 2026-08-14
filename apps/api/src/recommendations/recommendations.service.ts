@@ -61,7 +61,7 @@ const BOARD_ONLY_DEFAULTS = {
  * response is the same shape as a board entry. The relation had to dodge Recommendation's own
  * `notes` scalar; the API does not have to inherit that.
  */
-function present<T extends { creatorNotes?: unknown[] }>(row: T) {
+export function present<T extends { creatorNotes?: unknown[] }>(row: T) {
   const { creatorNotes, ...rest } = row;
   return { ...rest, notes: creatorNotes ?? [] };
 }
@@ -83,7 +83,7 @@ const HIDDEN_STATUSES: RecommendationStatus[] = ['DELETED', 'REJECTED'];
  * Design §7: staff read the whole board including the bin, patrons read only the visible
  * statuses — minus pending entries when the creator hides them, except their own.
  */
-function visibilityWhere(
+export function visibilityWhere(
   creator: { hidePendingFromPublic: boolean },
   viewer: { userId: string | null; staffRole: StaffRoleValue | null },
 ): Prisma.RecommendationWhereInput {
@@ -132,7 +132,7 @@ function decodeCursor(raw: string | undefined): BoardCursor | null {
 
 // Explicit select: the submitter is a User row carrying an email and Patreon id, neither of
 // which belongs on a public board.
-const RECOMMENDATION_FIELDS = {
+export const RECOMMENDATION_FIELDS = {
   id: true,
   type: true,
   customTitle: true,
