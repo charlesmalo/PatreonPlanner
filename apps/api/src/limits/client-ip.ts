@@ -29,3 +29,26 @@ export function clientIp(
   if (hops.length < trustedHops) return socketAddress;
   return hops[hops.length - trustedHops] ?? socketAddress;
 }
+
+/**
+ * Whether an address looks like a proxy sitting in front of us rather than a real client.
+ *
+ * With `TRUSTED_PROXY_HOPS` unset behind a proxy, *every* request presents the proxy's address
+ * and shares one bucket — so one client sustaining a few requests a second refuses every mutating
+ * request for everybody, permanently. The limiter would be the outage it exists to prevent. When
+ * the address looks like a proxy and we were told to trust nothing, the per-IP bucket is skipped
+ * rather than applied to the whole internet at once.
+ */
+export function looksLikeProxy(address: string): boolean {
+  const ip = address.replace(/^::ffff:/, '');
+  return (
+    ip === 'unknown' ||
+    ip === '::1' ||
+    ip === '127.0.0.1' ||
+    /^127\./.test(ip) ||
+    /^10\./.test(ip) ||
+    /^192\.168\./.test(ip) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(ip) ||
+    /^f[cd]/i.test(ip)
+  );
+}

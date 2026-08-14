@@ -166,8 +166,15 @@ Refusal is a `429` with `Retry-After` and nothing about the rule.
 from the _right_ of `X-Forwarded-For`, so with one proxy in front the last entry is the one that
 proxy wrote — which a client cannot forge. Set it too high and any caller claims any address,
 evading their own limit and exhausting someone else's. Leave it at `0` behind a proxy and every
-request presents the proxy's address, so the whole internet shares one bucket. The API logs a
-warning at boot while it is `0`. Behind one nginx or one platform load balancer, it is `1`.
+request presents the proxy's address — so rather than bucket the whole internet together, which
+would let one client refuse everyone else's writes, per-IP limiting **switches itself off** and
+logs an error. The API also warns at boot while the setting is `0`. Behind one nginx or one platform load balancer, it is `1`.
+
+**What it does not cover.** Express middleware runs before guards, so a request rejected by CSRF
+spends nothing, and Nest guards do not run for unmatched routes, so a 404 is free. The ceiling
+applies to well-formed, route-matching requests; absorbing malformed floods is the edge/WAF layer's
+job (design §6.1). Patreon webhooks are exempt — they carry an HMAC, which is a stronger gate than
+a velocity cap, and a bucket sized for a human would 429 a campaign's charge-day traffic.
 
 **The limiter fails open.** If Redis is unreachable the request proceeds and the failure is logged:
 a limiter is a safety margin, and making it a hard dependency would turn a cache blip into a total

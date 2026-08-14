@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { CookieOptions, Request, Response } from 'express';
+import { RateLimited } from '../limits/rate-limit.guard';
 import { ConfigService } from '../config/config.module';
 import { setCsrfCookie } from '../csrf/csrf.cookie';
 import { CsrfTokenService } from '../csrf/csrf-token.service';
@@ -30,6 +31,10 @@ export class AuthController {
     private readonly config: ConfigService,
   ) {}
 
+  // A GET that writes: every hit stores a pending OAuth state in Redis for ten minutes, which
+  // oauth-state.service.ts already calls an unauthenticated write anyone can provoke. Exempting
+  // it because the verb is GET would leave the cheapest unauthenticated write unmetered.
+  @RateLimited('write')
   @Get('auth/patreon/login')
   async login(@Res() res: Response): Promise<void> {
     const { url, state } = await this.auth.startLogin();

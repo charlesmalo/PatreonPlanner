@@ -274,7 +274,47 @@ docker-compose -f docker-compose.e2e.yml up -d --build && pnpm --filter e2e e2e
 - "Applies to upvotes" → upvotes are a mutating route and are covered by the same bucket. ✅
 - Edge/DDoS, fingerprinting, CAPTCHA (§6.1) → **deferred**, with the reason in Scope.
 
+## Found in review (fixed)
+
+1. **Critical — clock skew drove buckets negative and locked callers out indefinitely.** The
+   script had a ceiling but no floor, and took the clock from the *caller*. With two instances
+   30s apart, one request from the instance ahead emptied the shared bucket and the one behind
+   was refused **every** request until real time caught up. My own comment asserted that taking
+   the clock from the caller was what stopped replicas disagreeing — the reasoning was exactly
+   backwards: `redis.call('TIME')` is the single clock that makes them agree. Now Redis's clock,
+   with a floor as well as a cap.
+2. **Critical — `TRUSTED_PROXY_HOPS=0` behind a proxy was a whole-site denial-of-service lever,
+   and it is the shipped default.** This plan called it "degraded but obvious". It was not: every
+   request presents the proxy's address, both buckets must pass, so one anonymous client at a few
+   requests a second refuses **every** mutating request for everybody — including webhook
+   deliveries — indefinitely. The limiter would have been the outage it exists to prevent. Per-IP
+   limiting now switches itself off when the address is plainly a proxy we were told not to trust,
+   and logs an error.
+3. **Important — Patreon webhooks shared the human bucket.** Every delivery arrives from one
+   egress range, so a campaign's charge-day traffic would 429 and membership state would go
+   silently stale. Exempted: they carry an HMAC, a stronger gate than a velocity cap.
+4. **Important — the per-user bucket, half of "keyed by IP *and* user", had no coverage at all.**
+   Deleting it left all eight tests green, because every request in the suite came from one
+   socket. Worse, my first attempt at a test for it *also* passed with the bucket deleted — it
+   sent more than the burst from the second address, so the address bucket refused it anyway.
+5. **Important — the two genuinely expensive routes were unmetered.** `GET /catalog/search`
+   spends third-party quota per miss and `GET /auth/patreon/login` writes an unauthenticated
+   Redis key on every hit; both were exempt because the verb is GET, while the bucket went to the
+   local trigram query that already has a statement timeout.
+6. **Important — a Redis outage produced one or two log lines per request.** Now logged on the
+   transition into and out of degradation.
+7. **Minor, also fixed:** `Retry-After` reported the *first* refusal rather than the longest, so a
+   client retried into a refusal it could not pass, contradicting the class comment; `reset()` did
+   a `KEYS` scan on an app-wide injected service, the exact griefing primitive the test harness
+   exists to keep off one; and `.env.example` introduced the proxy setting under an unrelated
+   comment.
+
 **Known risks:**
+
+0. **The ceiling only applies to well-formed requests.** CSRF middleware runs before guards, so a
+   rejected request spends nothing, and Nest guards do not run for unmatched routes, so a 404 is
+   free. Absorbing malformed floods is the edge layer's job (design §6.1) — but it means this is a
+   ceiling on *use*, not on traffic, and the plan's goal line overstated it.
 
 1. **`TRUSTED_PROXY_HOPS` is a footgun by construction.** Set it too high and a client can forge its address by stuffing `X-Forwarded-For`; too low and everyone behind the proxy shares a bucket. There is no safe default because the right answer is a property of the deployment, not the code. The boot warning covers the second case; nothing detects the first.
 2. **IPv6 is limited per address, not per prefix.** A single /64 is routinely one household, but it is also trivially thousands of addresses to an attacker with a real allocation. Per-prefix bucketing is the right answer and needs a prefix-length decision nobody has made.

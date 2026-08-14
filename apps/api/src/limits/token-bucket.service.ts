@@ -1,19 +1,24 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { RedisService } from '../redis/redis.service';
 
-const PREFIX = 'bucket:';
+export const BUCKET_PREFIX = 'bucket:';
+const PREFIX = BUCKET_PREFIX;
 
 /**
  * Continuous refill, evaluated atomically in one round trip.
  *
- * The clock comes from the caller rather than `redis.call('TIME')`: it keeps the script
- * deterministic and testable, and replicas never disagree about now.
+ * The clock is Redis's own. Taking it from the caller was backwards: `redis.call('TIME')` is
+ * precisely what makes every app instance agree about now, and `Date.now()` is what makes them
+ * disagree. With two instances 30s apart, a request from the one ahead drove the shared bucket
+ * negative and the one behind was refused *every* request until real time caught up — a total
+ * outage for half the traffic, from a design note that claimed the opposite.
  */
 const SCRIPT = `
-local now = tonumber(ARGV[1])
-local capacity = tonumber(ARGV[2])
-local refill = tonumber(ARGV[3])
-local ttl = tonumber(ARGV[4])
+local clock = redis.call('TIME')
+local now = tonumber(clock[1]) + tonumber(clock[2]) / 1000000
+local capacity = tonumber(ARGV[1])
+local refill = tonumber(ARGV[2])
+local ttl = tonumber(ARGV[3])
 
 local state = redis.call('HMGET', KEYS[1], 'tokens', 'at')
 local tokens = tonumber(state[1])
@@ -21,7 +26,9 @@ local at = tonumber(state[2])
 if tokens == nil then tokens = capacity end
 if at == nil then at = now end
 
-tokens = math.min(capacity, tokens + (now - at) * refill)
+-- Floored as well as capped: a clock that ever moves backwards would otherwise drive the count
+-- negative, where it stays until real time overtakes the skew.
+tokens = math.max(0, math.min(capacity, tokens + math.max(0, now - at) * refill))
 local allowed = 0
 if tokens >= 1 then
   tokens = tokens - 1
@@ -44,6 +51,8 @@ export interface BucketDecision {
 @Injectable()
 export class TokenBucketService {
   private readonly logger = new Logger(TokenBucketService.name);
+  /** Whether the last call failed, so an outage logs twice rather than once per request. */
+  private degraded = false;
 
   constructor(private readonly redis: RedisService) {}
 
@@ -64,26 +73,31 @@ export class TokenBucketService {
           SCRIPT,
           1,
           `${PREFIX}${key}`,
-          String(Date.now() / 1000),
           String(capacity),
           String(refillPerSecond),
           String(ttl),
         )) as [number, string];
 
+      if (this.degraded) {
+        this.degraded = false;
+        this.logger.log('Rate-limit buckets available again');
+      }
       return {
         allowed: allowed === 1,
         // Rounded up: a Retry-After of 0 invites an immediate retry that cannot succeed.
         retryAfterSeconds: allowed === 1 ? 0 : Math.max(1, Math.ceil(Number(wait))),
       };
     } catch (error) {
-      this.logger.warn(`Rate-limit bucket unavailable, allowing: ${(error as Error).message}`);
+      // Logged on the transition only. One line per failed call means one or two lines per
+      // request for the duration of a Redis outage — a synchronous stderr flood that costs more
+      // than the outage it is reporting.
+      if (!this.degraded) {
+        this.degraded = true;
+        this.logger.error(
+          `Rate-limit buckets unavailable, allowing all requests: ${(error as Error).message}`,
+        );
+      }
       return { allowed: true, retryAfterSeconds: 0 };
     }
-  }
-
-  /** Test seam only: buckets are otherwise cleared by their TTL. */
-  async reset(): Promise<void> {
-    const keys = await this.redis.raw().keys(`${PREFIX}*`);
-    if (keys.length > 0) await this.redis.raw().del(...keys);
   }
 }

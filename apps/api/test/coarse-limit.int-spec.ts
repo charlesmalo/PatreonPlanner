@@ -19,6 +19,9 @@ describe('Coarse request limiter (integration)', () => {
     process.env.COARSE_LIMIT_PER_MINUTE = '1';
     process.env.SEARCH_LIMIT_BURST = '6';
     process.env.SEARCH_LIMIT_PER_MINUTE = '1';
+    // One proxy, as in the deployed stack — otherwise every test here shares the socket address
+    // and the per-address assertions cannot distinguish themselves from the per-user ones.
+    process.env.TRUSTED_PROXY_HOPS = '1';
     ctx = await startAuthApp();
     buckets = ctx.app.get(TokenBucketService);
 
@@ -64,6 +67,7 @@ describe('Coarse request limiter (integration)', () => {
     // Restored: process.env is shared across suites under --runInBand, and leaving a burst of 12
     // behind made later suites fail on a limiter they were not testing.
     for (const key of [
+      'TRUSTED_PROXY_HOPS',
       'COARSE_LIMIT_BURST',
       'COARSE_LIMIT_PER_MINUTE',
       'SEARCH_LIMIT_BURST',
@@ -75,7 +79,7 @@ describe('Coarse request limiter (integration)', () => {
   });
 
   beforeEach(async () => {
-    await buckets.reset();
+    await ctx.limits.reset();
   });
 
   async function loginAs(patreonUserId: string) {
@@ -159,6 +163,59 @@ describe('Coarse request limiter (integration)', () => {
     // Per-user alone would let one person spread across accounts; the IP bucket catches it.
     await spend(patron, 12);
     expect((await upvote(otherPatron)).status).toBe(429);
+  });
+
+  it('limits one user arriving from many addresses', async () => {
+    // The other half of design §6.2's "keyed by IP *and* user". Every test above is satisfiable
+    // by the IP bucket alone, because they all share one socket — deleting the user bucket
+    // entirely left the whole suite green.
+    const from = async (address: string, times: number) => {
+      let last = 0;
+      for (let i = 0; i < times; i += 1) {
+        last = (
+          await request(ctx.app.getHttpServer())
+            .post(`/api/v1/creators/limit-co/recommendations/${entryId}/upvote`)
+            .set('Cookie', [patron.session, patron.csrf])
+            .set('x-csrf-token', patron.csrfToken)
+            .set('x-forwarded-for', `client, ${address}`)
+        ).status;
+      }
+      return last;
+    };
+    // Exactly the burst from one address: that address's bucket is empty and so is the user's.
+    await from('198.51.100.1', 12);
+    // A single request from a *different* address, whose bucket is untouched. Only the user
+    // bucket can refuse this one — sending more than the burst here would let the address
+    // bucket refuse it too, which is what made an earlier version of this test pass with the
+    // user bucket deleted.
+    expect(await from('198.51.100.2', 1)).toBe(429);
+  });
+
+  it('limits an anonymous caller by address alone', async () => {
+    // No session, so there is no user bucket to fall back on.
+    const statuses: number[] = [];
+    for (let i = 0; i < 14; i += 1) {
+      statuses.push(
+        (
+          await request(ctx.app.getHttpServer())
+            .get('/api/v1/creators/limit-co/recommendations/similar?q=totoro')
+            .set('x-forwarded-for', 'client, 203.0.113.50')
+        ).status,
+      );
+    }
+    expect(statuses).toContain(429);
+  });
+
+  it('does not limit webhook deliveries', async () => {
+    // Patreon's deliveries all arrive from one egress range; a bucket sized for a human clicking
+    // upvote would 429 a campaign's charge-day traffic and leave membership state stale. The
+    // HMAC is the gate there.
+    await spend(patron, 14);
+    const res = await request(ctx.app.getHttpServer())
+      .post(`/api/v1/webhooks/patreon/${creatorId}`)
+      .set('x-patreon-signature', 'nope')
+      .send({});
+    expect(res.status).not.toBe(429);
   });
 
   it('proceeds when the bucket store is unavailable', async () => {
