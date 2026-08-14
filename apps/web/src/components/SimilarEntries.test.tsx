@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { SimilarEntries } from './SimilarEntries';
+import { DEBOUNCE_MS, SimilarEntries } from './SimilarEntries';
 import { fakeApi, recommendation } from '../test-support';
 
 function renderIt(query: string, onCount = vi.fn()) {
@@ -76,19 +76,25 @@ describe('SimilarEntries', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('debounces rather than asking on every keystroke', async () => {
-    const fetchMock = fakeApi({
-      'GET /api/v1/creators/ada-writes/recommendations/similar': match,
-    });
-    global.fetch = fetchMock;
-    const { rerender } = render(
-      <SimilarEntries slug="ada-writes" query="sp" canUpvote onCount={vi.fn()} />,
-    );
-    for (const q of ['spi', 'spir', 'spiri', 'spirit']) {
-      rerender(<SimilarEntries slug="ada-writes" query={q} canUpvote onCount={vi.fn()} />);
+  it('waits the full debounce interval before asking', async () => {
+    // Asserted at the boundary with fake timers: counting calls across synchronous rerenders
+    // only proves the effect cleanup runs, and passed with the interval set to zero.
+    vi.useFakeTimers();
+    try {
+      const fetchMock = fakeApi({
+        'GET /api/v1/creators/ada-writes/recommendations/similar': match,
+      });
+      global.fetch = fetchMock;
+      render(<SimilarEntries slug="ada-writes" query="spirited" canUpvote onCount={vi.fn()} />);
+
+      vi.advanceTimersByTime(DEBOUNCE_MS - 50);
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(100);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
     }
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(fetchMock.mock.calls.length).toBeLessThan(3);
   });
 
   it('renders a title containing markup as text', async () => {

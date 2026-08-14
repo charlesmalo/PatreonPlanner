@@ -169,6 +169,30 @@ describe('Board search (integration)', () => {
       expect(ids(res.body)).toContain(totoroId);
     });
 
+    it('finds a long title from one word of it', async () => {
+      // The type-ahead case. Plain `similarity()` scores "spirited" against this at 0.26 —
+      // below any usable threshold — because it penalises the length of the target.
+      const longId = (await entry('Spirited Away in the Land of the Gods')).id;
+      expect(ids((await search(patron, 'spirited').expect(200)).body)).toContain(longId);
+      expect(ids((await search(patron, 'gods').expect(200)).body)).toContain(longId);
+    });
+
+    it('finds an entry from a partial word', async () => {
+      expect(ids((await search(patron, 'neigh').expect(200)).body)).toContain(totoroId);
+    });
+
+    it('returns entries in the same shape as the board', async () => {
+      const [fromSearch, fromBoard] = await Promise.all([
+        search(patron, 'totoro').expect(200),
+        request(ctx.app.getHttpServer())
+          .get('/api/v1/creators/search-co/recommendations?limit=50')
+          .set('Cookie', [patron.session, patron.csrf])
+          .expect(200),
+      ]);
+      const boardEntry = fromBoard.body.items.find((i: { id: string }) => i.id === totoroId);
+      expect(Object.keys(fromSearch.body.items[0]).sort()).toEqual(Object.keys(boardEntry).sort());
+    });
+
     it('ignores case and punctuation', async () => {
       // normalizedTitle is the trigram target precisely so these are one string, not three.
       for (const q of ['THE MATRIX', 'the matrix!!', 'The  Matrix']) {
@@ -257,9 +281,27 @@ describe('Board search (integration)', () => {
     });
 
     it('caps the number of results', async () => {
+      // Asserted as equality: `toBeLessThanOrEqual` passes on an empty list, which is exactly
+      // the failure that hid hidden entries crowding out visible ones.
       for (let i = 0; i < MAX_SEARCH_RESULTS + 5; i += 1) await entry(`Matrix Sequel ${i}`);
       const res = await search(patron, 'matrix sequel').expect(200);
-      expect(res.body.items.length).toBeLessThanOrEqual(MAX_SEARCH_RESULTS);
+      expect(res.body.items).toHaveLength(MAX_SEARCH_RESULTS);
+    });
+
+    it('is not blinded by hidden entries filling the candidate window', async () => {
+      // Rejected near-duplicates are what moderating spam on a popular title produces, and
+      // DELETED rows accumulate forever. Ranking them into every candidate slot and filtering
+      // afterwards returned *nothing* — silently blinding search for that title.
+      for (let i = 0; i < MAX_SEARCH_RESULTS * 2; i += 1) {
+        await entry(`Matrix Clone ${i}`, { status: 'REJECTED' });
+      }
+      const res = await search(patron, 'the matrix').expect(200);
+      expect(ids(res.body)).toContain(matrixId);
+    });
+
+    it('rejects a query carrying a control character', async () => {
+      // A NUL byte reached Postgres as 22021 and came back as an anonymous, repeatable 500.
+      await search(patron, 'spirit\u0000ed').expect(400);
     });
 
     it('treats a query of pure punctuation as too short', async () => {

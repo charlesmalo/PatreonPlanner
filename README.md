@@ -95,6 +95,18 @@ ids and scores only, and those ids then go through the same `visibilityWhere()` 
 a change to the visibility rules cannot leave search behind. Writing the status filter into the SQL
 would have been shorter and would have diverged the first time those rules changed.
 
+Matching uses `word_similarity` / `<%`, not `similarity()`. The difference is not cosmetic: `<%`
+asks "is the query a fragment of the target", which is what a type-ahead means, and it is
+**GIN-indexable**. Plain `similarity()` scores "spirited" against "Spirited Away in the Land of the
+Gods" at 0.26 — below any usable threshold, because it penalises the length of the target — and in
+a `WHERE` clause it cannot use the index at all. Measured on 100k rows: **0.045ms indexed versus
+444ms sequential**.
+
+**Ops note:** the extension must be reachable on `search_path`. `CREATE EXTENSION` works for a
+non-superuser database owner (`pg_trgm` is a trusted extension on PG13+), but a provider that
+installs extensions into a separate schema — Supabase's `extensions`, for instance — needs that
+schema on the path or `word_similarity()` will not resolve at runtime.
+
 Not built: semantic / cross-language matching beyond aliases, which needs an embedding model.
 
 ## Notes & timelines

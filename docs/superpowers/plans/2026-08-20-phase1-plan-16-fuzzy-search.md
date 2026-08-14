@@ -227,9 +227,47 @@ docker-compose -f docker-compose.e2e.yml up -d --build && pnpm --filter e2e e2e
 - "…and pgvector nearest-neighbor (semantic, cross-language)" → **deferred**, with the reason in Scope. Aliases give a partial, free substitute. ✅
 - Searching descriptions → **not built**, with the reason in Scope.
 
+## Found in review (fixed)
+
+1. **Important — neither GIN index was used; every search was a sequential scan.** The plan
+   specified the `%` operator; the implementation shipped `similarity(...) >= threshold`, which is
+   not indexable in a `WHERE` clause. Measured on 100k rows: **444ms sequential versus 0.045ms
+   indexed**. Both indexes were pure write amplification on the two highest-insert tables.
+2. **Important — `similarity()` is the wrong metric for a type-ahead.** It penalises the length of
+   the target, so "spirited" scored **0.26** against "Spirited Away in the Land of the Gods" and
+   "neigh" scored 0.24 against "My Neighbour Totoro" — below any usable threshold. Every fixture
+   title was two or three short words, so the tests could not see it. Now `word_similarity` /
+   `<%`, which asks "is the query a fragment of the target" and is indexable — one change fixing
+   both findings.
+3. **Important — an anonymous, repeatable 500 from a crafted query.** The *raw* string was bound
+   to the alias comparison while only the other parameter was normalised, so a NUL byte reached
+   Postgres as `22021`, mapped to an unhandled `P2010`, and logged at error level on every
+   request. Both comparisons now take the normalised string, and the DTO rejects control
+   characters.
+4. **Important — hidden entries crowded visible ones out entirely.** The candidate `LIMIT` ran
+   *before* the visibility filter, so eight rejected near-duplicates — exactly what moderating
+   spam on a popular title produces, and `DELETED` rows accumulate forever — made search return
+   **nothing** for that title, permanently, letting through the duplicate the feature exists to
+   prevent. The plan called this "under-reporting"; it was total failure. Candidates are now
+   over-fetched and sliced after filtering.
+5. **Important — no bound on the worst case** on an endpoint reachable anonymously and fired every
+   250ms of typing. A 200-character query cost ~370ms of CPU across three parallel workers. The
+   indexable query removes most of it; a transaction-scoped `statement_timeout` bounds the rest.
+6. **Minor, also fixed:** the response was not actually the board's shape despite the README
+   saying so (missing `availability`, `parentId`, `themes`); Prisma would have dropped both
+   indexes on the next `migrate dev` because they existed only in raw SQL; `visibilityWhere` was
+   spread rather than `AND`-composed, the exact shape that once silently overwrote the board's own
+   filter; the threshold's comment was spliced into the middle of an unrelated setting's; the
+   debounce test passed with the interval set to zero; and the result-cap test passed on an empty
+   list, which is precisely the failure in (4).
+
 **Known risks:**
 
 1. **Trigram similarity is corpus-dependent.** 0.3 is `pg_trgm`'s default, not a tuned value; a board of long titles will match more loosely than one of short ones. It is configuration precisely because the right value is an operational question, but nothing currently tells an operator that their threshold is wrong.
-2. **The candidate query is not itself visibility-filtered.** It returns ids for entries the caller may not be allowed to see, and the second query removes them — so the result count can be smaller than `MAX_RESULTS` even when more visible matches exist further down the ranking. Correct, but not complete: a board with many hidden entries could under-report. Filtering in SQL would fix it and reintroduce exactly the duplication this plan exists to avoid.
+2. **The candidate query is still not visibility-filtered**, it is merely over-fetched by six
+   times the result cap before slicing. A board where more than forty-eight hidden entries
+   out-rank every visible one for a query would still under-report. Filtering in SQL would fix it
+   completely and reintroduce exactly the duplication this plan exists to avoid; the multiplier is
+   the compromise.
 3. **A GIN trigram index is large and slows writes.** Two of them, on the two tables that take the most inserts. Acceptable at Phase 1 volumes; worth measuring before a board has a million entries.
 4. **The search runs on every keystroke past the minimum**, debounced client-side only. There is no rate limit on it — it is a local read, but it is an unauthenticated-adjacent one on a public board.

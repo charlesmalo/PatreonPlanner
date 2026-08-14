@@ -5,7 +5,7 @@ import { UpvoteButton } from './UpvoteButton';
 
 /** Matches the server's floor; below it a trigram match is noise. */
 const MIN_QUERY_LENGTH = 2;
-const DEBOUNCE_MS = 250;
+export const DEBOUNCE_MS = 250;
 
 interface SimilarEntriesProps {
   slug: string;

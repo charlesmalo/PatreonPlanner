@@ -48,14 +48,14 @@ export const configSchema = z.object({
   // The regions callers may ask for. Bounded on purpose: the region is a free parameter on a
   // VIEW-gated route, so without a list one caller could drive 676 upstream lookups for a single
   // title and leave 676 rows in the refresh job's working set forever.
-  // Trigram similarity is corpus-dependent: a board of long titles matches more loosely than one
-  // of short ones, so the cut-off is operational rather than a constant. 0.3 is pg_trgm's own
-  // default.
-  SEARCH_SIMILARITY_THRESHOLD: z.coerce.number().min(0.05).max(1).default(0.3),
   AVAILABILITY_REGIONS: z
     .string()
     .regex(/^[A-Z]{2}(,[A-Z]{2})*$/, 'must be comma-separated ISO-3166-1 country codes')
     .default('US,GB,CA,AU,IE,NZ,DE,FR,ES,IT,JP,BR,MX'),
+
+  // Word-similarity cut-off for board search. Corpus-dependent — a board of long titles matches
+  // more loosely than one of short ones — so it is operational rather than a constant.
+  SEARCH_SIMILARITY_THRESHOLD: z.coerce.number().min(0.05).max(1).default(0.3),
 
   SUBMIT_LIMIT_PER_HOUR: z.coerce.number().int().positive().default(1),
   // Design §6 item 3: a looser cap across all creators, so a patron of twenty creators cannot

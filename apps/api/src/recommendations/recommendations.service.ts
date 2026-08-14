@@ -50,7 +50,7 @@ export const RATE_LIMIT_STRIKE_THRESHOLD = 5;
  * what matters here is that the shape matches, so a prepended card is not a different kind of
  * object from the ones beside it.
  */
-const BOARD_ONLY_DEFAULTS = {
+export const BOARD_ONLY_DEFAULTS = {
   availability: null,
   parentId: null,
   themes: [] as Array<{ id: string; name: string }>,
