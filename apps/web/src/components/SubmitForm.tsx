@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ApiError, api } from '../api/client';
 import type { CatalogResult, Recommendation, SubmitResult } from '../api/types';
+import { SimilarEntries } from './SimilarEntries';
 import { WatchOrderEditor, type DraftItem } from './WatchOrderEditor';
 
 // Long enough that typing a title is one request, not one per keystroke — the endpoint spends a
@@ -10,6 +11,9 @@ const SEARCH_DEBOUNCE_MS = 300;
 interface SubmitFormProps {
   slug: string;
   onCreated: (recommendation: Recommendation) => void;
+  /** Passed through to the "already on the board?" matches, which offer an upvote. */
+  canUpvote?: boolean;
+  onUpvoted?: (id: string, count: number, upvoted?: boolean) => void;
 }
 
 /** A collection is a franchise; everything else the catalogue returns is a single work. */
@@ -24,7 +28,7 @@ const MAX_ITEMS = 50;
 const MAX_TITLE = 200;
 const MAX_DESCRIPTION = 2000;
 
-export function SubmitForm({ slug, onCreated }: SubmitFormProps) {
+export function SubmitForm({ slug, onCreated, canUpvote = false, onUpvoted }: SubmitFormProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<CatalogResult[]>([]);
   const [picked, setPicked] = useState<CatalogResult | null>(null);
@@ -271,6 +275,17 @@ export function SubmitForm({ slug, onCreated }: SubmitFormProps) {
             onChange={(e) => setCustomTitle(e.target.value)}
             className="mt-1 w-full rounded border border-slate-300 px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-slate-700 dark:bg-slate-950"
           />
+          {/* Only for a free-text title. A picked catalogue result is already covered exactly by
+              the canonical de-dupe, which answers 200 with the existing entry — a fuzzy guess
+              beside it would be noise. */}
+          {picked ? null : (
+            <SimilarEntries
+              slug={slug}
+              query={customTitle}
+              canUpvote={canUpvote}
+              onCount={onUpvoted ?? (() => undefined)}
+            />
+          )}
         </div>
         {mode === 'WATCH_ORDER' ? (
           <WatchOrderEditor slug={slug} items={items} onChange={setItems} />

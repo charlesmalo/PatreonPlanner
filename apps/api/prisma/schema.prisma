@@ -6,7 +6,8 @@ generator client {
 datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
-  extensions = [vector]
+  // pg_trgm powers fuzzy board search; both are contrib extensions in the pgvector image.
+  extensions = [vector, pg_trgm]
 }
 
 enum StaffRole {
@@ -332,6 +333,8 @@ model Recommendation {
   // The review queue reads one creator's entries oldest-first, including the statuses the board
   // index's consumers never ask for.
   @@index([creatorId, createdAt])
+  // Trigram search. Declared so `migrate dev` cannot propose dropping what the migration made.
+  @@index([normalizedTitle(ops: raw("gin_trgm_ops"))], type: Gin)
   @@index([submittedByUserId])
 }
 
@@ -566,4 +569,5 @@ model TitleAlias {
 
   @@unique([titleId, language, kind, text])
   @@index([titleId])
+  @@index([text(ops: raw("gin_trgm_ops"))], type: Gin)
 }

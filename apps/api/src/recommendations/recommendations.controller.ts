@@ -25,7 +25,8 @@ import { CreateFlagDto } from '../moderation/dto/create-flag.dto';
 import { FlagsService } from '../moderation/flags.service';
 import { ModerationActionsService } from '../moderation/moderation-actions.service';
 import { CurrentUser, CurrentUserPayload, SessionGuard } from '../session/session.guard';
-import { ListRecommendationsQuery } from './dto/list-recommendations.query';
+import { ListRecommendationsQuery, SimilarQuery } from './dto/list-recommendations.query';
+import { SearchService } from './search.service';
 import { SubmitRecommendationDto } from './dto/submit-recommendation.dto';
 import { RecommendationsService } from './recommendations.service';
 
@@ -36,6 +37,7 @@ export class RecommendationsController {
     private readonly recommendations: RecommendationsService,
     private readonly moderationActions: ModerationActionsService,
     private readonly flags: FlagsService,
+    private readonly search: SearchService,
   ) {}
 
   @Get()
@@ -47,6 +49,24 @@ export class RecommendationsController {
     @Query() query: ListRecommendationsQuery,
   ) {
     return this.recommendations.list(creator, query.cursor, query.limit, viewer, query.theme);
+  }
+
+  /**
+   * VIEW, not SUBMIT: this spends no third-party quota and returns only entries the caller could
+   * already read on the board. Gating it higher would deny a reader the ability to search a board
+   * they are allowed to read, for no benefit.
+   *
+   * Declared before the `:id` routes so `similar` is not swallowed as an id.
+   */
+  @Get('similar')
+  @RequireCapability('VIEW')
+  @UseGuards(CreatorAccessGuard)
+  similar(
+    @CurrentCreator() creator: ResolvedCreator,
+    @CurrentViewer() viewer: Viewer,
+    @Query() query: SimilarQuery,
+  ) {
+    return this.search.similar(creator, query.q, viewer);
   }
 
   @Post()

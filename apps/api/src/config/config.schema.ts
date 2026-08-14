@@ -53,6 +53,10 @@ export const configSchema = z.object({
     .regex(/^[A-Z]{2}(,[A-Z]{2})*$/, 'must be comma-separated ISO-3166-1 country codes')
     .default('US,GB,CA,AU,IE,NZ,DE,FR,ES,IT,JP,BR,MX'),
 
+  // Word-similarity cut-off for board search. Corpus-dependent — a board of long titles matches
+  // more loosely than one of short ones — so it is operational rather than a constant.
+  SEARCH_SIMILARITY_THRESHOLD: z.coerce.number().min(0.05).max(1).default(0.3),
+
   SUBMIT_LIMIT_PER_HOUR: z.coerce.number().int().positive().default(1),
   // Design §6 item 3: a looser cap across all creators, so a patron of twenty creators cannot
   // submit twenty an hour.

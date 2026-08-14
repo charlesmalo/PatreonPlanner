@@ -85,7 +85,12 @@ export function CreatorBoard() {
 
       {capabilities.submit ? (
         <div className="mt-6">
-          <SubmitForm slug={slug} onCreated={board.prepend} />
+          <SubmitForm
+            slug={slug}
+            onCreated={board.prepend}
+            canUpvote={capabilities.upvote}
+            onUpvoted={board.applyUpvote}
+          />
         </div>
       ) : null}
 
