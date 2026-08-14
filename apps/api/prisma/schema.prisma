@@ -52,6 +52,11 @@ enum RecommendationStatus {
   DELETED
 }
 
+enum NoteKind {
+  NOTE
+  TIMELINE
+}
+
 enum StrikeReason {
   RATE_LIMIT
   MODERATION_BLOCK
@@ -121,6 +126,7 @@ model User {
   recommendations Recommendation[]
   upvotes         Upvote[]
   abuseRecord     AbuseRecord?
+  notesWritten    CreatorNote[]      @relation("NoteAuthor")
   invitesSent     StaffInvite[]      @relation("InviteAuthor")
   invitesAccepted StaffInvite[]      @relation("InviteAcceptor")
   flagsRaised     Flag[]             @relation("FlagAuthor")
@@ -312,6 +318,9 @@ model Recommendation {
   upvotes     Upvote[]
   flags       Flag[]
   actions     ModerationAction[]
+  // `notes` is already a scalar on this model (the submitter's own free text from Plan 05), so
+  // the relation carries the model's name instead.
+  creatorNotes CreatorNote[]
 
   // De-duplication is enforced here, not by the read-then-write check: two concurrent
   // submissions of the same title both miss that read.
@@ -371,6 +380,27 @@ model Upvote {
   // Design §5: one upvote per person per entry.
   @@unique([recommendationId, userId])
   @@index([userId])
+}
+
+model CreatorNote {
+  id               String    @id @default(uuid()) @db.Uuid
+  recommendationId String    @db.Uuid
+  authorUserId     String    @db.Uuid
+  kind             NoteKind
+  body             String
+  // Only meaningful on a TIMELINE note: "we'll cover this in March". Nullable because "soon, no
+  // promises" is a legitimate thing to say, and requiring a date would make creators invent one.
+  plannedFor       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  recommendation Recommendation @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
+  // Restrict, like ModerationAction: deleting a moderator's account must not erase what they
+  // wrote on someone else's board.
+  author         User           @relation("NoteAuthor", fields: [authorUserId], references: [id], onDelete: Restrict)
+
+  @@index([recommendationId, createdAt])
+  @@index([authorUserId])
 }
 
 model Flag {

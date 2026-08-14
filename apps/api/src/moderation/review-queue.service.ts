@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { FlagStatus, Prisma } from '@prisma/client';
 import { AbuseService } from '../abuse/abuse.service';
+import { NOTE_FIELDS } from '../notes/notes.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizeTitle } from '../recommendations/normalize-title';
 import { ModerationService } from './moderation.service';
@@ -74,6 +75,8 @@ export class ReviewQueueService {
           },
           orderBy: { position: 'asc' },
         },
+        // Every kind: the queue is the surface where a moderator reads their own commentary.
+        creatorNotes: { select: NOTE_FIELDS, orderBy: { createdAt: 'asc' } },
         flags: {
           where: { status: 'OPEN' },
           select: {
@@ -100,7 +103,13 @@ export class ReviewQueueService {
     const hasMore = items.length > take;
     const page = hasMore ? items.slice(0, take) : items;
     return {
-      items: page.map(({ _count, ...item }) => ({ ...item, openFlagCount: _count.flags })),
+      items: page.map(({ _count, creatorNotes, ...item }) => ({
+        ...item,
+        // Same rename as the board: the relation dodges Recommendation's `notes` scalar, the
+        // contract does not have to.
+        notes: creatorNotes,
+        openFlagCount: _count.flags,
+      })),
       nextOffset: hasMore ? offset + take : null,
     };
   }

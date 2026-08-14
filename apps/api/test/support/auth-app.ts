@@ -73,6 +73,11 @@ export async function startAuthApp(): Promise<AuthTestContext> {
   // does not have.
   configureApp(app);
   await app.init();
+  // Listening once per suite, not per request. Supertest binds an ephemeral port and closes it
+  // for *every* request against a non-listening server — thousands of sockets into TIME_WAIT
+  // across a run, which is a textbook source of the rare "Parse Error: Expected HTTP/" this
+  // suite could produce under load. With the server already listening, supertest reuses it.
+  await app.listen(0);
 
   const prisma = new PrismaClient({ datasources: { db: { url: pg.getConnectionUri() } } });
   await prisma.$connect();

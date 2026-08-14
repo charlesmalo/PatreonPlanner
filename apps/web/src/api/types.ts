@@ -60,6 +60,16 @@ export interface WatchOrderItem {
   title: TitleSummary | null;
 }
 
+export interface CreatorNote {
+  id: string;
+  kind: 'NOTE' | 'TIMELINE';
+  body: string;
+  /** Only ever set on a TIMELINE note. */
+  plannedFor: string | null;
+  createdAt: string;
+  author: { id: string; fullName: string | null; avatarUrl: string | null };
+}
+
 export interface StaffMember {
   userId: string;
   role: string;
@@ -102,6 +112,8 @@ export interface Recommendation {
   availability: Availability | null;
   /** Empty for every type but WATCH_ORDER. */
   watchOrderItems: WatchOrderItem[];
+  /** TIMELINE notes only — editor commentary never reaches the board. */
+  notes: CreatorNote[];
   /** The entry on this page that contains this one, if any. A per-board projection. */
   parentId: string | null;
   themes: Array<{ id: string; name: string }>;
@@ -156,4 +168,6 @@ export interface ReviewQueueItem {
   flags: FlagSummary[];
   /** A watch order's text is mostly in its steps; a queue without them reviews only a title. */
   watchOrderItems: WatchOrderItem[];
+  /** Both kinds: the queue is where a moderator reads their own commentary. */
+  notes: CreatorNote[];
 }

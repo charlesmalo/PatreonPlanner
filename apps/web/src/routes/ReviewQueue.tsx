@@ -4,6 +4,8 @@ import { ApiError, api } from '../api/client';
 import { useCreator, useReviewQueue } from '../api/hooks';
 import type { ReviewQueueItem } from '../api/types';
 import { STATUS_LABELS, StatusControl } from '../components/StatusControl';
+import { NoteEditor } from '../components/NoteEditor';
+import { NoteList } from '../components/NoteList';
 import { WatchOrderList } from '../components/WatchOrderList';
 
 const REASON_LABELS: Record<string, string> = {
@@ -109,6 +111,27 @@ function QueueRow({ slug, item, onUpdate, onFlagResolved }: QueueRowProps) {
           {/* Without this a moderator reviewing a fifty-step watch order sees a title and
               nothing else — which is what the API change exists to prevent. */}
           <WatchOrderList items={item.watchOrderItems ?? []} />
+          <NoteList
+            notes={item.notes ?? []}
+            // A TIMELINE note is public the moment it is written and there is no draft state, so
+            // deleting is the only way back from a mis-picked kind. Without this the product had
+            // no path to it at all.
+            onDelete={async (note) => {
+              try {
+                await api.del(`/creators/${encodeURIComponent(slug)}/notes/${note.id}`);
+                onUpdate(item.id, {
+                  notes: (item.notes ?? []).filter((n) => n.id !== note.id),
+                });
+              } catch {
+                // Left in place: the server still has it, and pretending otherwise is worse.
+              }
+            }}
+          />
+          <NoteEditor
+            slug={slug}
+            recommendationId={item.id}
+            onWritten={(note) => onUpdate(item.id, { notes: [...(item.notes ?? []), note] })}
+          />
         </div>
         <div className="flex items-start gap-2">
           <button
