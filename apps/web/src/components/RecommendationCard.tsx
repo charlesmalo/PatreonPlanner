@@ -18,6 +18,7 @@ export function isSafeHttpUrl(value: string): boolean {
 }
 import { AvailabilityBadges } from './AvailabilityBadges';
 import { FlagButton } from './FlagButton';
+import { NoteList } from './NoteList';
 import { StatusControl } from './StatusControl';
 import { WatchOrderList } from './WatchOrderList';
 import { UpvoteButton } from './UpvoteButton';
@@ -101,6 +102,7 @@ export function RecommendationCard({
           </ul>
         ) : null}
         <WatchOrderList items={recommendation.watchOrderItems} />
+        <NoteList notes={recommendation.notes ?? []} />
         <AvailabilityBadges
           availability={recommendation.availability}
           title={recommendation.customTitle}

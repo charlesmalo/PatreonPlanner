@@ -37,6 +37,7 @@ export function recommendation(overrides: Partial<Recommendation> = {}): Recomme
     createdAt: new Date().toISOString(),
     availability: null,
     watchOrderItems: [],
+    notes: [],
     parentId: null,
     themes: [],
     links: [],
