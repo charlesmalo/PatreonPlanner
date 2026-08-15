@@ -10,9 +10,11 @@
     "test": "jest --config jest-e2e.json --runInBand",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "dotenv -e ../../.env -- prisma migrate dev",
-    "prisma:deploy": "dotenv -e ../../.env -- prisma migrate deploy"
+    "prisma:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
+    "verify:embeddings": "tsx scripts/verify-embeddings.ts"
   },
   "dependencies": {
+    "@huggingface/transformers": "4.2.0",
     "@nestjs/common": "10.4.4",
     "@nestjs/core": "10.4.4",
     "@nestjs/platform-express": "10.4.4",
@@ -44,6 +46,7 @@
     "prisma": "5.20.0",
     "supertest": "7.0.0",
     "ts-jest": "29.2.5",
+    "tsx": "^4.23.12",
     "typescript": "5.5.4"
   }
 }

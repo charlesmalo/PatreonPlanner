@@ -8,6 +8,7 @@ import { CatalogModule } from './catalog/catalog.module';
 import { ConfigModule } from './config/config.module';
 import { CreatorsModule } from './creators/creators.module';
 import { CryptoModule } from './crypto/crypto.module';
+import { EmbeddingsModule } from './embeddings/embeddings.module';
 import { CsrfMiddleware } from './csrf/csrf.middleware';
 import { CsrfModule } from './csrf/csrf.module';
 import { IntelligenceModule } from './intelligence/intelligence.module';
@@ -46,6 +47,7 @@ import { HealthModule } from './health/health.module';
     AbuseModule,
     AvailabilityModule,
     CatalogModule,
+    EmbeddingsModule,
     IntelligenceModule,
     CreatorsModule,
     RecommendationsModule,

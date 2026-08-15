@@ -70,6 +70,19 @@ export const configSchema = z.object({
   SEARCH_LIMIT_BURST: z.coerce.number().int().positive().default(30),
   SEARCH_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(60),
 
+  /**
+   * Semantic search. Off by default: the model downloads on first use and costs ~250–400MB
+   * resident, which is a decision a deployment should make rather than inherit.
+   */
+  EMBEDDINGS_ENABLED: z
+    .string()
+    .transform((value) => value === 'true')
+    .or(z.boolean())
+    .default(false),
+  EMBEDDING_MODEL: z.string().min(1).default('Xenova/multilingual-e5-small'),
+  // Must match the width of the `Title.embedding` column; changing it needs a migration.
+  EMBEDDING_DIMENSIONS: z.coerce.number().int().positive().default(384),
+
   SUBMIT_LIMIT_PER_HOUR: z.coerce.number().int().positive().default(1),
   // Design §6 item 3: a looser cap across all creators, so a patron of twenty creators cannot
   // submit twenty an hour.

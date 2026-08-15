@@ -3,6 +3,7 @@ import { Queue, Worker } from 'bullmq';
 import { ConfigService } from '../config/config.module';
 import { AbuseDecayJob } from './abuse-decay.job';
 import { AvailabilityRefreshJob } from './availability-refresh.job';
+import { EmbedTitlesJob } from './embed-titles.job';
 import { EnrichTitleJob } from './enrich-title.job';
 import { MembershipRefreshJob } from './membership-refresh.job';
 
@@ -11,8 +12,20 @@ const EVERY_MS = 15 * 60 * 1000;
 
 @Global()
 @Module({
-  providers: [MembershipRefreshJob, AvailabilityRefreshJob, EnrichTitleJob, AbuseDecayJob],
-  exports: [MembershipRefreshJob, AvailabilityRefreshJob, EnrichTitleJob, AbuseDecayJob],
+  providers: [
+    MembershipRefreshJob,
+    AvailabilityRefreshJob,
+    EnrichTitleJob,
+    AbuseDecayJob,
+    EmbedTitlesJob,
+  ],
+  exports: [
+    MembershipRefreshJob,
+    AvailabilityRefreshJob,
+    EnrichTitleJob,
+    AbuseDecayJob,
+    EmbedTitlesJob,
+  ],
 })
 export class JobsModule implements OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger(JobsModule.name);
@@ -25,6 +38,7 @@ export class JobsModule implements OnModuleInit, OnApplicationShutdown {
     private readonly availabilityJob: AvailabilityRefreshJob,
     private readonly enrichJob: EnrichTitleJob,
     private readonly abuseDecayJob: AbuseDecayJob,
+    private readonly embedJob: EmbedTitlesJob,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -47,6 +61,7 @@ export class JobsModule implements OnModuleInit, OnApplicationShutdown {
         await this.runJob('tier resync', () => this.job.resyncTiers());
         await this.runJob('availability refresh', () => this.availabilityJob.runOnce());
         await this.runJob('title enrichment', () => this.enrichJob.runOnce());
+        await this.runJob('title embedding', () => this.embedJob.runOnce());
       },
       { connection },
     );
