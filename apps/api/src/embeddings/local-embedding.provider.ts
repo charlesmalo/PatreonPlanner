@@ -2,6 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '../config/config.module';
 import { EmbeddingProvider } from './embedding.provider';
 
+/** How long to wait before trying to load the model again after a failure. */
+const LOAD_RETRY_MS = 10 * 60 * 1000;
+
 type Pipeline = (
   texts: string[],
   options: { pooling: 'mean'; normalize: boolean },
@@ -12,13 +15,18 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
   private readonly logger = new Logger(LocalEmbeddingProvider.name);
   private pipeline?: Pipeline;
   private loading?: Promise<Pipeline | null>;
-  /** Set when the model could not be loaded, so the failure is reported once and not per call. */
-  private unavailable = false;
+  /**
+   * When to try loading again after a failure. The model is fetched over the network on first
+   * use, so a blip at exactly the wrong moment would otherwise disable semantic search until
+   * someone restarted the process — a permanent consequence for a transient cause.
+   */
+  private retryAfter = 0;
 
   constructor(private readonly config: ConfigService) {}
 
   isConfigured(): boolean {
-    return this.config.get('EMBEDDINGS_ENABLED') && !this.unavailable;
+    if (!this.config.get('EMBEDDINGS_ENABLED')) return false;
+    return this.pipeline !== undefined || Date.now() >= this.retryAfter;
   }
 
   modelId(): string {
@@ -64,13 +72,15 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
         this.logger.log(`Embedding model ready: ${this.modelId()}`);
         return extractor;
       } catch (error) {
-        // Once. A model that cannot load is a permanent condition until restart, and semantic
-        // search is an improvement on a working feature rather than a dependency of it.
-        this.unavailable = true;
+        // Backed off, not given up on. Degrading to trigram-only is right — semantic search is an
+        // improvement on a working feature rather than a dependency of it — but degrading until
+        // someone restarts the process, because one model download happened to fail, is not.
+        this.retryAfter = Date.now() + LOAD_RETRY_MS;
+        this.loading = undefined;
         this.logger.error(
-          `Embedding model unavailable, falling back to trigram search only: ${
-            (error as Error).message
-          }`,
+          `Embedding model unavailable, using trigram search only; retrying in ${
+            LOAD_RETRY_MS / 60_000
+          } minutes: ${(error as Error).message}`,
         );
         return null;
       }
