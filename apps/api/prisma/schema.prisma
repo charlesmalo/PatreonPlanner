@@ -130,6 +130,7 @@ model User {
   notesWritten    CreatorNote[]      @relation("NoteAuthor")
   invitesSent     StaffInvite[]      @relation("InviteAuthor")
   invitesAccepted StaffInvite[]      @relation("InviteAcceptor")
+  notifications   Notification[]
   flagsRaised     Flag[]             @relation("FlagAuthor")
   flagsResolved   Flag[]             @relation("FlagResolver")
   moderationActs  ModerationAction[] @relation("ModerationActor")
@@ -180,6 +181,7 @@ model Creator {
   recommendations Recommendation[]
   themes          Theme[]
   themeSources    ThemeSource[]
+  notifications   Notification[]
   staffInvites    StaffInvite[]
 
   // Postgres does not index foreign keys automatically, and the cascade from Creator scans them.
@@ -554,6 +556,31 @@ model Theme {
 //
 // Many labels per theme, because that is what a merge produces: fold "sci-fi" into "science
 // fiction" and the survivor legitimately owns both.
+enum NotificationType {
+  ENTRY_STATUS_CHANGED
+  ENTRY_FLAGGED
+}
+
+// Design §3: in-app only — §12 puts email and push out of Phase 1, and every provider worth
+// using costs money.
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @db.Uuid
+  // Kept so a board's notifications go when the board does, and so the SPA can link back.
+  creatorId String           @db.Uuid
+  type      NotificationType
+  // A snapshot, not a join: the message has to keep being true after the entry it describes is
+  // deleted, retitled by a moderator, or moved somewhere this reader can no longer see.
+  payload   Json
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  creator Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc), id(sort: Desc)])
+}
+
 model ThemeSource {
   creatorId String @db.Uuid
   sourceKey String
