@@ -193,9 +193,13 @@ export function seedRelation(
 export function seedTheme(name: string, tmdbIds: number[]): void {
   const slug = name.toLowerCase();
   seed(`
-    INSERT INTO "Theme"(id,"creatorId",name,slug,"sourceKey","createdAt","updatedAt")
-      VALUES (gen_random_uuid(),'${CREATOR.id}','${name}','${slug}','${slug}',now(),now())
+    INSERT INTO "Theme"(id,"creatorId",name,slug,"createdAt","updatedAt")
+      VALUES (gen_random_uuid(),'${CREATOR.id}','${name}','${slug}',now(),now())
       ON CONFLICT ("creatorId",slug) DO NOTHING;
+    INSERT INTO "ThemeSource"("creatorId","sourceKey","themeId")
+      SELECT '${CREATOR.id}','${slug}', th.id FROM "Theme" th
+      WHERE th."creatorId"='${CREATOR.id}' AND th.slug='${slug}'
+      ON CONFLICT DO NOTHING;
     INSERT INTO "TitleTheme"("titleId","themeId")
       SELECT t.id, th.id FROM "Title" t, "Theme" th
       WHERE t."tmdbId" IN (${tmdbIds.join(',')}) AND th."creatorId" = '${CREATOR.id}'

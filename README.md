@@ -246,9 +246,11 @@ and most abusable one.
   on what else is on _that_ board, which changes with every submission and status change. Only
   containment kinds nest — `RELATED` means "similar", and nesting on it would bury unrelated
   entries.
-- **Themes are creator-scoped**, seeded from TMDB genres and keywords. Re-seeding matches on
-  `sourceKey` (the TMDB label), never the display name, so a creator's rename survives it.
-  `GET|PATCH|DELETE /creators/:slug/themes` and `?theme=<id>` on the board.
+- **Themes are creator-scoped**, seeded from TMDB genres and keywords. Re-seeding matches on the
+  TMDB labels recorded in `ThemeSource`, never the display name, so a creator's rename survives it.
+  A theme may answer to several labels, which is what merging two themes produces.
+  `GET|PATCH|DELETE /creators/:slug/themes`, `POST /creators/:slug/themes/:id/merge`, and
+  `?theme=<id>` on the board.
 
 Without `TMDB_API_KEY` there are no relations and no themes; the board renders unnested and
 unfiltered.

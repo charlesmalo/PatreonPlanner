@@ -232,6 +232,53 @@ describe('Relation and theme enrichment (integration)', () => {
       // And the title is attached to the theme that now owns that name.
       expect(await prisma.titleTheme.count({ where: { titleId: other.id } })).toBe(1);
     });
+
+    it('records which TMDB label a theme was seeded from', async () => {
+      const film = await makeTitle(129, 'MOVIE');
+      await themes.seedFor(film.id, creatorId, ['Animation']);
+
+      const rows = await prisma.themeSource.findMany({ where: { creatorId } });
+      expect(rows).toHaveLength(1);
+      expect(rows[0].sourceKey).toBe('animation');
+    });
+
+    it('remembers a label it had to resolve through a slug collision', async () => {
+      // Resolving "anime" onto the renamed theme costs a failed insert and a second query. Doing
+      // that once is the cost of curation; doing it on every pass forever is a bug, and leaving
+      // the label unclaimed is what lets a merge be undone by the next enrichment.
+      const film = await makeTitle(129, 'MOVIE');
+      const other = await makeTitle(8392, 'MOVIE');
+      await themes.seedFor(film.id, creatorId, ['Animation']);
+      await prisma.theme.updateMany({
+        where: { creatorId },
+        data: { name: 'Anime', slug: 'anime' },
+      });
+
+      await themes.seedFor(other.id, creatorId, ['anime']);
+
+      const theme = await prisma.theme.findFirstOrThrow({ where: { creatorId } });
+      const keys = await prisma.themeSource.findMany({ where: { themeId: theme.id } });
+      expect(new Set(keys.map((row) => row.sourceKey))).toEqual(new Set(['animation', 'anime']));
+    });
+
+    it('keeps one creator label mapping out of another creator namespace', async () => {
+      const owner = await prisma.user.findFirstOrThrow();
+      const other = await prisma.creator.create({
+        data: {
+          patreonCampaignId: 'en-src-other',
+          ownerUserId: owner.id,
+          displayName: 'Other',
+          slug: 'en-src-other',
+        },
+      });
+      const film = await makeTitle(129, 'MOVIE');
+      await themes.seedFor(film.id, creatorId, ['Animation']);
+      await themes.seedFor(film.id, other.id, ['Animation']);
+
+      const rows = await prisma.themeSource.findMany({ where: { sourceKey: 'animation' } });
+      expect(rows).toHaveLength(2);
+      expect(new Set(rows.map((row) => row.themeId)).size).toBe(2);
+    });
   });
 
   describe('enrichment end to end', () => {
