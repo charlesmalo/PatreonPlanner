@@ -71,10 +71,11 @@ describe('Theme curation (integration)', () => {
     ).id;
     themeId = (
       await ctx.prisma.theme.create({
-        data: { creatorId, name: 'Anime', slug: 'anime', sourceKey: 'anime' },
+        data: { creatorId, name: 'Anime', slug: 'anime' },
       })
     ).id;
     await ctx.prisma.titleTheme.create({ data: { titleId, themeId } });
+    await ctx.prisma.themeSource.create({ data: { creatorId, sourceKey: 'anime', themeId } });
   });
 
   async function loginAs(patreonUserId: string) {
@@ -150,7 +151,7 @@ describe('Theme curation (integration)', () => {
 
   it('never lists another creator themes', async () => {
     await ctx.prisma.theme.create({
-      data: { creatorId: otherCreatorId, name: 'Foreign', slug: 'foreign', sourceKey: 'foreign' },
+      data: { creatorId: otherCreatorId, name: 'Foreign', slug: 'foreign' },
     });
     const res = await list(patron).expect(200);
     expect(res.body.items.map((t: { name: string }) => t.name)).toEqual(['Anime']);
@@ -160,8 +161,10 @@ describe('Theme curation (integration)', () => {
     await patch(staff, themeId, { name: 'Cartoons' }).expect(200);
     const row = await ctx.prisma.theme.findUniqueOrThrow({ where: { id: themeId } });
     expect(row).toMatchObject({ name: 'Cartoons', slug: 'cartoons' });
-    // The source key is untouched, which is what stops re-seeding from resurrecting the old name.
-    expect(row.sourceKey).toBe('anime');
+    // The label mapping is untouched, which is what stops re-seeding from resurrecting the old
+    // name the next time a title carrying that TMDB keyword lands on the board.
+    const sources = await ctx.prisma.themeSource.findMany({ where: { themeId } });
+    expect(sources.map((s) => s.sourceKey)).toEqual(['anime']);
     expect(await ctx.prisma.titleTheme.count({ where: { themeId } })).toBe(1);
   });
 
@@ -171,7 +174,7 @@ describe('Theme curation (integration)', () => {
 
   it('refuses a rename that collides with an existing theme', async () => {
     const other = await ctx.prisma.theme.create({
-      data: { creatorId, name: 'Fantasy', slug: 'fantasy', sourceKey: 'fantasy' },
+      data: { creatorId, name: 'Fantasy', slug: 'fantasy' },
     });
     await patch(staff, other.id, { name: 'anime' }).expect(409);
   });
@@ -188,7 +191,7 @@ describe('Theme curation (integration)', () => {
 
   it('refuses a theme belonging to another creator', async () => {
     const foreign = await ctx.prisma.theme.create({
-      data: { creatorId: otherCreatorId, name: 'Foreign', slug: 'foreign', sourceKey: 'foreign' },
+      data: { creatorId: otherCreatorId, name: 'Foreign', slug: 'foreign' },
     });
     await patch(staff, foreign.id, { name: 'Mine' }).expect(404);
     await remove(staff, foreign.id).expect(404);

@@ -116,7 +116,7 @@ describe('Board nesting and theme filtering (integration)', () => {
     similarId = (await makeEntry(similarTitleId, 'MOVIE')).id;
 
     const theme = await ctx.prisma.theme.create({
-      data: { creatorId, name: 'Anime', slug: 'anime', sourceKey: 'anime' },
+      data: { creatorId, name: 'Anime', slug: 'anime' },
     });
     themeId = theme.id;
     await ctx.prisma.titleTheme.create({ data: { titleId: filmTitleId, themeId } });
@@ -221,7 +221,7 @@ describe('Board nesting and theme filtering (integration)', () => {
 
   it('rejects a theme belonging to another creator', async () => {
     const foreign = await ctx.prisma.theme.create({
-      data: { creatorId: otherCreatorId, name: 'Anime', slug: 'anime', sourceKey: 'anime' },
+      data: { creatorId: otherCreatorId, name: 'Anime', slug: 'anime' },
     });
     await board(patron, `&theme=${foreign.id}`).expect(404);
   });

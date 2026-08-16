@@ -179,6 +179,7 @@ model Creator {
   policy          CreatorPolicy?
   recommendations Recommendation[]
   themes          Theme[]
+  themeSources    ThemeSource[]
   staffInvites    StaffInvite[]
 
   // Postgres does not index foreign keys automatically, and the cascade from Creator scans them.
@@ -537,20 +538,32 @@ model Theme {
   name      String
   // Lowercased name for uniqueness: two themes differing only in case are one theme.
   slug      String
-  // The TMDB label this was seeded from, so re-seeding matches the source rather than the
-  // display name — otherwise every re-seed would resurrect a theme the creator renamed.
-  // Nullable, and Postgres treats NULLs as distinct in a unique index: a creator may invent any
-  // number of themes with no source label, and those stay unique by `slug` alone.
-  sourceKey String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  creator Creator      @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  creator Creator       @relation(fields: [creatorId], references: [id], onDelete: Cascade)
   titles  TitleTheme[]
+  sources ThemeSource[]
 
   @@unique([creatorId, slug])
-  @@unique([creatorId, sourceKey])
   @@index([creatorId])
+}
+
+// The TMDB labels a theme answers to, so re-seeding matches the source rather than the display
+// name — otherwise every pass would resurrect a theme the creator renamed or merged away.
+//
+// Many labels per theme, because that is what a merge produces: fold "sci-fi" into "science
+// fiction" and the survivor legitimately owns both.
+model ThemeSource {
+  creatorId String @db.Uuid
+  sourceKey String
+  themeId   String @db.Uuid
+
+  creator Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  theme   Theme   @relation(fields: [themeId], references: [id], onDelete: Cascade)
+
+  @@id([creatorId, sourceKey])
+  @@index([themeId])
 }
 
 model TitleTheme {

@@ -39,25 +39,48 @@ export class ThemesService {
     const sourceKey = themeSlug(label);
     if (sourceKey.length === 0) return null;
 
+    const known = await this.prisma.themeSource.findUnique({
+      where: { creatorId_sourceKey: { creatorId, sourceKey } },
+      select: { themeId: true },
+    });
+    // The mapping wins over the name in every case: it is what survives a rename, and what a
+    // merge rewrites so the losing theme stays merged.
+    if (known) return known.themeId;
+
+    const themeId = await this.themeForNewLabel(creatorId, label, sourceKey);
+    if (!themeId) return null;
+
+    // Recorded so the next pass is a point lookup rather than a collision to resolve again.
+    await this.prisma.themeSource.upsert({
+      where: { creatorId_sourceKey: { creatorId, sourceKey } },
+      create: { creatorId, sourceKey, themeId },
+      update: {},
+    });
+    return themeId;
+  }
+
+  /**
+   * `Theme` is unique on slug per creator, so a creator who renamed "Animation" to "Anime" owns
+   * the `anime` slug and the TMDB label "anime" collides on it. Their theme already means this
+   * label, so attach to it rather than failing the title: a P2002 escaping here used to abort the
+   * title mid-loop, costing every remaining label and every remaining creator their themes —
+   * permanently, because `enrichedAt` is stamped regardless.
+   */
+  private async themeForNewLabel(
+    creatorId: string,
+    label: string,
+    slug: string,
+  ): Promise<string | null> {
     try {
-      const theme = await this.prisma.theme.upsert({
-        where: { creatorId_sourceKey: { creatorId, sourceKey } },
-        create: { creatorId, name: label.trim(), slug: sourceKey, sourceKey },
-        // Deliberately empty: an existing theme carries the creator's name for it, and seeding
-        // must never overwrite curation.
-        update: {},
+      const theme = await this.prisma.theme.create({
+        data: { creatorId, name: label.trim(), slug },
         select: { id: true },
       });
       return theme.id;
     } catch (error) {
-      // `Theme` is unique on *two* columns. A creator who renamed "Animation" to "Anime" owns the
-      // `anime` slug with sourceKey `animation`, so seeding the TMDB label "anime" misses on
-      // sourceKey and then collides on slug. That P2002 used to abort the title mid-loop, costing
-      // every remaining label and every remaining creator their themes — permanently, because
-      // enrichedAt is stamped regardless. The creator's theme already means this label; attach it.
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         const existing = await this.prisma.theme.findFirst({
-          where: { creatorId, slug: sourceKey },
+          where: { creatorId, slug },
           select: { id: true },
         });
         return existing?.id ?? null;
