@@ -4,7 +4,7 @@
 
 **Goal:** Let a creator fold one theme into another, so the duplicates TMDB seeds ("sci-fi" and "science fiction") collapse into the one name they actually use.
 
-**Architecture:** Merging is only half a feature unless the seeder is taught about it. Today a theme owns exactly one TMDB label via `Theme.sourceKey`, so deleting the loser frees its label and the very next enrichment pass re-creates the theme the creator just merged away. This plan moves that mapping into a `ThemeSource` table keyed by `(creatorId, sourceKey)`, letting one theme own many labels — which is what a merged theme *is*. Merge then moves the loser's labels and title assignments onto the winner inside one transaction and deletes the loser.
+**Architecture:** Merging is only half a feature unless the seeder is taught about it. Today a theme owns exactly one TMDB label via `Theme.sourceKey`, so deleting the loser frees its label and the very next enrichment pass re-creates the theme the creator just merged away. This plan moves that mapping into a `ThemeSource` table keyed by `(creatorId, sourceKey)`, letting one theme own many labels — which is what a merged theme *is*. Merge then moves the loser's labels and title assignments onto the winner and deletes the loser, in one transaction that locks both theme rows first — a transaction alone buys atomicity, not isolation, which cost three data-loss races found in review.
 
 **Tech Stack:** NestJS 10, Prisma 5.20, Postgres 16, Jest + Testcontainers.
 
@@ -338,8 +338,20 @@ git commit -m "feat(themes): merge one theme into another"
 
 ---
 
+## Found in review (fixed)
+
+The plan sold "inside one transaction" as what makes merge correct. A transaction buys atomicity, not isolation, and Prisma's default is read committed — so the plan was wrong about its own central claim. Three data-loss races followed from it, all reproduced against a real Postgres before fixing and all now pinned by tests that fail when the fix is reverted:
+
+1. **Two merges chaining through the same theme** (X into Y, then Y into Z) both returned 200 while the second, working from a snapshot taken before the first one's writes landed, cascaded them away — the title left with no theme and the label mapping gone, which re-arms the exact resurrection this feature exists to prevent. Measured at **8 rounds in 10**. Fixed by locking both theme rows `FOR UPDATE` in id order — by id rather than by role, so X-into-Y and Y-into-X cannot deadlock — with the existence checks moved inside the transaction.
+2. **A merge landing mid-enrichment.** `seedFor` resolves every label before writing any assignment, so a merge committing in that window either aborted the title with a foreign key violation — costing it every other label, permanently, since `enrichedAt` is stamped regardless — or had its rows quietly cascaded away. The same lock closes the second case (the seeder's insert needs a key-share lock on the row the merge holds); the first is handled by resolving once more, since the mapping now points at the winner.
+3. **An unhandled P2002 on the label mapping.** Prisma compiles an upsert with an empty update to a select followed by an insert, not to `ON CONFLICT` — confirmed from its query log — so two enrichment passes reaching that line together left one holding a P2002 that cost the title all of its labels. Now an explicit create whose P2002 defers to whoever recorded the label first.
+
+Also fixed: the e2e seed helper wrote `Theme.sourceKey` in raw SQL, which no compiler checks and which the migration would have broken in CI — the plan's File Structure never considered `e2e/`. And the merge copied every assignment through the application, which is a round trip per title inside a transaction with a five-second timeout; it is now one `INSERT … SELECT … ON CONFLICT DO NOTHING`.
+
 ## Known risks
 
-- **`ThemeSource.creatorId` can disagree with `Theme.creatorId`** if a future writer moves a theme between creators. Nothing does today, and merge checks both sides, but the constraint is not expressible in the schema.
+- **The migration is not rolling-deploy safe.** The backfill and the `DROP COLUMN` are one atomic step, so the moment it commits, any old instance still running 500s on every read of `Theme` — Prisma names columns explicitly, so `sourceKey` is in every select. The correct shape is expand/contract: ship `ThemeSource` and dual-write, deploy, drop the column in a later migration. It is left as one migration deliberately, because nothing is deployed yet and there is no production data; **this becomes a real hazard the first time this app runs more than one instance,** and the split has to happen before then.
+- **`ThemeSource.creatorId` can disagree with `Theme.creatorId`** if a future writer moves a theme between creators. Nothing does today; merge verifies both sides and its `updateMany` is scoped by creator as well as theme, but the constraint is not expressible in the schema.
 - **The backfill is one-way.** Rolling back past this migration loses which label each theme came from, and the next enrichment pass would rebuild the mapping by colliding on slug — recoverable, but noisy.
 - **Merge is destructive and has no undo.** A creator who merges the wrong pair re-creates the theme by hand and loses the assignments. Flagged in §3 as out of scope; worth an "are you sure" when the admin UI is built.
+- **A merge can now lose a lock race and 404.** If the losing theme is folded away by another merge while this one waits, the caller gets a 404 rather than a 200. That is the correct answer — the theme is genuinely gone — but the admin UI should say so in those words rather than "not found".

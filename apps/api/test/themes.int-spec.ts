@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { Prisma, PrismaClient } from '@prisma/client';
 import request from 'supertest';
 import { ThemesService } from '../src/intelligence/themes.service';
 import { AuthTestContext, pickCookie, startAuthApp } from './support/auth-app';
@@ -295,6 +296,147 @@ describe('Theme curation (integration)', () => {
     it('refuses a merge from a patron', async () => {
       await merge(patron, themeId, { intoId: target }).expect(403);
       expect(await ctx.prisma.theme.findUnique({ where: { id: themeId } })).not.toBeNull();
+    });
+
+    it('does not lose data when two merges chain through the same theme', async () => {
+      // A creator cleaning up three duplicates fires X into Y and Y into Z without waiting. Both
+      // used to return 200 while the second transaction, working from a snapshot taken before the
+      // first one's writes landed, cascaded them away — leaving the title with no theme at all and
+      // the label mapping gone, which re-arms the resurrection this feature exists to prevent.
+      //
+      // Two clients rather than two requests: the race needs genuinely separate connections, and
+      // through one pool it did not reproduce at all. Repeated because the interleaving is not
+      // guaranteed; unfixed this lost data in 8 rounds out of 10.
+      const other = new PrismaClient({ datasources: { db: { url: process.env.DATABASE_URL } } });
+      const mergeVia = (db: PrismaClient, from: string, into: string) =>
+        new ThemesService(db as never).merge(creatorId, from, into).catch((error: Error) => error);
+
+      try {
+        for (let round = 0; round < 5; round += 1) {
+          const [x, y, z] = await Promise.all(
+            ['x', 'y', 'z'].map((n) =>
+              ctx.prisma.theme.create({
+                data: { creatorId, name: `${n}${round}`, slug: `${n}${round}` },
+              }),
+            ),
+          );
+          const film = await ctx.prisma.title.create({
+            data: { tmdbId: 7000 + round, mediaType: 'MOVIE', name: `Film ${round}` },
+          });
+          await ctx.prisma.titleTheme.create({ data: { titleId: film.id, themeId: x.id } });
+          await ctx.prisma.themeSource.create({
+            data: { creatorId, sourceKey: `x${round}`, themeId: x.id },
+          });
+
+          await Promise.all([mergeVia(ctx.prisma, x.id, y.id), mergeVia(other, y.id, z.id)]);
+
+          // Whichever way the two landed — and one of them may legitimately 404, having lost its
+          // theme while waiting on the lock — the title keeps a theme that still exists, and the
+          // label keeps a home on a theme that still exists.
+          const survivors = await ctx.prisma.theme.findMany({
+            where: { id: { in: [x.id, y.id, z.id] } },
+            select: { id: true },
+          });
+          const ids = survivors.map((t) => t.id);
+          const links = await ctx.prisma.titleTheme.findMany({ where: { titleId: film.id } });
+          const sources = await ctx.prisma.themeSource.findMany({
+            where: { creatorId, sourceKey: `x${round}` },
+          });
+
+          expect({ round, links: links.length, sources: sources.length }).toEqual({
+            round,
+            links: 1,
+            sources: 1,
+          });
+          expect(ids).toContain(links[0].themeId);
+          expect(ids).toContain(sources[0].themeId);
+        }
+      } finally {
+        await other.$disconnect();
+      }
+    });
+
+    it('does not lose a title themes when a merge lands mid-enrichment', async () => {
+      // The enrichment job resolves every label before writing any assignment, so a merge
+      // committing inside that window left the resolved ids pointing at a theme that no longer
+      // exists: a foreign key violation that cost the title every one of its labels, permanently,
+      // because enrichedAt is stamped either way. The other order was worse — the assignment
+      // committed and was then quietly cascaded away by the merge's delete.
+      const other = new PrismaClient({ datasources: { db: { url: process.env.DATABASE_URL } } });
+      const themes = ctx.app.get(ThemesService);
+
+      try {
+        for (let round = 0; round < 5; round += 1) {
+          const loser = await ctx.prisma.theme.create({
+            data: { creatorId, name: `Seeded${round}`, slug: `seeded${round}` },
+          });
+          await ctx.prisma.themeSource.create({
+            data: { creatorId, sourceKey: `seeded${round}`, themeId: loser.id },
+          });
+          const film = await ctx.prisma.title.create({
+            data: { tmdbId: 7100 + round, mediaType: 'MOVIE', name: `Mid ${round}` },
+          });
+
+          const [, mergeResult] = await Promise.all([
+            themes.seedFor(film.id, creatorId, [`Seeded${round}`]),
+            new ThemesService(other as never)
+              .merge(creatorId, loser.id, target)
+              .catch((error: Error) => error),
+          ]);
+          expect(mergeResult).not.toBeInstanceOf(Error);
+
+          // The title ends up on the surviving theme either way: the seed either wrote to the
+          // loser before it was folded in, or resolved again afterwards and wrote to the winner.
+          const links = await ctx.prisma.titleTheme.findMany({ where: { titleId: film.id } });
+          expect(links.map((l) => l.themeId)).toEqual([target]);
+        }
+      } finally {
+        await other.$disconnect();
+      }
+    });
+
+    it('recovers when another enrichment pass records the same label first', async () => {
+      // Prisma compiles an upsert with an empty update to a select followed by an insert, not to
+      // ON CONFLICT — verified from its query log — so two passes reaching that line together
+      // leave one holding a P2002. Unhandled, it cost the title every one of its labels,
+      // permanently, since enrichedAt is stamped either way.
+      //
+      // The interleaving is forced rather than raced: through one process the two round trips do
+      // not reliably overlap, and a test that only sometimes reproduces the bug is not a test.
+      // The competing row is really inserted, so the recovery path reads real data.
+      await ctx.prisma.themeSource.deleteMany({ where: { creatorId, sourceKey: 'anime' } });
+      const rival = await ctx.prisma.theme.create({
+        data: { creatorId, name: 'Rival', slug: 'rival' },
+      });
+      let raced = false;
+      const prisma = {
+        theme: ctx.prisma.theme,
+        titleTheme: ctx.prisma.titleTheme,
+        themeSource: {
+          findUnique: (args: never) => ctx.prisma.themeSource.findUnique(args),
+          create: async (args: {
+            data: { creatorId: string; sourceKey: string; themeId: string };
+          }) => {
+            if (raced) return ctx.prisma.themeSource.create(args);
+            raced = true;
+            await ctx.prisma.themeSource.create({ data: { ...args.data, themeId: rival.id } });
+            throw new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+              code: 'P2002',
+              clientVersion: '5.20.0',
+            });
+          },
+        },
+      };
+
+      await new ThemesService(prisma as never).seedFor(otherTitleId, creatorId, ['Anime']);
+
+      // Whoever recorded the label first owns it, and the title lands on their theme rather than
+      // on a second one carrying the same meaning.
+      expect(await ctx.prisma.themeSource.count({ where: { creatorId, sourceKey: 'anime' } })).toBe(
+        1,
+      );
+      const links = await ctx.prisma.titleTheme.findMany({ where: { titleId: otherTitleId } });
+      expect(links.map((l) => l.themeId)).toEqual([rival.id]);
     });
 
     it('reports the winner entry count as the union of both', async () => {

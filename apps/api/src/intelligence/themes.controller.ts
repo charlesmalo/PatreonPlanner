@@ -99,8 +99,8 @@ export class ThemesController {
 
     return this.prisma.theme.update({
       where: { id: theme.id },
-      // sourceKey is deliberately untouched: re-seeding matches on it, so leaving it alone is
-      // what stops the next enrichment pass from resurrecting the old name.
+      // The ThemeSource rows are deliberately untouched: re-seeding matches on those labels, so
+      // leaving them alone is what stops the next pass from resurrecting the old name.
       data: { name: dto.name.trim(), slug },
       select: { id: true, name: true },
     });
