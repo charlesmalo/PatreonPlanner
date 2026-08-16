@@ -4,11 +4,24 @@ import { Layout } from './components/Layout';
 import { RecommendationCard } from './components/RecommendationCard';
 import { recommendation } from './test-support';
 
+const noNotifications = {
+  unreadCount: 0,
+  items: [],
+  loading: false,
+  failed: false,
+  open: vi.fn(),
+};
+
 describe('accessibility basics', () => {
   it('offers a sign-in link when signed out and a sign-out button when signed in', () => {
     const { rerender } = render(
       <MemoryRouter>
-        <Layout user={null} loadingSession={false} onSignOut={vi.fn()}>
+        <Layout
+          user={null}
+          loadingSession={false}
+          onSignOut={vi.fn()}
+          notifications={noNotifications}
+        >
           <p>content</p>
         </Layout>
       </MemoryRouter>,
@@ -24,6 +37,7 @@ describe('accessibility basics', () => {
           user={{ id: 'u', patreonUserId: 'p', fullName: 'Ada', avatarUrl: null }}
           loadingSession={false}
           onSignOut={vi.fn()}
+          notifications={noNotifications}
         >
           <p>content</p>
         </Layout>

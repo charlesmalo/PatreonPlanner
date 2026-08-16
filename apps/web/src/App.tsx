@@ -1,5 +1,5 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
-import { useSession } from './api/hooks';
+import { useNotifications, useSession } from './api/hooks';
 import { Layout } from './components/Layout';
 import { CreatorBoard } from './routes/CreatorBoard';
 import { LandingPage } from './routes/LandingPage';
@@ -9,10 +9,16 @@ import { StaffPage } from './routes/StaffPage';
 
 export default function App() {
   const { user, loading, signOut } = useSession();
+  const notifications = useNotifications(user !== null);
 
   return (
     <BrowserRouter>
-      <Layout user={user} loadingSession={loading} onSignOut={signOut}>
+      <Layout
+        user={user}
+        loadingSession={loading}
+        onSignOut={signOut}
+        notifications={notifications}
+      >
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/c/:slug" element={<CreatorBoard />} />

@@ -18,6 +18,7 @@ import { RateLimitGuard } from './limits/rate-limit.guard';
 import { ModerationModule } from './moderation/moderation.module';
 import { MembershipsModule } from './memberships/memberships.module';
 import { NotesModule } from './notes/notes.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { PatreonModule } from './patreon/patreon.module';
 import { RecommendationsModule } from './recommendations/recommendations.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -38,6 +39,7 @@ import { HealthModule } from './health/health.module';
     SessionModule,
     StaffModule,
     NotesModule,
+    NotificationsModule,
     PatreonModule,
     MembershipsModule,
     JobsModule,

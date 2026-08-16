@@ -4,6 +4,7 @@ import type {
   Board,
   Capabilities,
   CreatorProfile,
+  Notification,
   ReviewQueueItem,
   SessionUser,
   ThemeSummary,
@@ -298,4 +299,66 @@ export function useBoard(slug: string, enabled: boolean, themeId?: string | null
     applyStatus,
     prepend,
   };
+}
+
+/** Conservative on purpose: this fires for every signed-in reader for as long as the tab is open. */
+export const UNREAD_POLL_MS = 60_000;
+
+/**
+ * The badge polls a single integer; the list is fetched only when the panel opens, and opening it
+ * is what marks the unread rows read. Polling the list instead would move twenty rows on a timer
+ * to answer a question that is only ever "is there anything new".
+ */
+export function useNotifications(enabled: boolean) {
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [items, setItems] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (!enabled) {
+      setUnreadCount(0);
+      setItems([]);
+      return;
+    }
+    let cancelled = false;
+    const poll = () =>
+      api
+        .get<{ count: number }>('/notifications/unread-count')
+        .then(({ count }) => {
+          if (!cancelled) setUnreadCount(count);
+        })
+        // A failed poll is not worth showing anyone: the badge simply does not move.
+        .catch(() => undefined);
+
+    poll();
+    const timer = setInterval(poll, UNREAD_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [enabled]);
+
+  const open = useCallback(async () => {
+    setLoading(true);
+    setFailed(false);
+    try {
+      const page = await api.get<{ items: Notification[] }>('/notifications');
+      setItems(page.items);
+      // Only the rows actually shown. Marking everything read would silently consume anything
+      // past the first page — and since the panel has no way to reach a second page, those rows
+      // would be both read and unreachable.
+      const ids = page.items.filter((item) => item.readAt === null).map((item) => item.id);
+      if (ids.length > 0) await api.post('/notifications/read', { ids });
+      setUnreadCount((count) => Math.max(0, count - ids.length));
+    } catch {
+      // The badge is left where it was and the next poll corrects it, but the panel has to say
+      // something: an empty list under a "3 unread" badge reads as a bug.
+      setFailed(true);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { unreadCount, items, loading, failed, open };
 }

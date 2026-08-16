@@ -171,7 +171,14 @@ export class StaffService {
       throw new ConflictException('A creator must keep an owner');
     }
 
-    await this.prisma.creatorStaff.delete({ where: { id: member.id } });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.creatorStaff.delete({ where: { id: member.id } });
+      // Their notifications about this board go with the role that entitled them to it. A flag
+      // notification carries the entry's title and why it was reported, and on a subscribers-only
+      // board a removed mod who does not pledge cannot read a single entry — but the bell would
+      // have gone on showing them those payloads for as long as they kept the account.
+      await tx.notification.deleteMany({ where: { creatorId, userId } });
+    });
   }
 
   /** Live, redeemable invitations: not spent, not revoked, not expired. */
