@@ -4,6 +4,7 @@ import type {
   Board,
   Capabilities,
   CreatorProfile,
+  Notification,
   ReviewQueueItem,
   SessionUser,
   ThemeSummary,
@@ -298,4 +299,60 @@ export function useBoard(slug: string, enabled: boolean, themeId?: string | null
     applyStatus,
     prepend,
   };
+}
+
+/** Conservative on purpose: this fires for every signed-in reader for as long as the tab is open. */
+export const UNREAD_POLL_MS = 60_000;
+
+/**
+ * The badge polls a single integer; the list is fetched only when the panel opens, and opening it
+ * is what marks the unread rows read. Polling the list instead would move twenty rows on a timer
+ * to answer a question that is only ever "is there anything new".
+ */
+export function useNotifications(enabled: boolean) {
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [items, setItems] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!enabled) {
+      setUnreadCount(0);
+      setItems([]);
+      return;
+    }
+    let cancelled = false;
+    const poll = () =>
+      api
+        .get<{ count: number }>('/notifications/unread-count')
+        .then(({ count }) => {
+          if (!cancelled) setUnreadCount(count);
+        })
+        // A failed poll is not worth showing anyone: the badge simply does not move.
+        .catch(() => undefined);
+
+    poll();
+    const timer = setInterval(poll, UNREAD_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [enabled]);
+
+  const open = useCallback(async () => {
+    setLoading(true);
+    try {
+      const page = await api.get<{ items: Notification[] }>('/notifications');
+      setItems(page.items);
+      // Marked read on open rather than per row: the reader has seen them, and asking them to
+      // dismiss each one is work the badge does not need.
+      await api.post('/notifications/read', {});
+      setUnreadCount(0);
+    } catch {
+      // Leaves the badge where it was; the next poll corrects it.
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { unreadCount, items, loading, open };
 }

@@ -171,3 +171,21 @@ export interface ReviewQueueItem {
   /** Both kinds: the queue is where a moderator reads their own commentary. */
   notes: CreatorNote[];
 }
+
+export interface NotificationPayload {
+  recommendationId: string;
+  title: string;
+  creatorSlug: string;
+  creatorName: string;
+  status?: 'PENDING' | 'ACCEPTED' | 'ACTIVE' | 'COMPLETED' | 'REJECTED' | 'DELETED';
+  reason?: string;
+}
+
+export interface Notification {
+  id: string;
+  type: 'ENTRY_STATUS_CHANGED' | 'ENTRY_FLAGGED';
+  /** A snapshot taken when the event happened, not a live view of the entry. */
+  payload: NotificationPayload;
+  readAt: string | null;
+  createdAt: string;
+}

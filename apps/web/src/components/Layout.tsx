@@ -1,15 +1,22 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import type { SessionUser } from '../api/types';
+import type { Notification, SessionUser } from '../api/types';
+import { NotificationBell } from './NotificationBell';
 
 interface LayoutProps {
   user: SessionUser | null;
   loadingSession: boolean;
   onSignOut: () => void;
+  notifications: {
+    unreadCount: number;
+    items: Notification[];
+    loading: boolean;
+    open: () => void;
+  };
   children: ReactNode;
 }
 
-export function Layout({ user, loadingSession, onSignOut, children }: LayoutProps) {
+export function Layout({ user, loadingSession, onSignOut, notifications, children }: LayoutProps) {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <header className="border-b border-slate-200 dark:border-slate-800">
@@ -22,6 +29,13 @@ export function Layout({ user, loadingSession, onSignOut, children }: LayoutProp
           </Link>
           {loadingSession ? null : user ? (
             <div className="flex items-center gap-3">
+              {/* Signed-in only: there is nobody to notify otherwise, and the endpoints 401. */}
+              <NotificationBell
+                unreadCount={notifications.unreadCount}
+                items={notifications.items}
+                loading={notifications.loading}
+                onOpen={notifications.open}
+              />
               <span className="text-sm text-slate-600 dark:text-slate-300">
                 {user.fullName ?? 'Signed in'}
               </span>
