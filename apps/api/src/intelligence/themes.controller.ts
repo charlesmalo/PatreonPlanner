@@ -12,6 +12,7 @@ import {
   Param,
   ParseUUIDPipe,
   Patch,
+  Post,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -24,8 +25,9 @@ import { ModerationService } from '../moderation/moderation.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionGuard } from '../session/session.guard';
 import { PATRON_VISIBLE_STATUSES } from '../moderation/transitions';
+import { MergeThemeDto } from './dto/merge-theme.dto';
 import { RenameThemeDto } from './dto/rename-theme.dto';
-import { themeSlug } from './themes.service';
+import { ThemesService, themeSlug } from './themes.service';
 
 // The statuses a count may include. Rejected and deleted entries are gone as far as a reader is
 // concerned, and counting them would advertise their existence.
@@ -38,6 +40,7 @@ export class ThemesController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly moderation: ModerationService,
+    private readonly themes: ThemesService,
   ) {}
 
   // VIEW: themes are how a reader narrows the board, so anyone who can read it can list them.
@@ -101,6 +104,21 @@ export class ThemesController {
       data: { name: dto.name.trim(), slug },
       select: { id: true, name: true },
     });
+  }
+
+  // POST rather than PATCH: this is not an edit to the theme in the path, it is that theme
+  // ceasing to exist in favour of another one.
+  @Post(':id/merge')
+  // 200, not Nest's default 201: nothing is created here, and the body is the surviving theme.
+  @HttpCode(HttpStatus.OK)
+  @RequireCapability('MODERATE')
+  @UseGuards(CreatorAccessGuard, SessionGuard)
+  async merge(
+    @CurrentCreator() creator: ResolvedCreator,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: MergeThemeDto,
+  ) {
+    return this.themes.merge(creator.id, id, dto.intoId);
   }
 
   @Delete(':id')

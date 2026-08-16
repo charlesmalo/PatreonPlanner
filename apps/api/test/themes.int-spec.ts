@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
+import { ThemesService } from '../src/intelligence/themes.service';
 import { AuthTestContext, pickCookie, startAuthApp } from './support/auth-app';
 
 describe('Theme curation (integration)', () => {
@@ -114,6 +115,13 @@ describe('Theme curation (integration)', () => {
       .set('Cookie', [auth.session, auth.csrf])
       .set('x-csrf-token', auth.csrfToken);
 
+  const merge = (auth: Auth, id: string, body: object) =>
+    request(ctx.app.getHttpServer())
+      .post(`/api/v1/creators/theme-co/themes/${id}/merge`)
+      .set('Cookie', [auth.session, auth.csrf])
+      .set('x-csrf-token', auth.csrfToken)
+      .send(body);
+
   it('lists the creator themes with how many board entries carry each', async () => {
     const user = await ctx.prisma.user.findFirstOrThrow({ where: { patreonUserId: 'th-patron' } });
     await ctx.prisma.recommendation.create({
@@ -206,6 +214,115 @@ describe('Theme curation (integration)', () => {
     expect(await ctx.prisma.theme.count({ where: { id: themeId } })).toBe(0);
     expect(await ctx.prisma.titleTheme.count()).toBe(0);
     expect(await ctx.prisma.title.count({ where: { id: titleId } })).toBe(1);
+  });
+
+  describe('merging', () => {
+    let target: string;
+    let otherTitleId: string;
+
+    beforeEach(async () => {
+      target = (
+        await ctx.prisma.theme.create({
+          data: { creatorId, name: 'Animation', slug: 'animation' },
+        })
+      ).id;
+      await ctx.prisma.themeSource.create({
+        data: { creatorId, sourceKey: 'animation', themeId: target },
+      });
+      otherTitleId = (
+        await ctx.prisma.title.create({ data: { tmdbId: 2, mediaType: 'MOVIE', name: 'B Film' } })
+      ).id;
+    });
+
+    it('moves the losing theme titles onto the winner and removes the loser', async () => {
+      const res = await merge(staff, themeId, { intoId: target }).expect(200);
+
+      expect(res.body).toEqual({ id: target, name: 'Animation' });
+      const links = await ctx.prisma.titleTheme.findMany({ where: { themeId: target } });
+      expect(links.map((l) => l.titleId)).toEqual([titleId]);
+      expect(await ctx.prisma.theme.findUnique({ where: { id: themeId } })).toBeNull();
+    });
+
+    it('does not resurrect the merged-away theme on the next enrichment pass', async () => {
+      // The whole point of the feature. "anime" was seeded from a TMDB label; if the merge leaves
+      // that label unclaimed, the next title carrying it re-creates the theme the creator just
+      // folded away — and they have no way to make it stop.
+      await merge(staff, themeId, { intoId: target }).expect(200);
+      await ctx.app.get(ThemesService).seedFor(otherTitleId, creatorId, ['Anime']);
+
+      const themes = await ctx.prisma.theme.findMany({ where: { creatorId } });
+      expect(themes.map((t) => t.id)).toEqual([target]);
+      const links = await ctx.prisma.titleTheme.findMany({ where: { titleId: otherTitleId } });
+      expect(links.map((l) => l.themeId)).toEqual([target]);
+    });
+
+    it('survives a title that carried both themes', async () => {
+      await ctx.prisma.titleTheme.create({ data: { titleId, themeId: target } });
+
+      await merge(staff, themeId, { intoId: target }).expect(200);
+
+      expect(await ctx.prisma.titleTheme.count({ where: { titleId } })).toBe(1);
+    });
+
+    it('refuses to merge a theme into itself', async () => {
+      // Not a no-op to wave through: it means the caller confused the two ids, and reporting
+      // success would have them believe a merge happened.
+      await merge(staff, themeId, { intoId: themeId }).expect(400);
+      expect(await ctx.prisma.theme.findUnique({ where: { id: themeId } })).not.toBeNull();
+    });
+
+    it('refuses a target on another creator board', async () => {
+      const foreign = await ctx.prisma.theme.create({
+        data: { creatorId: otherCreatorId, name: 'Foreign', slug: 'foreign' },
+      });
+
+      await merge(staff, themeId, { intoId: foreign.id }).expect(404);
+
+      expect(await ctx.prisma.titleTheme.count({ where: { themeId: foreign.id } })).toBe(0);
+      expect(await ctx.prisma.theme.findUnique({ where: { id: themeId } })).not.toBeNull();
+    });
+
+    it('refuses a source on another creator board', async () => {
+      const foreign = await ctx.prisma.theme.create({
+        data: { creatorId: otherCreatorId, name: 'Foreign', slug: 'foreign' },
+      });
+
+      await merge(staff, foreign.id, { intoId: target }).expect(404);
+
+      expect(await ctx.prisma.theme.findUnique({ where: { id: foreign.id } })).not.toBeNull();
+    });
+
+    it('refuses a merge from a patron', async () => {
+      await merge(patron, themeId, { intoId: target }).expect(403);
+      expect(await ctx.prisma.theme.findUnique({ where: { id: themeId } })).not.toBeNull();
+    });
+
+    it('reports the winner entry count as the union of both', async () => {
+      const user = await ctx.prisma.user.findFirstOrThrow({
+        where: { patreonUserId: 'th-patron' },
+      });
+      await ctx.prisma.titleTheme.create({ data: { titleId: otherTitleId, themeId: target } });
+      for (const [id, title] of [
+        [titleId, 'A Film'],
+        [otherTitleId, 'B Film'],
+      ] as const) {
+        await ctx.prisma.recommendation.create({
+          data: {
+            creatorId,
+            submittedByUserId: user.id,
+            type: 'MOVIE',
+            titleId: id,
+            customTitle: title,
+            normalizedTitle: title.toLowerCase(),
+          },
+        });
+      }
+
+      await merge(staff, themeId, { intoId: target }).expect(200);
+
+      const res = await list(patron).expect(200);
+      expect(res.body.items).toEqual([{ id: target, name: 'Animation', entryCount: 2 }]);
+    });
   });
 
   it('refuses a delete from a patron', async () => {
