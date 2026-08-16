@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { FlagReason, Prisma } from '@prisma/client';
 import { AbuseService } from '../abuse/abuse.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ModerationService } from './moderation.service';
 
@@ -19,6 +20,7 @@ export class FlagsService {
     private readonly prisma: PrismaService,
     private readonly moderation: ModerationService,
     private readonly abuse: AbuseService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /**
@@ -36,7 +38,7 @@ export class FlagsService {
     // Scoped by creatorId: the guard proved access to this creator, not to this id.
     const rec = await this.prisma.recommendation.findFirst({
       where: { id: recommendationId, creatorId },
-      select: { id: true },
+      select: { id: true, customTitle: true },
     });
     if (!rec) throw new NotFoundException();
 
@@ -57,9 +59,31 @@ export class FlagsService {
     }
 
     try {
-      const flag = await this.prisma.flag.create({
-        data: { recommendationId, flaggedByUserId: userId, reason, note: note ?? null },
-        select: FLAG_FIELDS,
+      const recipients = await this.staffToNotify(creatorId, userId);
+      const flag = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.flag.create({
+          data: { recommendationId, flaggedByUserId: userId, reason, note: note ?? null },
+          select: FLAG_FIELDS,
+        });
+        // Inside the transaction, so the unique index that makes a repeat report idempotent also
+        // makes the notifications idempotent. Emitting afterwards would let one reporter ring
+        // every moderator's bell as often as they liked.
+        await this.notifications.emit(
+          tx,
+          recipients.map(({ userId: recipient, slug, displayName }) => ({
+            userId: recipient,
+            creatorId,
+            type: 'ENTRY_FLAGGED' as const,
+            payload: {
+              recommendationId,
+              title: rec.customTitle,
+              creatorSlug: slug,
+              creatorName: displayName,
+              reason,
+            },
+          })),
+        );
+        return created;
       });
       return { duplicate: false as const, ...flag };
     } catch (error) {
@@ -76,5 +100,32 @@ export class FlagsService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Design §6.6: a report notifies the creator and their verified mods. The owner is not a
+   * `CreatorStaff` row, and a mod may be the person reporting, so both are deduped here rather
+   * than leaving one of them to be noticed later.
+   *
+   * Inline rather than queued: a board has an owner and a handful of mods, and a job for a
+   * fan-out of five is machinery with its own failure modes that would also put the write outside
+   * the flag's transaction.
+   */
+  private async staffToNotify(creatorId: string, reporterId: string) {
+    const creator = await this.prisma.creator.findUniqueOrThrow({
+      where: { id: creatorId },
+      select: { ownerUserId: true, slug: true, displayName: true },
+    });
+    const staff = await this.prisma.creatorStaff.findMany({
+      where: { creatorId },
+      select: { userId: true },
+    });
+    const ids = new Set([creator.ownerUserId, ...staff.map((row) => row.userId)]);
+    ids.delete(reporterId);
+    return [...ids].map((userId) => ({
+      userId,
+      slug: creator.slug,
+      displayName: creator.displayName,
+    }));
   }
 }

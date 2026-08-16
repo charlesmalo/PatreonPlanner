@@ -1,11 +1,15 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { ModerationActionType, RecommendationStatus } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { isLegalTransition } from './transitions';
 
 @Injectable()
 export class ModerationActionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   /**
    * Design §7: only staff move an entry, every transition is audited, and the audit row is
@@ -23,7 +27,14 @@ export class ModerationActionsService {
     // Scoped by creatorId: the guard proved access to this creator, not to this id.
     const current = await this.prisma.recommendation.findFirst({
       where: { id: recommendationId, creatorId },
-      select: { id: true, status: true },
+      select: {
+        id: true,
+        status: true,
+        // The rest is for the notification payload, which is a snapshot rather than a join.
+        submittedByUserId: true,
+        customTitle: true,
+        creator: { select: { slug: true, displayName: true } },
+      },
     });
     if (!current) throw new NotFoundException();
     if (!isLegalTransition(current.status, to)) {
@@ -53,6 +64,26 @@ export class ModerationActionsService {
           after: { status: to },
         },
       });
+      // In the same transaction, for the same reason the audit row is: a notification telling
+      // someone their entry was accepted, when the move it describes was rolled back, is worse
+      // than no notification at all. Not sent to the actor — a moderator who moves their own
+      // entry already knows.
+      if (current.submittedByUserId !== actorUserId) {
+        await this.notifications.emit(tx, [
+          {
+            userId: current.submittedByUserId,
+            creatorId,
+            type: 'ENTRY_STATUS_CHANGED',
+            payload: {
+              recommendationId,
+              title: current.customTitle,
+              creatorSlug: current.creator.slug,
+              creatorName: current.creator.displayName,
+              status: to,
+            },
+          },
+        ]);
+      }
       return updated;
     });
   }
