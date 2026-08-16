@@ -313,6 +313,7 @@ export function useNotifications(enabled: boolean) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     if (!enabled) {
@@ -340,19 +341,24 @@ export function useNotifications(enabled: boolean) {
 
   const open = useCallback(async () => {
     setLoading(true);
+    setFailed(false);
     try {
       const page = await api.get<{ items: Notification[] }>('/notifications');
       setItems(page.items);
-      // Marked read on open rather than per row: the reader has seen them, and asking them to
-      // dismiss each one is work the badge does not need.
-      await api.post('/notifications/read', {});
-      setUnreadCount(0);
+      // Only the rows actually shown. Marking everything read would silently consume anything
+      // past the first page — and since the panel has no way to reach a second page, those rows
+      // would be both read and unreachable.
+      const ids = page.items.filter((item) => item.readAt === null).map((item) => item.id);
+      if (ids.length > 0) await api.post('/notifications/read', { ids });
+      setUnreadCount((count) => Math.max(0, count - ids.length));
     } catch {
-      // Leaves the badge where it was; the next poll corrects it.
+      // The badge is left where it was and the next poll corrects it, but the panel has to say
+      // something: an empty list under a "3 unread" badge reads as a bug.
+      setFailed(true);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  return { unreadCount, items, loading, open };
+  return { unreadCount, items, loading, failed, open };
 }

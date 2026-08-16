@@ -6,11 +6,19 @@ interface NotificationBellProps {
   unreadCount: number;
   items: Notification[];
   loading: boolean;
+  /** True when the last fetch failed, so the panel can say so instead of looking empty. */
+  failed?: boolean;
   /** Called when the panel opens: the list is fetched then, not on every poll. */
   onOpen: () => void;
 }
 
-export function NotificationBell({ unreadCount, items, loading, onOpen }: NotificationBellProps) {
+export function NotificationBell({
+  unreadCount,
+  items,
+  loading,
+  failed = false,
+  onOpen,
+}: NotificationBellProps) {
   const [open, setOpen] = useState(false);
 
   const toggle = () => {
@@ -47,6 +55,10 @@ export function NotificationBell({ unreadCount, items, loading, onOpen }: Notifi
         <div className="absolute right-0 z-10 mt-2 w-80 rounded border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
           {loading ? (
             <p className="px-3 py-4 text-sm text-slate-600 dark:text-slate-300">Loading…</p>
+          ) : failed ? (
+            <p className="px-3 py-4 text-sm text-slate-600 dark:text-slate-300">
+              Could not load notifications.
+            </p>
           ) : items.length === 0 ? (
             <p className="px-3 py-4 text-sm text-slate-600 dark:text-slate-300">Nothing yet.</p>
           ) : (
@@ -91,5 +103,9 @@ function describe(item: Notification): string {
       item.payload.reason ? ` (${item.payload.reason.toLowerCase()})` : ''
     }.`;
   }
-  return `was ${(item.payload.status ?? '').toLowerCase()} on ${item.payload.creatorName}.`;
+  // The status is optional on the type; without it there is no sentence to write, so say the
+  // neutral thing rather than rendering "was  on Ada Writes."
+  return item.payload.status
+    ? `was ${item.payload.status.toLowerCase()} on ${item.payload.creatorName}.`
+    : `was updated on ${item.payload.creatorName}.`;
 }

@@ -97,9 +97,10 @@ describe('Notifications (integration)', () => {
   it('pages newest first without repeating a row', async () => {
     // Keyset rather than offset: the list grows at the head, so an offset page two would show a
     // row that page one already carried.
-    for (const title of ['One', 'Two', 'Three']) {
-      await service.emit(ctx.prisma, [row(alice, title)]);
-    }
+    //
+    // The timestamps are set explicitly: createdAt is TIMESTAMP(3), and three emits in the same
+    // millisecond would leave the order to the id tiebreak and flake.
+    await seedInOrder(['One', 'Two', 'Three']);
 
     const first = await service.list(alice, undefined, 2);
     expect(first.items.map((n) => (n.payload as { title: string }).title)).toEqual([
@@ -110,6 +111,16 @@ describe('Notifications (integration)', () => {
     expect(second.items.map((n) => (n.payload as { title: string }).title)).toEqual(['One']);
     expect(second.nextCursor).toBeNull();
   });
+
+  const seedInOrder = async (titles: string[]) => {
+    for (const [index, title] of titles.entries()) {
+      await service.emit(ctx.prisma, [row(alice, title)]);
+      await ctx.prisma.notification.updateMany({
+        where: { payload: { path: ['title'], equals: title } },
+        data: { createdAt: new Date(Date.UTC(2026, 7, 24, 0, 0, index)) },
+      });
+    }
+  };
 
   it('goes when the board goes', async () => {
     // A notification about a board nobody can reach any more is not worth keeping, and the
@@ -179,6 +190,28 @@ describe('Notifications (integration)', () => {
       const mine = (await service.list(alice)).items[0];
 
       await markRead(bobAuth, { ids: [mine.id] }).expect(200);
+
+      expect(await service.unreadCount(alice)).toBe(1);
+    });
+
+    it('pages through the endpoint, not just the service', async () => {
+      // The controller has to pass the cursor through; without it every page is page one.
+      await seedInOrder(['One', 'Two', 'Three']);
+      const all = (await service.list(alice)).items;
+
+      const res = await get(aliceAuth, `?cursor=${all[0].id}`).expect(200);
+
+      expect(res.body.items.map((n: { id: string }) => n.id)).toEqual([all[1].id, all[2].id]);
+    });
+
+    it('rejects a write without the CSRF token', async () => {
+      await service.emit(ctx.prisma, [row(alice)]);
+
+      await request(ctx.app.getHttpServer())
+        .post('/api/v1/notifications/read')
+        .set('Cookie', [aliceAuth.session, aliceAuth.csrf])
+        .send({})
+        .expect(403);
 
       expect(await service.unreadCount(alice)).toBe(1);
     });

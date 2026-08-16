@@ -456,9 +456,23 @@ it('renders nothing for a signed-out reader', () => {
 
 ---
 
+## Found in review (fixed)
+
+Nothing in the authorisation logic was wrong. Everything found was in what the tests failed to hold down — including two that were named for properties they did not test at all — plus one data-loss bug and one abuse vector the plan had waved at.
+
+1. **The multi-tenancy test for the fan-out was vacuous.** Its "outsider" had no staff row on any board, so an *unscoped* staff query satisfied it just as well; the `creatorId` filter could be deleted with every test green. Given this project's history with exactly this defect class, that is the worst kind of test to have. The recipient is now someone who moderates a *different* board.
+2. **Decision 1 was enforced by neither the type nor the tests.** The rollback test threw inside the transaction, so an implementation that emitted *after* it never emitted at all and passed. It now asks the transaction itself what it can see before rolling back, which distinguishes the two. `Writer` was never going to do this work — `PrismaClient` is structurally assignable to `Prisma.TransactionClient`, so no signature here can refuse the plain client.
+3. **Opening the panel marked rows read that the reader was never shown.** `markRead` with no ids marks everything; the panel shows twenty and discarded `nextCursor`, so on a busy board a single click made every row past the first page both read and unreachable. It now marks only the ids it rendered.
+4. **`useNotifications` had no tests at all** — it could be replaced with a constant and the suite stayed green, so nothing asserted that opening the panel marked anything read, that the badge polled, or that the interval was cleared.
+5. **The flag flood was unbounded.** Raising a flag needs only `VIEW`, and the coarse limiter allows 120 writes a minute, so one account could put a notification per entry in front of every moderator — the in-transaction placement bounds only *repeats of the same flag*, which the plan overstated. Flag notifications are now coalesced: a moderator with an unread one for that board is not told again until they look. The review queue is where reports are read; the bell only has to say something is waiting.
+6. **A removed moderator kept the payloads.** Flag notifications carry the entry title and the reason, and on a subscribers-only board an ex-mod who does not pledge cannot read a single entry — but the bell went on showing them. Removal now deletes that user's notifications for that board, in the same transaction.
+
+Also fixed: the plan asserted the owner is not a `CreatorStaff` row, which is false — claiming a board writes one — and the test fixture built a board without one, which made the dead union look load-bearing; the paging test relied on three writes landing in distinct milliseconds; the panel showed an empty list when the fetch failed, under a badge saying otherwise; the controller's cursor and the CSRF requirement were untested.
+
 ## Known risks
 
 - **Polling interval versus free-tier quota.** Every signed-in reader asks for an integer on a timer. The count query is index-backed and tiny, but the interval is the knob that decides how much traffic the app makes at rest; start conservative (60s) rather than chatty.
-- **No cap on rows per user.** A board that flags heavily could give a moderator thousands of notifications. The list is paginated so nothing breaks, but there is no retention policy, and adding one later means deciding what "read and old" is worth keeping.
+- **Still no retention policy.** Coalescing bounds the unread flood, but read rows accumulate for ever and there is no job that removes them. Deciding what "read and old" is worth keeping is a policy question, not a bug, but the table only grows.
+- **Reads are unmetered.** `GET /notifications` and `/unread-count` are exempt from the coarse limiter, like every safe method. That is intended and fine for a 60s poll, but it does mean an authenticated reader can ask as often as they like.
 - **A notification can outlive what it describes.** That is the point of decision 2, but it means a reader can click through to an entry that no longer exists. The link should degrade to the board rather than a 404 page.
 - **The flag fan-out is inline.** Correct for a handful of staff; a board with a very large staff list would make the flag request slower in proportion. Nothing enforces a ceiling on staff size.

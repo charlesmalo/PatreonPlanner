@@ -4,7 +4,13 @@ import { Layout } from './components/Layout';
 import { RecommendationCard } from './components/RecommendationCard';
 import { recommendation } from './test-support';
 
-const noNotifications = { unreadCount: 0, items: [], loading: false, open: vi.fn() };
+const noNotifications = {
+  unreadCount: 0,
+  items: [],
+  loading: false,
+  failed: false,
+  open: vi.fn(),
+};
 
 describe('accessibility basics', () => {
   it('offers a sign-in link when signed out and a sign-out button when signed in', () => {

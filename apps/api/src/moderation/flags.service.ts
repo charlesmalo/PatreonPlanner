@@ -103,9 +103,11 @@ export class FlagsService {
   }
 
   /**
-   * Design §6.6: a report notifies the creator and their verified mods. The owner is not a
-   * `CreatorStaff` row, and a mod may be the person reporting, so both are deduped here rather
-   * than leaving one of them to be noticed later.
+   * Design §6.6: a report notifies the creator and their verified mods. `CreatorStaff` has one
+   * write path — accepting an invite — and removal deletes the row, so every row here is a
+   * verified mod. Claiming a board also writes an OWNER row, so the owner is normally in that
+   * set; the union is belt and braces for any board that predates it, and a mod may be the
+   * person reporting, so both are deduped.
    *
    * Inline rather than queued: a board has an owner and a handful of mods, and a job for a
    * fan-out of five is machinery with its own failure modes that would also put the write outside
@@ -122,6 +124,19 @@ export class FlagsService {
     });
     const ids = new Set([creator.ownerUserId, ...staff.map((row) => row.userId)]);
     ids.delete(reporterId);
+
+    // Coalesced: a moderator who has not yet looked at the last report does not need to be told
+    // about the next one. Raising a flag costs a signed-in account almost nothing and there are
+    // as many entries to flag as the board has, so without this one patron can put a notification
+    // per entry in front of every moderator. The review queue is where reports are read; the bell
+    // only has to say that something is waiting.
+    const alreadyWaiting = await this.prisma.notification.findMany({
+      where: { creatorId, type: 'ENTRY_FLAGGED', readAt: null, userId: { in: [...ids] } },
+      select: { userId: true },
+      distinct: ['userId'],
+    });
+    for (const row of alreadyWaiting) ids.delete(row.userId);
+
     return [...ids].map((userId) => ({
       userId,
       slug: creator.slug,

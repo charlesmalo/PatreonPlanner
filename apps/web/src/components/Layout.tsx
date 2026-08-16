@@ -11,6 +11,7 @@ interface LayoutProps {
     unreadCount: number;
     items: Notification[];
     loading: boolean;
+    failed: boolean;
     open: () => void;
   };
   children: ReactNode;
@@ -34,6 +35,7 @@ export function Layout({ user, loadingSession, onSignOut, notifications, childre
                 unreadCount={notifications.unreadCount}
                 items={notifications.items}
                 loading={notifications.loading}
+                failed={notifications.failed}
                 onOpen={notifications.open}
               />
               <span className="text-sm text-slate-600 dark:text-slate-300">
