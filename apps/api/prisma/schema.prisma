@@ -131,6 +131,7 @@ model User {
   invitesSent     StaffInvite[]      @relation("InviteAuthor")
   invitesAccepted StaffInvite[]      @relation("InviteAcceptor")
   notifications   Notification[]
+  moderationResults ModerationResult[]
   flagsRaised     Flag[]             @relation("FlagAuthor")
   flagsResolved   Flag[]             @relation("FlagResolver")
   moderationActs  ModerationAction[] @relation("ModerationActor")
@@ -180,8 +181,9 @@ model Creator {
   policy          CreatorPolicy?
   recommendations Recommendation[]
   themes          Theme[]
-  themeSources    ThemeSource[]
-  notifications   Notification[]
+  themeSources     ThemeSource[]
+  notifications    Notification[]
+  moderationResults ModerationResult[]
   staffInvites    StaffInvite[]
 
   // Postgres does not index foreign keys automatically, and the cascade from Creator scans them.
@@ -556,6 +558,40 @@ model Theme {
 //
 // Many labels per theme, because that is what a merge produces: fold "sci-fi" into "science
 // fiction" and the survivor legitimately owns both.
+enum ModerationSubjectType {
+  RECOMMENDATION
+  NOTE
+  THEME
+  FLAG_NOTE
+}
+
+// Design §6.5: the pipeline's verdicts, kept. Only FLAG and BLOCK are written — every submission,
+// note and rename passes through the pipeline and almost all of them pass, so recording those
+// would be the largest table in the database holding nothing anyone reads.
+//
+// The offending text is deliberately absent. A BLOCK on a slur would otherwise mean the database
+// keeps that slur for ever, on a row nobody reads, for a board that never accepted it — and §6.6
+// gives moderators redaction precisely so text like that can be removed.
+model ModerationResult {
+  id          String                @id @default(uuid()) @db.Uuid
+  creatorId   String                @db.Uuid
+  userId      String                @db.Uuid
+  subjectType ModerationSubjectType
+  // Null when the content was rejected outright: there is nothing to point at, and that is
+  // exactly the case where the record matters, since it is the evidence behind an abuse strike.
+  subjectId   String?               @db.Uuid
+  verdict     String
+  categories  String[]
+  source      String
+  createdAt   DateTime              @default(now())
+
+  creator Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([creatorId, createdAt(sort: Desc)])
+  @@index([subjectId])
+}
+
 enum NotificationType {
   ENTRY_STATUS_CHANGED
   ENTRY_FLAGGED

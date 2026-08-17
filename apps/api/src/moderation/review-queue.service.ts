@@ -139,7 +139,10 @@ export class ReviewQueueService {
 
     // A moderator's replacement text is still text on a public board. Design §6.5 runs it
     // through the same pipeline as a patron's.
-    const verdict = await this.moderation.review(fields.map(([, value]) => value as string));
+    const verdict = await this.moderation.review(
+      { creatorId, userId: actorUserId, type: 'RECOMMENDATION', id: recommendationId },
+      fields.map(([, value]) => value as string),
+    );
     if (verdict.verdict === 'BLOCK') {
       this.logger.warn(`Blocked redaction by ${actorUserId} on recommendation ${recommendationId}`);
       throw new BadRequestException('Rejected');

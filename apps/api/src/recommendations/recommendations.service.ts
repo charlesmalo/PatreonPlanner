@@ -236,13 +236,18 @@ export class RecommendationsService {
     // Link labels and URLs are user-controlled and rendered on the board, so they go through
     // the pipeline too. Reviewing only title and description left the whole content-safety
     // control bypassable by putting the text in a label.
-    const moderation = await this.moderation.review([
-      dto.customTitle,
-      dto.description,
-      ...(dto.links?.flatMap((link) => [link.label, link.url]) ?? []),
-      // Item text is exactly where a submitter would route around a title-only check.
-      ...(dto.items?.flatMap((item) => [item.customTitle, item.note]) ?? []),
-    ]);
+    const moderation = await this.moderation.review(
+      // No id: the entry does not exist yet, and on a BLOCK it never will — which is exactly the
+      // case the record is evidence for.
+      { creatorId, userId, type: 'RECOMMENDATION' },
+      [
+        dto.customTitle,
+        dto.description,
+        ...(dto.links?.flatMap((link) => [link.label, link.url]) ?? []),
+        // Item text is exactly where a submitter would route around a title-only check.
+        ...(dto.items?.flatMap((item) => [item.customTitle, item.note]) ?? []),
+      ],
+    );
     if (moderation.verdict === 'BLOCK') {
       // Generic to the caller, specific in the log: design §9 wants no probing of the rules.
       this.logger.warn(`Blocked submission from user ${userId} to creator ${creatorId}`);

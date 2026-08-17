@@ -52,7 +52,7 @@ export class NotesService {
     if (kind !== 'TIMELINE' && plannedFor != null) {
       throw new BadRequestException('Only a timeline note can carry a planned date');
     }
-    await this.assertClean(body, authorUserId);
+    await this.assertClean(body, authorUserId, creatorId, recommendationId);
 
     // Counted and written under a lock on the entry: a read-then-write cap does not survive a
     // double-click, and the cap exists to stop an unpaginated wall of text on a board card.
@@ -87,7 +87,7 @@ export class NotesService {
     if (note.kind !== 'TIMELINE' && plannedFor != null) {
       throw new BadRequestException('Only a timeline note can carry a planned date');
     }
-    await this.assertClean(body, actorUserId);
+    await this.assertClean(body, actorUserId, creatorId, note.recommendationId);
 
     return this.prisma.creatorNote.update({
       where: { id: note.id },
@@ -112,16 +112,24 @@ export class NotesService {
   private async find(creatorId: string, noteId: string) {
     const note = await this.prisma.creatorNote.findFirst({
       where: { id: noteId, recommendation: { creatorId } },
-      select: { id: true, kind: true },
+      select: { id: true, kind: true, recommendationId: true },
     });
     if (!note) throw new NotFoundException();
     return note;
   }
 
-  private async assertClean(body: string, userId: string): Promise<void> {
+  private async assertClean(
+    body: string,
+    userId: string,
+    creatorId: string,
+    recommendationId: string,
+  ): Promise<void> {
     // Design §6.5: every user string goes through the pipeline. A TIMELINE note is published to
     // the board, so a creator's own words are not an exemption.
-    const verdict = await this.moderation.review([body]);
+    const verdict = await this.moderation.review(
+      { creatorId, userId, type: 'NOTE', id: recommendationId },
+      [body],
+    );
     if (verdict.verdict === 'BLOCK') {
       this.logger.warn(`Blocked note text from user ${userId}`);
       throw new BadRequestException('Rejected');

@@ -23,7 +23,7 @@ import {
 import { RequireCapability } from '../access/require-capability.decorator';
 import { ModerationService } from '../moderation/moderation.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { SessionGuard } from '../session/session.guard';
+import { CurrentUser, CurrentUserPayload, SessionGuard } from '../session/session.guard';
 import { PATRON_VISIBLE_STATUSES } from '../moderation/transitions';
 import { MergeThemeDto } from './dto/merge-theme.dto';
 import { RenameThemeDto } from './dto/rename-theme.dto';
@@ -77,13 +77,17 @@ export class ThemesController {
   @UseGuards(CreatorAccessGuard, SessionGuard)
   async rename(
     @CurrentCreator() creator: ResolvedCreator,
+    @CurrentUser() user: CurrentUserPayload,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: RenameThemeDto,
   ) {
     const theme = await this.find(creator.id, id);
 
     // A theme name is shown on a public board, so it is a user string like any other.
-    const verdict = await this.moderation.review([dto.name]);
+    const verdict = await this.moderation.review(
+      { creatorId: creator.id, userId: user.id, type: 'THEME', id: theme.id },
+      [dto.name],
+    );
     if (verdict.verdict === 'BLOCK') {
       this.logger.warn(`Blocked theme rename on creator ${creator.id}`);
       throw new BadRequestException('Rejected');
