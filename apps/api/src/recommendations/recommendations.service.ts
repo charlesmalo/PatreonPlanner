@@ -299,7 +299,7 @@ export class RecommendationsService {
     }
 
     try {
-      return await this.create(
+      const created = await this.create(
         creatorId,
         userId,
         dto,
@@ -308,6 +308,11 @@ export class RecommendationsService {
         title?.id ?? null,
         items,
       );
+      // A FLAG is reviewed before the entry exists — it has to be, or a BLOCK would create one —
+      // so the record was written with no subject. Linked now there is something to link to,
+      // which is what lets the review queue find it.
+      await this.moderation.attachSubject(moderation.recordId, created.recommendation.id);
+      return created;
     } catch (error) {
       // Two patrons submitting the same title concurrently both miss the read above; the unique
       // index is what actually enforces de-duplication, and the loser resolves to the winner's

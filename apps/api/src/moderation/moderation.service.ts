@@ -6,6 +6,7 @@ import {
   ModerationVerdict,
   Moderator,
 } from './moderation.types';
+import { CreatorBlocklistModerator } from './creator-blocklist.moderator';
 import { WordlistModerator } from './wordlist-moderator';
 
 const SEVERITY: Record<ModerationVerdict, number> = { PASS: 0, FLAG: 1, BLOCK: 2 };
@@ -16,10 +17,11 @@ export class ModerationService {
 
   constructor(
     wordlist: WordlistModerator,
+    creatorBlocklist: CreatorBlocklistModerator,
     private readonly prisma: PrismaService,
   ) {
     // Design §6.5's ML stage joins this list; nothing else changes.
-    this.moderators = [wordlist];
+    this.moderators = [wordlist, creatorBlocklist];
   }
 
   /**
@@ -31,7 +33,7 @@ export class ModerationService {
   async review(
     subject: ModerationSubject,
     parts: Array<string | undefined | null>,
-  ): Promise<ModerationResultData> {
+  ): Promise<ModerationResultData & { recordId?: string }> {
     let worst: ModerationResultData = { verdict: 'PASS', categories: [], source: 'WORDLIST' };
     for (const part of parts) {
       if (!part) continue;
@@ -45,7 +47,7 @@ export class ModerationService {
     // of it passes, so recording those would be the largest table in the database, holding a
     // number nobody needs.
     if (worst.verdict !== 'PASS') {
-      await this.prisma.moderationResult.create({
+      const record = await this.prisma.moderationResult.create({
         data: {
           creatorId: subject.creatorId,
           userId: subject.userId,
@@ -55,8 +57,24 @@ export class ModerationService {
           categories: worst.categories,
           source: worst.source,
         },
+        select: { id: true },
       });
+      return { ...worst, recordId: record.id };
     }
     return worst;
+  }
+
+  /**
+   * Points a record at content that only exists because the verdict let it through. A FLAG is
+   * reviewed before the entry is created — it has to be, or a BLOCK would create one — so the
+   * record is written with no subject and linked once there is something to link to. Without
+   * this the review queue has a verdict it cannot attach to any entry.
+   */
+  async attachSubject(recordId: string | undefined, subjectId: string): Promise<void> {
+    if (!recordId) return;
+    await this.prisma.moderationResult.update({
+      where: { id: recordId },
+      data: { subjectId },
+    });
   }
 }

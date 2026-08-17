@@ -3,7 +3,8 @@ export type ModerationVerdict = 'PASS' | 'FLAG' | 'BLOCK';
 export interface ModerationResultData {
   verdict: ModerationVerdict;
   categories: string[];
-  source: 'WORDLIST' | 'ML';
+  /** Which stage produced it: the global wordlist, the board's own list, or design §6.5's ML. */
+  source: 'WORDLIST' | 'CREATOR' | 'ML';
 }
 
 export type ModerationSubjectType = 'RECOMMENDATION' | 'NOTE' | 'THEME' | 'FLAG_NOTE';
