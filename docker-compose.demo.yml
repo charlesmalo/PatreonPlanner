@@ -1,0 +1,133 @@
+# Its own project name and its own ports, so this can run beside the e2e stack without either
+# one recreating or destroying the other's containers.
+name: patreonplanner-demo
+
+# The playtest stack: the same images CI builds and the same stub, plus a seeded board and a
+# one-click way to sign in as each kind of person. Deliberately the real containers and the real
+# nginx proxy — a demo that skipped those would be demonstrating something else.
+#
+# Ports: web on 8081, stub on 4001 (e2e uses 8080 and 4000).
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: planner
+      POSTGRES_PASSWORD: planner
+      POSTGRES_DB: planner
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U planner']
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+  patreon-stub:
+    image: node:20-slim
+    working_dir: /stub
+    volumes:
+      - ./e2e/stub:/stub:ro
+    command: node patreon-stub.mjs
+    environment:
+      PORT: '4000'
+      WEB_ORIGIN: http://localhost:8081
+    ports:
+      # Published because the *browser* follows the consent redirect to it — and, in this stack,
+      # because /__be is where a playtester picks who to be.
+      - '4001:4000'
+
+  # One-shot. The runtime image deliberately ships production dependencies only, so it has no
+  # prisma CLI; the build stage does. Migrations are a deploy step in production too, not
+  # something the app runs at boot.
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: build
+    working_dir: /repo/apps/api
+    command: pnpm exec prisma migrate deploy
+    environment:
+      DATABASE_URL: postgresql://planner:planner@postgres:5432/planner
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  seed:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: build
+    working_dir: /repo/apps/api
+    command: pnpm exec tsx scripts/seed-demo.ts
+    environment:
+      DATABASE_URL: postgresql://planner:planner@postgres:5432/planner
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://planner:planner@postgres:5432/planner
+      REDIS_URL: redis://redis:6379
+      PORT: '3000'
+      PATREON_CLIENT_ID: e2e-client
+      PATREON_CLIENT_SECRET: e2e-secret
+      PATREON_REDIRECT_URI: http://localhost:8081/auth/patreon/callback
+      # Browser-facing vs server-facing: the browser reaches the stub on the published port,
+      # the API reaches it inside the compose network.
+      PATREON_OAUTH_BASE_URL: http://localhost:4001
+      PATREON_API_BASE_URL: http://patreon-stub:4000
+      # The same stub also stands in for TMDB; only the API calls it, so the in-network URL.
+      TMDB_API_BASE_URL: http://patreon-stub:4000/3
+      TMDB_API_KEY: e2e-tmdb-key
+      WEB_ORIGIN: http://localhost:8081
+      ENCRYPTION_KEY: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=
+      # On, unlike the e2e stack: enrichment, availability and embeddings are part of what there
+      # is to look at, and a demo with the background work switched off shows a thinner product
+      # than the one that exists.
+      JOBS_ENABLED: 'true'
+      # One nginx in front of the API in this stack, so the real client address is the last
+      # X-Forwarded-For entry rather than nginx's own.
+      TRUSTED_PROXY_HOPS: '1'
+      SUBMIT_LIMIT_PER_HOUR: '20'
+      SUBMIT_LIMIT_PER_HOUR_GLOBAL: '50'
+    healthcheck:
+      # node rather than curl: the runtime image ships production dependencies only.
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "require('http').get('http://localhost:3000/healthz',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))",
+        ]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+      seed: { condition: service_completed_successfully }
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports:
+      - '8081:80'
+    healthcheck:
+      # 127.0.0.1, not localhost: nginx listens on IPv4 only, and busybox wget resolves
+      # localhost to ::1 first, so the check fails against a perfectly healthy server.
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1/']
+      interval: 3s
+      timeout: 5s
+      retries: 20
+    depends_on:
+      api: { condition: service_healthy }
