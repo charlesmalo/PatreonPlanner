@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import type { Recommendation } from '../api/types';
 
 // Built here rather than stored, so the image size can change without a migration.
@@ -32,17 +33,24 @@ interface RecommendationCardProps {
   onStatusChanged: (id: string, status: string) => void;
   /** Entries this one contains — a season under its show, a film under its franchise. */
   children?: React.ReactNode;
+  /**
+   * `h1` when this card *is* the page — on an entry's own page the title is the document's
+   * subject, and repeating it above the card would show it twice.
+   */
+  headingLevel?: 1 | 3;
 }
 
 export function RecommendationCard({
   slug,
   recommendation,
+  headingLevel = 3,
   canUpvote,
   canModerate,
   onCount,
   onStatusChanged,
   children,
 }: RecommendationCardProps) {
+  const Heading = headingLevel === 1 ? 'h1' : 'h3';
   return (
     <li className="flex gap-4 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
       <UpvoteButton
@@ -68,14 +76,29 @@ export function RecommendationCard({
       ) : null}
       <div className="min-w-0 flex-1">
         {/* Rendered as text, never as HTML: every field here is submitter-controlled. */}
-        <h3 className="font-medium break-words">
-          {recommendation.customTitle}
+        <Heading
+          className={
+            headingLevel === 1 ? 'text-xl font-semibold break-words' : 'font-medium break-words'
+          }
+        >
+          {/* Linked on the board, plain text on its own page — a heading that links to the
+              page you are already on is a dead control. */}
+          {headingLevel === 1 ? (
+            recommendation.customTitle
+          ) : (
+            <Link
+              to={`/c/${slug}/e/${recommendation.id}`}
+              className="underline decoration-slate-300 underline-offset-2 hover:decoration-slate-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:decoration-slate-600"
+            >
+              {recommendation.customTitle}
+            </Link>
+          )}
           {recommendation.title?.year ? (
             <span className="ml-2 font-normal text-slate-500 dark:text-slate-400">
               ({recommendation.title.year})
             </span>
           ) : null}
-        </h3>
+        </Heading>
         {recommendation.description ? (
           <p className="mt-1 whitespace-pre-line break-words text-sm text-slate-600 dark:text-slate-300">
             {recommendation.description}

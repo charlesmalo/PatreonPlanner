@@ -234,6 +234,33 @@ test('a patron reports an entry and a moderator dismisses it', async ({ page }) 
   await expect(page.getByText(/no open reports/i)).toBeVisible();
 });
 
+test('an entry opens on its own page, and that page can be shared', async ({ page }) => {
+  await signIn(page, 500, 'patreon-detail-e2e');
+  seedEntryFrom('patreon-other-e2e', 'Ponyo', 'ACCEPTED');
+  await page.goto(`/c/${CREATOR.slug}`);
+
+  await page.getByRole('link', { name: 'Ponyo' }).click();
+  await page.waitForURL((url) => /\/e\/[0-9a-f-]+$/.test(url.pathname));
+  await expect(page.getByRole('heading', { level: 1, name: 'Ponyo' })).toBeVisible();
+
+  // The whole point of the URL: it stands on its own, without the board having been loaded first.
+  const shared = page.url();
+  await page.goto('/');
+  await page.goto(shared);
+  await expect(page.getByRole('heading', { level: 1, name: 'Ponyo' })).toBeVisible();
+
+  await page.getByRole('link', { name: /back to/i }).click();
+  await page.waitForURL((url) => url.pathname === `/c/${CREATOR.slug}`);
+});
+
+test('a shared link to an entry nobody can see says so rather than breaking', async ({ page }) => {
+  await signIn(page, 500, 'patreon-detail-e2e');
+  await page.goto(`/c/${CREATOR.slug}/e/11111111-1111-4111-8111-111111111111`);
+
+  await expect(page.getByText(/not found/i)).toBeVisible();
+  await expect(page.getByRole('link', { name: /back to/i })).toBeVisible();
+});
+
 test('a reader finds a board by name and walks to it without typing a URL', async ({ page }) => {
   // The traversal a real visitor makes: land, search, click through. Previously the only way onto
   // a board was knowing its slug and typing it.

@@ -49,16 +49,18 @@ describe('accessibility basics', () => {
 
   it('keeps a live region mounted so its updates are announced', () => {
     const { container } = render(
-      <ul>
-        <RecommendationCard
-          slug="s"
-          recommendation={recommendation()}
-          canUpvote
-          canModerate={false}
-          onStatusChanged={vi.fn()}
-          onCount={vi.fn()}
-        />
-      </ul>,
+      <MemoryRouter>
+        <ul>
+          <RecommendationCard
+            slug="s"
+            recommendation={recommendation()}
+            canUpvote
+            canModerate={false}
+            onStatusChanged={vi.fn()}
+            onCount={vi.fn()}
+          />
+        </ul>
+      </MemoryRouter>,
     );
     // Screen readers announce mutations of an existing region; one that appears already
     // populated is unreliably announced.
@@ -67,16 +69,18 @@ describe('accessibility basics', () => {
 
   it('gives the upvote control an accessible name naming its suggestion', () => {
     render(
-      <ul>
-        <RecommendationCard
-          slug="s"
-          recommendation={recommendation({ upvoteCount: 7 })}
-          canUpvote
-          canModerate={false}
-          onStatusChanged={vi.fn()}
-          onCount={vi.fn()}
-        />
-      </ul>,
+      <MemoryRouter>
+        <ul>
+          <RecommendationCard
+            slug="s"
+            recommendation={recommendation({ upvoteCount: 7 })}
+            canUpvote
+            canModerate={false}
+            onStatusChanged={vi.fn()}
+            onCount={vi.fn()}
+          />
+        </ul>
+      </MemoryRouter>,
     );
     // Naming the entry matters: otherwise every button on the board reads "7 upvotes".
     expect(
@@ -86,16 +90,18 @@ describe('accessibility basics', () => {
 
   it('uses no positive tabIndex anywhere in a rendered card', () => {
     const { container } = render(
-      <ul>
-        <RecommendationCard
-          slug="s"
-          recommendation={recommendation()}
-          canUpvote
-          canModerate={false}
-          onStatusChanged={vi.fn()}
-          onCount={vi.fn()}
-        />
-      </ul>,
+      <MemoryRouter>
+        <ul>
+          <RecommendationCard
+            slug="s"
+            recommendation={recommendation()}
+            canUpvote
+            canModerate={false}
+            onStatusChanged={vi.fn()}
+            onCount={vi.fn()}
+          />
+        </ul>
+      </MemoryRouter>,
     );
     const positive = [...container.querySelectorAll('[tabindex]')].filter(
       (el) => Number(el.getAttribute('tabindex')) > 0,
@@ -106,16 +112,18 @@ describe('accessibility basics', () => {
 
   it('exposes headings for the page structure', () => {
     render(
-      <ul>
-        <RecommendationCard
-          slug="s"
-          recommendation={recommendation()}
-          canUpvote
-          canModerate={false}
-          onStatusChanged={vi.fn()}
-          onCount={vi.fn()}
-        />
-      </ul>,
+      <MemoryRouter>
+        <ul>
+          <RecommendationCard
+            slug="s"
+            recommendation={recommendation()}
+            canUpvote
+            canModerate={false}
+            onStatusChanged={vi.fn()}
+            onCount={vi.fn()}
+          />
+        </ul>
+      </MemoryRouter>,
     );
     expect(screen.getByRole('heading', { name: 'Spirited Away' })).toBeInTheDocument();
   });

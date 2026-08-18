@@ -342,6 +342,34 @@ export class RecommendationsService {
    * renders it as a card alongside board entries — and a card missing them crashes. That lesson
    * is already written above for `hasUpvoted`; nesting and themes joined it the same way.
    */
+  /**
+   * One entry, by id, under the same visibility rule the board list applies.
+   *
+   * Composed with AND rather than spread, for the reason the list already carries: both clauses
+   * can want the `OR` key, and a spread lets the last one win — which is how page two of every
+   * board once returned rejected and other patrons' pending entries.
+   *
+   * A hidden entry is a 404 rather than a 403: telling the reader an id exists but is not for
+   * them is itself the leak, since it confirms what is on a board they cannot see.
+   */
+  async findOne(
+    creator: { id: string; hidePendingFromPublic: boolean },
+    id: string,
+    viewer: { userId: string | null; staffRole: StaffRoleValue | null },
+  ) {
+    const entry = await this.prisma.recommendation.findFirst({
+      where: {
+        AND: [{ id, creatorId: creator.id }, visibilityWhere(creator, viewer)],
+      },
+      select: RECOMMENDATION_FIELDS,
+    });
+    if (!entry) throw new NotFoundException();
+
+    return viewer.userId
+      ? this.withUpvoted(entry, viewer.userId)
+      : { ...present(entry), hasUpvoted: false, ...BOARD_ONLY_DEFAULTS };
+  }
+
   private async withUpvoted<T extends { id: string; creatorNotes?: unknown[] }>(
     recommendation: T,
     userId: string,

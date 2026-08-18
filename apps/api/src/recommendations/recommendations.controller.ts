@@ -72,6 +72,21 @@ export class RecommendationsController {
     return this.search.similar(creator, query.q, viewer);
   }
 
+  /**
+   * Declared after `similar` so that literal route is not swallowed as an id, and before the
+   * parameterised writes for the same reason in reverse.
+   */
+  @Get(':id')
+  @RequireCapability('VIEW')
+  @UseGuards(CreatorAccessGuard)
+  findOne(
+    @CurrentCreator() creator: ResolvedCreator,
+    @CurrentViewer() viewer: Viewer,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.recommendations.findOne(creator, id, viewer);
+  }
+
   @Post()
   @RequireCapability('SUBMIT')
   @UseGuards(CreatorAccessGuard, SessionGuard)
