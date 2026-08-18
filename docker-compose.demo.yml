@@ -37,6 +37,9 @@ services:
     environment:
       PORT: '4000'
       WEB_ORIGIN: http://localhost:8081
+      # Ask who is signing in, rather than reusing whoever went last — the demo's whole point is
+      # seeing an interaction from both sides.
+      STUB_CONSENT_SCREEN: 'true'
     ports:
       # Published because the *browser* follows the consent redirect to it — and, in this stack,
       # because /__be is where a playtester picks who to be.

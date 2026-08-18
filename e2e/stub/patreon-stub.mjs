@@ -9,6 +9,12 @@ import { createServer } from 'node:http';
  */
 const PORT = Number(process.env.PORT ?? 4000);
 const WEB_ORIGIN = process.env.WEB_ORIGIN ?? 'http://localhost:8080';
+/**
+ * Off by default so the e2e suite keeps getting a silent approval — it sets the identity through
+ * `/__control` and expects the redirect to happen without a click. The demo turns it on, so
+ * "Sign in with Patreon" asks who you are instead of silently reusing whoever went last.
+ */
+const CONSENT_SCREEN = process.env.STUB_CONSENT_SCREEN === 'true';
 
 // Whoever the next login should be. Tests set this to switch identities.
 let identity = {
@@ -243,6 +249,34 @@ const server = createServer(async (req, res) => {
   if (url.pathname === '/oauth2/authorize') {
     const state = url.searchParams.get('state');
     const redirect = url.searchParams.get('redirect_uri') ?? `${WEB_ORIGIN}/auth/patreon/callback`;
+    const chosen = url.searchParams.get('persona');
+
+    if (chosen && PERSONAS[chosen]) {
+      identity = PERSONAS[chosen].identity;
+      memberships = PERSONAS[chosen].memberships;
+      campaigns = PERSONAS[chosen].campaigns;
+    } else if (CONSENT_SCREEN) {
+      // The real consent screen asks a question; so does this one. Without it the button signs
+      // you in as whoever went last, which makes it impossible to see the two sides of anything
+      // — a report and the moderator who receives it, say.
+      const rows = Object.entries(PERSONAS)
+        .map(([key, p]) => {
+          const href = `${url.pathname}?${new URLSearchParams({
+            ...Object.fromEntries(url.searchParams),
+            persona: key,
+          })}`;
+          return `<li><a href="${href}">${p.identity.full_name}</a> — ${p.note}</li>`;
+        })
+        .join('');
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      return res.end(
+        `<!doctype html><meta charset="utf-8"><title>Approve access</title>` +
+          `<body style="font:16px system-ui;max-width:34rem;margin:3rem auto">` +
+          `<h1>Continue as…</h1><ul>${rows}</ul>` +
+          `<p style="color:#666">Standing in for Patreon's consent screen.</p></body>`,
+      );
+    }
+
     res.writeHead(302, { Location: `${redirect}?code=stub-code&state=${encodeURIComponent(state)}` });
     return res.end();
   }

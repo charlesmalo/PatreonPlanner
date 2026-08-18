@@ -5,6 +5,7 @@ import {
   resetRateLimits,
   clearAbuse,
   clearIntelligence,
+  clearReaderState,
   clearStaff,
   makeOwner,
   makeStaff,
@@ -30,6 +31,7 @@ test.beforeEach(() => {
   // Strikes outlive a test otherwise, and a timed-out patron cannot submit anything.
   clearAbuse();
   clearStaff();
+  clearReaderState();
   // Every test starts from the same state regardless of what ran before, including CI retries.
   resetRateLimits();
 });
@@ -60,6 +62,11 @@ async function signIn(
   // is still in flight, and the caller's next goto is then interrupted by it.
   await page.waitForURL((url) => url.pathname === '/');
   await expect(page.getByRole('button', { name: /sign out/i })).toBeVisible();
+}
+
+async function signOut(page: import('@playwright/test').Page) {
+  await page.getByRole('button', { name: /sign out/i }).click();
+  await expect(page.getByRole('link', { name: /sign in with patreon/i })).toBeVisible();
 }
 
 test('an anonymous visitor can read a public board', async ({ page }) => {
@@ -232,6 +239,45 @@ test('a patron reports an entry and a moderator dismisses it', async ({ page }) 
 
   await page.getByRole('button', { name: 'Dismiss' }).click();
   await expect(page.getByText(/no open reports/i)).toBeVisible();
+});
+
+test('a report reaches the moderator bell, and not the reporter own', async ({ page }) => {
+  // The whole point of the notification, and it had no end-to-end cover at all: a reader is told
+  // a moderator will look, so a moderator has to actually hear about it.
+  seedEntryFrom('patreon-other-e2e', 'Kiki');
+
+  // The moderator signs in first so the staff row can reference their user, and because the
+  // fan-out reaches whoever is staff *at the time of the report* — someone promoted afterwards
+  // finds the report in the review queue rather than in their bell.
+  await signIn(page, 500, 'patreon-modbell-e2e');
+  makeStaff('patreon-modbell-e2e');
+  await signOut(page);
+
+  await signIn(page, 500, 'patreon-reporter-e2e');
+  await page.goto(`/c/${CREATOR.slug}`);
+  await page.getByRole('button', { name: /report “Kiki”/i }).click();
+  await page.getByLabel(/reason/i).selectOption('SPAM');
+  await page.getByRole('button', { name: 'Send report' }).click();
+  await expect(page.getByText(/thanks/i)).toBeVisible();
+
+  // Not the reporter: they filed it, so telling them about it is noise. Matched on the count so
+  // this does not also match the "no unread" label, which is always present.
+  await expect(page.getByRole('button', { name: /\d+ unread/i })).toBeHidden();
+
+  await signOut(page);
+  await signIn(page, 500, 'patreon-modbell-e2e');
+  await page.goto(`/c/${CREATOR.slug}`);
+
+  const bell = page.getByRole('button', { name: /1 unread notification/i });
+  await expect(bell).toBeVisible();
+  await bell.click();
+  // Scoped to the notification row: the board behind the panel also has a Kiki link now that
+  // card titles open their own page.
+  const notification = page.getByRole('listitem').filter({ hasText: /was reported on/i });
+  await expect(notification).toContainText('Kiki');
+
+  // Opening it marks what it showed as read, so the badge clears rather than nagging for ever.
+  await expect(page.getByRole('button', { name: /no unread/i })).toBeVisible();
 });
 
 test('an entry opens on its own page, and that page can be shared', async ({ page }) => {
