@@ -29,12 +29,21 @@ export async function setPatreonIdentity(options: {
 // Addressed by container name rather than `docker compose exec`, which differs between the v1
 // binary and the v2 plugin. The project name is pinned in docker-compose.e2e.yml, so this is
 // deterministic.
+const REDIS_CONTAINER = process.env.E2E_REDIS_CONTAINER ?? 'patreonplanner-e2e-redis-1';
 const POSTGRES_CONTAINER = process.env.E2E_POSTGRES_CONTAINER ?? 'patreonplanner-e2e-postgres-1';
 
 /**
  * Seeds directly through psql rather than the API: claiming needs a Patreon campaign the stub
  * would have to own, and these tests are about the patron journey, not the claim flow.
  */
+/**
+ * Drops every session the API knows about, without touching the browser's cookie — which is
+ * exactly what a session store restart looks like from the reader's side.
+ */
+export function forgetAllSessions(): void {
+  execFileSync('docker', ['exec', REDIS_CONTAINER, 'redis-cli', 'FLUSHALL'], { stdio: 'pipe' });
+}
+
 export function seed(sql: string): void {
   try {
     execFileSync(
@@ -61,8 +70,6 @@ export function seed(sql: string): void {
     throw new Error(`Seeding failed against ${POSTGRES_CONTAINER}: ${detail}`);
   }
 }
-
-const REDIS_CONTAINER = process.env.E2E_REDIS_CONTAINER ?? 'patreonplanner-e2e-redis-1';
 
 /**
  * Clears the submission rate-limit counters and the coarse token buckets.

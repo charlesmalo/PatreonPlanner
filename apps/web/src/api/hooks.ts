@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ApiError, api } from './client';
+import { ApiError, api, onUnauthorized } from './client';
 import type {
   Board,
   Capabilities,
@@ -41,6 +41,9 @@ export function useSession() {
       cancelled = true;
     };
   }, []);
+
+  // Anything that 401s means the session is gone, whoever the header currently claims to be.
+  useEffect(() => onUnauthorized(() => setUser(null)), []);
 
   const signOut = useCallback(async () => {
     try {

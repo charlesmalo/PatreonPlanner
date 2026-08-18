@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import {
   CREATOR,
+  forgetAllSessions,
   resetRateLimits,
   clearAbuse,
   clearIntelligence,
@@ -231,6 +232,26 @@ test('a patron reports an entry and a moderator dismisses it', async ({ page }) 
 
   await page.getByRole('button', { name: 'Dismiss' }).click();
   await expect(page.getByText(/no open reports/i)).toBeVisible();
+});
+
+test('a reader whose session ended is told so, not left looking signed in', async ({ page }) => {
+  // The session is fetched once when the page loads. Anything that ends it afterwards — an
+  // expired or revoked session, a sign-out in another tab, a restarted session store — used to
+  // leave the header showing a name while every write failed telling the reader to sign in.
+  await signIn(page, 500, 'patreon-stale-e2e');
+  seedEntryFrom('patreon-other-e2e', 'Nausicaa');
+  await page.goto(`/c/${CREATOR.slug}`);
+  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
+
+  forgetAllSessions();
+
+  await page.getByRole('button', { name: /report “Nausicaa”/i }).click();
+  await page.getByLabel(/reason/i).selectOption('SPAM');
+  await page.getByRole('button', { name: 'Send report' }).click();
+
+  // The header stops claiming otherwise, so the sign-in link is there to act on.
+  await expect(page.getByRole('link', { name: /sign in with patreon/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sign out' })).toBeHidden();
 });
 
 test('a moderator redacts a description and the board shows the redaction', async ({ page }) => {
