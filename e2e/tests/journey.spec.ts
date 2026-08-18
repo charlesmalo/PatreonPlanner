@@ -285,6 +285,36 @@ test('a report reaches the moderator bell, and not the reporter own', async ({ p
   await expect(page.getByRole('button', { name: 'Dismiss' })).toBeVisible();
 });
 
+test('a moderator works the full notification list with filters', async ({ page }) => {
+  seedEntryFrom('patreon-other-e2e', 'Laputa');
+  await signIn(page, 500, 'patreon-listmod-e2e');
+  makeStaff('patreon-listmod-e2e');
+  await signOut(page);
+
+  await signIn(page, 500, 'patreon-reporter2-e2e');
+  await page.goto(`/c/${CREATOR.slug}`);
+  await page.getByRole('button', { name: /report “Laputa”/i }).click();
+  await page.getByLabel(/reason/i).selectOption('HARASSMENT');
+  await page.getByRole('button', { name: 'Send report' }).click();
+  await expect(page.getByText(/thanks/i)).toBeVisible();
+
+  await signOut(page);
+  await signIn(page, 500, 'patreon-listmod-e2e');
+  await page.getByRole('button', { name: /1 unread notification/i }).click();
+  await page.getByRole('link', { name: /see all/i }).click();
+  await page.waitForURL((url) => url.pathname === '/notifications');
+
+  await expect(page.getByText('Laputa')).toBeVisible();
+  // The reason is what the severity ranking sorts on, so it is on the row.
+  await expect(page.getByText(/harassment/i)).toBeVisible();
+
+  await page.getByLabel(/sort/i).selectOption('severity');
+  await expect(page.getByText('Laputa')).toBeVisible();
+
+  await page.getByLabel(/show/i).selectOption('ENTRY_STATUS_CHANGED');
+  await expect(page.getByText(/nothing here/i)).toBeVisible();
+});
+
 test('an entry opens on its own page, and that page can be shared', async ({ page }) => {
   await signIn(page, 500, 'patreon-detail-e2e');
   seedEntryFrom('patreon-other-e2e', 'Ponyo', 'ACCEPTED');

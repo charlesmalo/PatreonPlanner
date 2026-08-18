@@ -22,6 +22,31 @@ export interface EmitRow {
   creatorId: string;
   type: NotificationType;
   payload: NotificationPayload;
+  /** See `SEVERITY_BY_REASON`. Omitted means news rather than a problem. */
+  severity?: number;
+}
+
+/**
+ * How urgently a report wants working, most serious first.
+ *
+ * Harassment targets a person and time matters. Sexual content may break the law or the platform's
+ * terms and is publicly visible. Spam degrades a board without a victim. Off-topic is curation,
+ * duplicate is housekeeping. OTHER sits at the bottom deliberately: an unclassified report must
+ * not outrank one whose seriousness is known.
+ */
+export const SEVERITY_BY_REASON: Record<string, number> = {
+  HARASSMENT: 50,
+  SEXUAL_CONTENT: 40,
+  SPAM: 30,
+  OFF_TOPIC: 20,
+  DUPLICATE: 10,
+  OTHER: 5,
+};
+
+export interface ListOptions {
+  type?: NotificationType;
+  unreadOnly?: boolean;
+  sort?: 'newest' | 'oldest' | 'severity';
 }
 
 /** Anything that can run a write — the caller's transaction, or the client itself. */
@@ -42,6 +67,7 @@ export class NotificationsService {
     await tx.notification.createMany({
       data: rows.map((row) => ({
         ...row,
+        severity: row.severity ?? SEVERITY_BY_REASON[row.payload.reason ?? ''] ?? 0,
         payload: row.payload as unknown as Prisma.InputJsonValue,
       })),
     });
@@ -51,10 +77,21 @@ export class NotificationsService {
    * Keyset rather than offset: this list grows at the head, so by the time a reader asks for page
    * two an offset would hand them a row page one already carried.
    */
-  async list(userId: string, cursor?: string, limit = NOTIFICATION_PAGE_SIZE) {
+  async list(
+    userId: string,
+    cursor?: string,
+    limit = NOTIFICATION_PAGE_SIZE,
+    options: ListOptions = {},
+  ) {
     const rows = await this.prisma.notification.findMany({
-      where: { userId },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      where: {
+        userId,
+        ...(options.type ? { type: options.type } : {}),
+        ...(options.unreadOnly ? { readAt: null } : {}),
+      },
+      // Every ordering ends in id, so it is total — without that a cursor cannot resume from a
+      // stable position when two rows share a timestamp.
+      orderBy: orderingFor(options.sort),
       take: limit + 1,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
@@ -80,4 +117,12 @@ export class NotificationsService {
     });
     return count;
   }
+}
+
+function orderingFor(sort: ListOptions['sort']): Prisma.NotificationOrderByWithRelationInput[] {
+  if (sort === 'oldest') return [{ createdAt: 'asc' }, { id: 'asc' }];
+  if (sort === 'severity') {
+    return [{ severity: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }];
+  }
+  return [{ createdAt: 'desc' }, { id: 'desc' }];
 }

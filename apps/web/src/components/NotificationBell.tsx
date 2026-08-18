@@ -53,6 +53,8 @@ export function NotificationBell({
 
       {open ? (
         <div className="absolute right-0 z-10 mt-2 w-80 rounded border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
+          {/* Always offered, including when the panel is empty: what it holds is the unread
+              tail, and a reader with nothing new may still want what they have already seen. */}
           {loading ? (
             <p className="px-3 py-4 text-sm text-slate-600 dark:text-slate-300">Loading…</p>
           ) : failed ? (
@@ -87,6 +89,15 @@ export function NotificationBell({
               ))}
             </ul>
           )}
+          <div className="border-t border-slate-200 px-3 py-2 dark:border-slate-700">
+            <Link
+              to="/notifications"
+              onClick={() => setOpen(false)}
+              className="text-sm underline focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+            >
+              See all notifications
+            </Link>
+          </div>
         </div>
       ) : null}
     </div>
