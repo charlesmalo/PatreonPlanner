@@ -2,6 +2,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { useNotifications, useSession } from './api/hooks';
 import { Layout } from './components/Layout';
 import { CreatorBoard } from './routes/CreatorBoard';
+import { EntryDetail } from './routes/EntryDetail';
 import { LandingPage } from './routes/LandingPage';
 import { AcceptInvite } from './routes/AcceptInvite';
 import { ReviewQueue } from './routes/ReviewQueue';
@@ -22,6 +23,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<LandingPage signedIn={user !== null} />} />
           <Route path="/c/:slug" element={<CreatorBoard />} />
+          <Route path="/c/:slug/e/:id" element={<EntryDetail />} />
           <Route path="/c/:slug/review" element={<ReviewQueue />} />
           <Route path="/c/:slug/staff" element={<StaffPage />} />
           <Route path="/invite" element={<AcceptInvite user={user} />} />

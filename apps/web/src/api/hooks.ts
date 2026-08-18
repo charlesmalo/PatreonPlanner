@@ -5,6 +5,7 @@ import type {
   Capabilities,
   CreatorProfile,
   Notification,
+  Recommendation,
   ReviewQueueItem,
   SessionUser,
   ThemeSummary,
@@ -364,4 +365,48 @@ export function useNotifications(enabled: boolean) {
   }, []);
 
   return { unreadCount, items, loading, failed, open };
+}
+
+/** One entry, for its own page. Separate from the board so a shared link needs no board load. */
+export function useEntry(slug: string, id: string) {
+  const [entry, setEntry] = useState<Recommendation | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const path = `/creators/${encodeURIComponent(slug)}/recommendations/${encodeURIComponent(id)}`;
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    api
+      .get<Recommendation>(path)
+      .then((value) => {
+        if (!cancelled) setEntry(value);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof ApiError ? err : new ApiError(0));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [path]);
+
+  /** The card's controls report counts back; the page holds one entry, so it just replaces it. */
+  const applyUpvote = useCallback((_id: string, upvoteCount: number, hasUpvoted?: boolean) => {
+    setEntry((current) =>
+      current ? { ...current, upvoteCount, hasUpvoted: hasUpvoted ?? current.hasUpvoted } : current,
+    );
+  }, []);
+
+  const applyStatus = useCallback((_id: string, status: string) => {
+    setEntry((current) =>
+      current ? { ...current, status: status as Recommendation['status'] } : current,
+    );
+  }, []);
+
+  return { entry, error, loading, applyUpvote, applyStatus };
 }

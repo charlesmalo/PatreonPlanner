@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
 import { UpvoteButton } from './UpvoteButton';
 import { fakeApi } from '../test-support';
@@ -88,16 +89,18 @@ describe('RecommendationCard resilience', () => {
     delete (entry as Partial<typeof entry>).themes;
 
     render(
-      <ul>
-        <RecommendationCard
-          slug="s"
-          recommendation={entry}
-          canUpvote
-          canModerate={false}
-          onCount={vi.fn()}
-          onStatusChanged={vi.fn()}
-        />
-      </ul>,
+      <MemoryRouter>
+        <ul>
+          <RecommendationCard
+            slug="s"
+            recommendation={entry}
+            canUpvote
+            canModerate={false}
+            onCount={vi.fn()}
+            onStatusChanged={vi.fn()}
+          />
+        </ul>
+      </MemoryRouter>,
     );
     expect(screen.getByText('Spirited Away')).toBeInTheDocument();
   });
