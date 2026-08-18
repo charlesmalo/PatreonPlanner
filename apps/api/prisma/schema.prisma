@@ -646,6 +646,10 @@ model Notification {
   // A snapshot, not a join: the message has to keep being true after the entry it describes is
   // deleted, retitled by a moderator, or moved somewhere this reader can no longer see.
   payload   Json
+  // Ranked at write time rather than derived from the payload on every sort: a report about
+  // harassment wants working before one about a duplicate, and ordering on a column is something
+  // an index can serve. Zero for anything that is news rather than a problem.
+  severity  Int              @default(0)
   readAt    DateTime?
   createdAt DateTime         @default(now())
 
@@ -653,6 +657,7 @@ model Notification {
   creator Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([userId, severity(sort: Desc), createdAt(sort: Desc), id(sort: Desc)])
 }
 
 model ThemeSource {

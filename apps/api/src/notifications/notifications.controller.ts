@@ -24,7 +24,11 @@ export class NotificationsController {
 
   @Get()
   list(@CurrentUser() user: CurrentUserPayload, @Query() query: ListNotificationsQuery) {
-    return this.notifications.list(user.id, query.cursor);
+    return this.notifications.list(user.id, query.cursor, undefined, {
+      type: query.type,
+      unreadOnly: query.unreadOnly,
+      sort: query.sort,
+    });
   }
 
   // Its own endpoint because the badge polls it: the full list is a much larger answer to a

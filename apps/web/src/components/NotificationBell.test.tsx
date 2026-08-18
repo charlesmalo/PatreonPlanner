@@ -111,6 +111,26 @@ describe('NotificationBell', () => {
     expect(screen.queryByText(/Cowboy Bebop/)).not.toBeInTheDocument();
   });
 
+  it('offers the full list, which is where filtering and sorting live', async () => {
+    renderBell({ unreadCount: 1, items: [statusChange()] });
+
+    await userEvent.click(screen.getByRole('button', { name: /unread/i }));
+
+    expect(screen.getByRole('link', { name: /see all/i })).toHaveAttribute(
+      'href',
+      '/notifications',
+    );
+  });
+
+  it('offers the full list even when the panel is empty', async () => {
+    // Read notifications are still there; an empty panel does not mean an empty history.
+    renderBell({ items: [] });
+
+    await userEvent.click(screen.getByRole('button', { name: /notification/i }));
+
+    expect(screen.getByRole('link', { name: /see all/i })).toBeInTheDocument();
+  });
+
   it('says so when there is nothing to show', async () => {
     renderBell({ items: [] });
 

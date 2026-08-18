@@ -1,3 +1,4 @@
+import type { FlagReason } from '@prisma/client';
 import request from 'supertest';
 import { NotificationsService } from '../src/notifications/notifications.service';
 import { AuthTestContext, pickCookie, startAuthApp } from './support/auth-app';
@@ -131,6 +132,85 @@ describe('Notifications (integration)', () => {
     expect(await service.unreadCount(alice)).toBe(0);
   });
 
+  describe('filtering and sorting', () => {
+    const flagged = (userId: string, reason: FlagReason, title: string) => ({
+      userId,
+      creatorId,
+      type: 'ENTRY_FLAGGED' as const,
+      payload: {
+        recommendationId: '00000000-0000-4000-8000-000000000002',
+        title,
+        creatorSlug: 'notify-co',
+        creatorName: 'Notify Co',
+        reason,
+      },
+    });
+
+    it('keeps newest first by default', async () => {
+      await seedInOrder(['One', 'Two', 'Three']);
+
+      const { items } = await service.list(alice);
+
+      expect(items.map((n) => (n.payload as { title: string }).title)).toEqual([
+        'Three',
+        'Two',
+        'One',
+      ]);
+    });
+
+    it('narrows to one kind, so reports can be worked through alone', async () => {
+      await service.emit(ctx.prisma, [row(alice, 'A status change')]);
+      await service.emit(ctx.prisma, [flagged(alice, 'SPAM', 'A report')]);
+
+      const { items } = await service.list(alice, undefined, undefined, {
+        type: 'ENTRY_FLAGGED',
+      });
+
+      expect(items.map((n) => (n.payload as { title: string }).title)).toEqual(['A report']);
+    });
+
+    it('narrows to what has not been read', async () => {
+      await service.emit(ctx.prisma, [row(alice, 'Seen'), row(alice, 'Unseen')]);
+      const all = (await service.list(alice)).items;
+      await service.markRead(alice, [
+        all.find((n) => (n.payload as { title: string }).title === 'Seen')!.id,
+      ]);
+
+      const { items } = await service.list(alice, undefined, undefined, { unreadOnly: true });
+
+      expect(items.map((n) => (n.payload as { title: string }).title)).toEqual(['Unseen']);
+    });
+
+    it('ranks reports by how serious they are, not by when they arrived', async () => {
+      // Harassment targets a person and time matters; a duplicate is housekeeping. A moderator
+      // working a backlog wants the first one first regardless of arrival order.
+      await service.emit(ctx.prisma, [flagged(alice, 'DUPLICATE', 'Housekeeping')]);
+      await service.emit(ctx.prisma, [flagged(alice, 'HARASSMENT', 'Someone is being targeted')]);
+      await service.emit(ctx.prisma, [flagged(alice, 'SPAM', 'Junk')]);
+
+      const { items } = await service.list(alice, undefined, undefined, { sort: 'severity' });
+
+      expect(items.map((n) => (n.payload as { title: string }).title)).toEqual([
+        'Someone is being targeted',
+        'Junk',
+        'Housekeeping',
+      ]);
+    });
+
+    it('leaves a status change below every report when ranking by severity', async () => {
+      // Nothing has happened to anybody; it is news, not a problem.
+      await service.emit(ctx.prisma, [row(alice, 'Accepted')]);
+      await service.emit(ctx.prisma, [flagged(alice, 'DUPLICATE', 'Housekeeping')]);
+
+      const { items } = await service.list(alice, undefined, undefined, { sort: 'severity' });
+
+      expect(items.map((n) => (n.payload as { title: string }).title)).toEqual([
+        'Housekeeping',
+        'Accepted',
+      ]);
+    });
+  });
+
   describe('the endpoints', () => {
     let aliceAuth: Awaited<ReturnType<typeof loginAs>>;
     let bobAuth: Awaited<ReturnType<typeof loginAs>>;
@@ -214,6 +294,30 @@ describe('Notifications (integration)', () => {
         .expect(403);
 
       expect(await service.unreadCount(alice)).toBe(1);
+    });
+
+    it('passes the filters through, not just the cursor', async () => {
+      await service.emit(ctx.prisma, [row(alice, 'A status change')]);
+      await service.emit(ctx.prisma, [
+        {
+          userId: alice,
+          creatorId,
+          type: 'ENTRY_FLAGGED' as const,
+          payload: {
+            recommendationId: '00000000-0000-4000-8000-000000000003',
+            title: 'A report',
+            creatorSlug: 'notify-co',
+            creatorName: 'Notify Co',
+            reason: 'SPAM' as FlagReason,
+          },
+        },
+      ]);
+
+      const res = await get(aliceAuth, '?type=ENTRY_FLAGGED').expect(200);
+
+      expect(res.body.items.map((n: { payload: { title: string } }) => n.payload.title)).toEqual([
+        'A report',
+      ]);
     });
 
     it('marks the caller own read', async () => {
