@@ -278,6 +278,11 @@ test('a report reaches the moderator bell, and not the reporter own', async ({ p
 
   // Opening it marks what it showed as read, so the badge clears rather than nagging for ever.
   await expect(page.getByRole('button', { name: /no unread/i })).toBeVisible();
+
+  // Following it lands where the report can be acted on, not merely where the entry is read.
+  await notification.getByRole('link').click();
+  await page.waitForURL((url) => url.pathname.endsWith('/review'));
+  await expect(page.getByRole('button', { name: 'Dismiss' })).toBeVisible();
 });
 
 test('an entry opens on its own page, and that page can be shared', async ({ page }) => {

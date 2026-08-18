@@ -74,16 +74,29 @@ describe('NotificationBell', () => {
     expect(screen.getByText(/Ada Writes/)).toBeInTheDocument();
   });
 
-  it('links to the board rather than the entry', async () => {
-    // The entry may be gone — deleted, or moved somewhere this reader cannot see — and a link
-    // that 404s is worse than one that lands on the board it came from.
+  it('takes a report to the queue where it is acted on', async () => {
+    // A moderator hearing about a report wants the queue, not the board — the board is where the
+    // entry is read, the queue is where something can be done about it.
+    renderBell({ unreadCount: 1, items: [flagged()] });
+
+    await userEvent.click(screen.getByRole('button', { name: /unread/i }));
+
+    expect(screen.getByRole('link', { name: /Some Entry/ })).toHaveAttribute(
+      'href',
+      '/c/ada-writes/review',
+    );
+  });
+
+  it('takes a status change to the entry it happened to', async () => {
+    // Its own page exists now and says so plainly when the entry has since gone, so this no
+    // longer has to settle for the board.
     renderBell({ unreadCount: 1, items: [statusChange()] });
 
     await userEvent.click(screen.getByRole('button', { name: /unread/i }));
 
     expect(screen.getByRole('link', { name: /Cowboy Bebop/ })).toHaveAttribute(
       'href',
-      '/c/ada-writes',
+      '/c/ada-writes/e/rec-1',
     );
   });
 

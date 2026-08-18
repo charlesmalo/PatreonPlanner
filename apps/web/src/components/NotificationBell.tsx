@@ -75,11 +75,8 @@ export function NotificationBell({
                     <span aria-hidden="true" className="mt-1.5 h-2 w-2 shrink-0" />
                   )}
                   <span>
-                    {/* To the board, not the entry: the entry may be deleted or moved somewhere
-                        this reader cannot see, and a link that 404s is worse than one that lands
-                        on the board it came from. */}
                     <Link
-                      to={`/c/${item.payload.creatorSlug}`}
+                      to={destinationFor(item)}
                       className="font-medium underline focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
                     >
                       {item.payload.title}
@@ -94,6 +91,22 @@ export function NotificationBell({
       ) : null}
     </div>
   );
+}
+
+/**
+ * Where the news is acted on, which is not always where it happened.
+ *
+ * A report goes to the queue: the board is where an entry is read, the queue is where a
+ * moderator can do something about it. A status change goes to the entry itself, which has its
+ * own page and says so plainly when it has since been removed.
+ */
+function destinationFor(item: Notification): string {
+  const board = `/c/${item.payload.creatorSlug}`;
+  if (item.type === 'ENTRY_FLAGGED') return `${board}/review`;
+  return item.payload.recommendationId
+    ? `${board}/e/${item.payload.recommendationId}`
+    : // No id means the content was refused before it existed; the board is all there is.
+      board;
 }
 
 /** Rendered from type and payload; there is nothing else to consult, by design. */
