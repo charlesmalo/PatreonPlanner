@@ -234,6 +234,36 @@ test('a patron reports an entry and a moderator dismisses it', async ({ page }) 
   await expect(page.getByText(/no open reports/i)).toBeVisible();
 });
 
+test('a reader finds a board by name and walks to it without typing a URL', async ({ page }) => {
+  // The traversal a real visitor makes: land, search, click through. Previously the only way onto
+  // a board was knowing its slug and typing it.
+  await signIn(page, 500, 'patreon-finder-e2e');
+  await page.goto('/');
+
+  await page.getByLabel(/find a creator/i).fill(CREATOR.displayName.slice(0, 6));
+  await page.getByRole('link', { name: CREATOR.displayName }).click();
+
+  await page.waitForURL((url) => url.pathname === `/c/${CREATOR.slug}`);
+  await expect(page.getByRole('heading', { name: CREATOR.displayName })).toBeVisible();
+});
+
+test('a favourited board is offered first next time', async ({ page }) => {
+  await signIn(page, 500, 'patreon-finder-e2e');
+  await page.goto('/');
+  await page.getByLabel(/find a creator/i).fill(CREATOR.displayName.slice(0, 6));
+
+  await page
+    .getByRole('button', { name: new RegExp(`Favourite ${CREATOR.displayName}`, 'i') })
+    .click();
+  await expect(page.getByText(/^Favourite$/)).toBeVisible();
+
+  await page.reload();
+  await page.getByLabel(/find a creator/i).fill(CREATOR.displayName.slice(0, 6));
+
+  // Survives a reload because it is stored, not held in the tab.
+  await expect(page.getByText(/^Favourite$/)).toBeVisible();
+});
+
 test('a reader whose session ended is told so, not left looking signed in', async ({ page }) => {
   // The session is fetched once when the page loads. Anything that ends it afterwards — an
   // expired or revoked session, a sign-out in another tab, a restarted session store — used to

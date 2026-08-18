@@ -1,4 +1,10 @@
-export function LandingPage() {
+import { CreatorSearch } from '../components/CreatorSearch';
+
+interface LandingPageProps {
+  signedIn: boolean;
+}
+
+export function LandingPage({ signedIn }: LandingPageProps) {
   return (
     <section>
       <h1 className="text-2xl font-semibold tracking-tight">
@@ -9,9 +15,9 @@ export function LandingPage() {
         each other&apos;s picks, and see what is coming up — with who can suggest and vote decided
         by the creator&apos;s own Patreon tiers.
       </p>
-      <p className="mt-6 text-sm text-slate-500 dark:text-slate-400">
-        Open a creator&apos;s board at <code className="font-mono">/c/their-slug</code>.
-      </p>
+      <div className="mt-8">
+        <CreatorSearch signedIn={signedIn} />
+      </div>
     </section>
   );
 }

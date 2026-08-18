@@ -189,3 +189,13 @@ export interface Notification {
   readAt: string | null;
   createdAt: string;
 }
+
+export interface DiscoveredCreator {
+  id: string;
+  slug: string;
+  displayName: string;
+  /** On the reader's own shortlist. */
+  favorited: boolean;
+  /** The reader has a membership here, active or lapsed. */
+  supported: boolean;
+}

@@ -132,6 +132,7 @@ model User {
   invitesAccepted   StaffInvite[]      @relation("InviteAcceptor")
   notifications     Notification[]
   moderationResults ModerationResult[]
+  favorites         CreatorFavorite[]
   flagsRaised       Flag[]             @relation("FlagAuthor")
   flagsResolved     Flag[]             @relation("FlagResolver")
   moderationActs    ModerationAction[] @relation("ModerationActor")
@@ -185,6 +186,7 @@ model Creator {
   notifications     Notification[]
   moderationResults ModerationResult[]
   blockwords        CreatorBlockword[]
+  favoritedBy       CreatorFavorite[]
   staffInvites      StaffInvite[]
 
   // Postgres does not index foreign keys automatically, and the cascade from Creator scans them.
@@ -559,6 +561,20 @@ model Theme {
 //
 // Many labels per theme, because that is what a merge produces: fold "sci-fi" into "science
 // fiction" and the survivor legitimately owns both.
+// A reader's own shortlist. Deliberate, unlike a membership — which is a side effect of paying
+// for something — so it outranks one when boards are ordered.
+model CreatorFavorite {
+  userId    String   @db.Uuid
+  creatorId String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  creator Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@id([userId, creatorId])
+  @@index([creatorId])
+}
+
 enum BlockwordAction {
   BLOCK
   FLAG
