@@ -320,8 +320,21 @@ what third parties may do with campaign data and with monetisation layered on pl
 first, not after.
 
 **If creator-side revenue ever matters, make it a flat plan** — predictable, no proration, no
-headcount disputes, and it degrades gracefully because what lapses is the creator's own features
-rather than their community's.
+headcount disputes, card on file so the processor's dunning handles failure, and no accounts
+receivable. Invoicing on trust is unsecured credit: aging balances and chasing, for amounts
+measured in single dollars, where collecting costs more than the sum owed. Discretionary waivers
+are fine for a handful of relationships and unbounded personal work at any real number of them.
+
+> **Non-payment must never suspend the community's cosmetics.** Patrons paid their pledge in good
+> faith and had no part in the creator's bill; taking their reactions away puts the support burden
+> on the creator and the reputational damage on us, while the person who owes money is the only
+> one unaffected. What lapses is the **creator's own** features — branding, analytics, board
+> customisation.
+
+**Build none of this until someone asks.** There are no creators on the platform. When the third
+one wants it: a payment link sent by hand and a boolean on their row — an afternoon, not a
+subsystem. Automate only once doing it manually becomes annoying, by which point the real usage
+pattern is known rather than guessed.
 
 ---
 
