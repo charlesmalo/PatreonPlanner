@@ -133,6 +133,14 @@ export function setVisibility(value: 'PUBLIC' | 'ANY_PATREON_USER' | 'SUBSCRIBER
  * Grants moderation power to an already-logged-in identity. The User row only exists after a
  * first login, so this is keyed on the Patreon id and runs after signing in.
  */
+/**
+ * Favourites and notifications outlive a test otherwise — a favourite left by an earlier run
+ * makes the star a toggle in the wrong direction, and a stale unread count makes the bell lie.
+ */
+export function clearReaderState(): void {
+  seed(`DELETE FROM "CreatorFavorite"; DELETE FROM "Notification";`);
+}
+
 export function makeStaff(patreonUserId: string): void {
   seed(`
     INSERT INTO "CreatorStaff"(id,"creatorId","userId",role,"createdAt","updatedAt")
