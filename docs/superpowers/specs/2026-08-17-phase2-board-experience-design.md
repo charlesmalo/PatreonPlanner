@@ -5,7 +5,7 @@ before the plan that touches them.
 
 **What this covers:** the kanban board, weighted voting, grouping related entries, where watch
 links come from, disputes and contact tickets, granular moderator permissions, the moderator view
-switch, and the donation link.
+switch, the donation link, reactions, and what premium may and may not be.
 
 **What it does not change:** the access model (`VIEW | UPVOTE | SUBMIT | MODERATE | ADMINISTER`
 resolved per creator), multi-tenancy, or the moderation pipeline. Those hold as built.
@@ -269,24 +269,62 @@ them, and creators would reasonably read it as monetising their audience.
 - **Disclaimer**, as uBlock and similar carry: a voluntary gift supporting development, may not be
   tax-deductible, and following local rules is the giver's responsibility.
 
-### **OPEN:** a premium tier
+### Premium — **decided in principle**
 
-Proposed: paid relief from rate limits, with a token-style budget.
+**Premium is cosmetic and quality-of-life only. No feature is withheld from free users**, and no
+limit set by a creator is ever overridden by something a user bought from us.
 
-The token presentation is worth building **regardless of payment** — "3 suggestions left, next
-unlocks at 14:20" is far better than an opaque 429, and reads as a budget rather than a
-punishment.
+The governing precedent is Discord Nitro, which sells cosmetics and better emoji and pointedly
+does **not** let a subscriber post faster in a server whose admin set a rate limit. The same line
+holds here: the abuse limiter stays a security control, and the per-board submission quota belongs
+to the **creator** — it is their policy about how much one patron may put on their board, and they
+absorb the moderation cost of the result. Selling relief from it would put our revenue in
+proportion to their workload.
 
-Selling *relief from the limits* is unresolved and recorded here rather than decided. The concern:
-the limiter is the control that stops a board being flooded, the noise lands on creators' boards
-while the fee accrues to the app, and a recurring subscription turns this into a payment business
-(dunning, refunds, chargebacks, GST/HST past the small-supplier threshold). Alternatives that
-scale with value rather than risk: custom branding, analytics and export, longer retention, more
-themes, priority support.
+If quotas should be more generous for some people, the two honest routes are app-level actions
+that land on nobody's board (catalogue searches), or letting the **creator** grant a higher quota
+to whoever they choose. Not the app selling it over their head.
+
+**Premium is a property of the `User`, not of a (user, creator) pair.** It never enters
+`can(capability, viewer, policy)`, so it cannot become an authorization input — which a per-board
+perk eventually would.
+
+**The token presentation is built regardless of payment.** "3 suggestions left, next unlocks at
+14:20" is far better than an opaque 429 and reads as a budget rather than a punishment.
+
+**OPEN:** what premium actually contains beyond the reaction palette below — candidates that cost
+nothing to serve and withhold no functionality: colour schemes, profile flair, board themes for
+one's own view.
 
 ---
 
-## 10. Sequencing
+## 10. Reactions
+
+Separate from upvotes, and worth building on their own merits rather than as a premium hook.
+
+Today enthusiasm and demand are the same button: people upvote to say "yes!" when they mean
+"I would watch this", which pollutes the very signal the board exists to produce. Reactions give
+hype somewhere to go that does not touch ranking.
+
+- **Reactions never affect ordering.** One per person per emote, unweighted, and not an input to
+  any sort. The moment they influence rank they become a second voting system with none of the
+  tier weighting that makes the first one meaningful.
+- **A curated set we ship — never uploaded images.** User- or creator-uploaded emotes mean image
+  hosting, storage cost and a content-moderation surface considerably worse than text, and they
+  break the free-only constraint the first time a CDN bill arrives. Premium unlocks *more of the
+  set we already ship*, which costs nothing to serve and cannot be abused.
+- **Creator toggle.** Some boards will not want emoji on them at all.
+- **Their own rate limit**, for the same reason everything else has one: reacting to four hundred
+  entries in a minute is a thing people do.
+- **Generic attachment from the start** — entries and notes now, comments when discussion threads
+  arrive (design §12 puts those in Phase 2) — so comments do not need a second implementation.
+
+Stored like upvotes are: a row per (subject, user, emote), aggregated into counts for display.
+Unlike upvotes there is no tier reference, because reactions carry no weight.
+
+---
+
+## 11. Sequencing
 
 Cheapest and highest-value first; each produces something usable on its own.
 
@@ -299,10 +337,12 @@ Cheapest and highest-value first; each produces something usable on its own.
 7. Disputes and tickets inbox
 8. Grouping and the link/candidate model
 9. Donation page
-10. Drag-and-drop, as an enhancement over arrows that already work
+10. Reactions
+11. Drag-and-drop, as an enhancement over arrows that already work
 
 ## Open questions
 
 - Group weight: sum across children, or head only? (§3)
-- Premium tier: sell rate-limit relief, sell something else, or nothing? (§9)
+- Premium: what it contains beyond the reaction palette, given it may withhold no functionality
+  and may not override a creator's limits (§9)
 - Which permissions belong in the granular set, and which stay bundled under `MODERATE`? (§7)
