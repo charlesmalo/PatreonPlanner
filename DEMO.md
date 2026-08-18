@@ -12,8 +12,12 @@ docker compose -f docker-compose.demo.yml up -d --build
 
 First run takes a few minutes to build. Then:
 
-- **The board** — <http://localhost:8081/c/ada-watches-things>
+- **Start here** — <http://localhost:8081> — search for a creator and click through to their board
 - **Sign in as…** — <http://localhost:4001/__be>
+
+The board itself is at `/c/ada-watches-things`, but you should not need to type that: search for
+"Ada" from the home page. Favourite a board with the star and it sorts to the top next time, above
+boards you merely pay for.
 
 Stop with `docker compose -f docker-compose.demo.yml down`. Add `-v` to throw the data away and
 get a fresh board next time; without it, whatever you did survives the restart.

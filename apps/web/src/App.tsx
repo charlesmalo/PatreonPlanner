@@ -20,7 +20,7 @@ export default function App() {
         notifications={notifications}
       >
         <Routes>
-          <Route path="/" element={<LandingPage />} />
+          <Route path="/" element={<LandingPage signedIn={user !== null} />} />
           <Route path="/c/:slug" element={<CreatorBoard />} />
           <Route path="/c/:slug/review" element={<ReviewQueue />} />
           <Route path="/c/:slug/staff" element={<StaffPage />} />
