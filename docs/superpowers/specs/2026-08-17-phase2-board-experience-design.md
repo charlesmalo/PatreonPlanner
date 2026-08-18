@@ -1,0 +1,308 @@
+# Phase 2 — Board Experience Design
+
+**Status:** draft for review. Nothing here is built. Decisions marked **OPEN** need an answer
+before the plan that touches them.
+
+**What this covers:** the kanban board, weighted voting, grouping related entries, where watch
+links come from, disputes and contact tickets, granular moderator permissions, the moderator view
+switch, and the donation link.
+
+**What it does not change:** the access model (`VIEW | UPVOTE | SUBMIT | MODERATE | ADMINISTER`
+resolved per creator), multi-tenancy, or the moderation pipeline. Those hold as built.
+
+---
+
+## 1. The board becomes a kanban
+
+Design §7 already specifies a kanban dashboard for creators and mods. This makes it the primary
+view for **everyone**, read-only for those without write capabilities.
+
+Columns are the lifecycle statuses, which already exist: **Suggestions** (`PENDING`) →
+**Accepted** → **Now Playing** (`ACTIVE`) → **Completed**. `REJECTED` and `DELETED` stay off the
+board and remain reachable from the review queue.
+
+- **Cards are collapsible summaries.** Each opens into its own page (`/c/:slug/e/:id`) with the
+  full description, notes, links, availability and history. A shareable URL per entry is worth
+  having on its own.
+- **Columns collapse left or right**, so a creator working through Accepted can push the rest out
+  of the way. Collapsed state is per-reader and local; it is not board configuration.
+- **Moving a card:** left/right arrows on every card, plus drag-and-drop. Arrows first and
+  drag-and-drop second — arrows work on touch, work with a keyboard, and are announceable to a
+  screen reader, which drag-and-drop is not without significant extra work.
+- **Narrow screens get one column at a time** with a column switcher. Horizontal kanban on a phone
+  is unusable, and a Patreon audience is heavily mobile. This is the same data, not a second
+  implementation: the existing vertical layout becomes the narrow-screen form.
+
+### Ordering — **decided**
+
+**Upvote-driven is canonical.** The board is a demand signal; the default order should encourage
+voting and reflect it. Manual order is available as an explicit per-column sort mode, and card
+placement is only preserved while that mode is active — in any other sort, an arrow or a drag
+changes status, not position.
+
+This needs a persisted rank per entry (fractional/lexo-style, so an insert between two cards does
+not renumber the column). Sort modes per column: **upvote weight**, **newest**, **manual**, with
+creator-favourited entries sub-sorted to the top without a separate filter.
+
+---
+
+## 2. Weighted voting
+
+A creator assigns a **weight** to each of their Patreon tiers (e.g. 20/15/10/5/2/1). An upvote
+counts for the weight of the tier the voter held.
+
+### Storage — **decided**
+
+A vote stores the **tier it was cast at**, never a copied number.
+
+```
+Upvote        (recommendationId, userId, tierId)
+UpvoteTally   (recommendationId, tierId, count)   -- denormalised counts, not products
+```
+
+Displayed weight is `Σ count × tier.weight`, computed on read by joining the tiers. A board page
+is roughly twenty entries across a handful of tiers, so the sum is trivial.
+
+**Why counts rather than a cached product:** if the creator rebalances tier weights, nothing
+derived is stored, so **no backfill is needed and no cache can disagree with the tiers**. The
+backfill is the expensive, failure-prone part of the alternative. Materialise the product only if
+measurement says the join is too slow.
+
+### When a patron changes tier — **decided**
+
+- Existing votes keep the tier they were cast at. New votes use the new tier.
+- The voter gets a page listing everything they have upvoted, with an action to **update** those
+  votes to their current tier.
+- That update **only ratchets upward**: a past vote moves to the current tier only where the
+  current tier's weight is greater. It never moves down.
+
+The intent is that paying more, even once, is not wasted — which is a deliberate incentive rather
+than a neutral rule.
+
+**Two consequences to accept knowingly:**
+
+1. A **creator rebalance can still lower** an existing vote's value. The ratchet protects against
+   the voter's own downgrade, not against the creator changing what a tier is worth. This is
+   correct — the creator owns the weights — but it is the one path where a vote falls without the
+   voter acting.
+2. The ratchet is permanent, so a board's totals drift over time toward each voter's *historical
+   peak* generosity rather than current support. That is the intended incentive, and it does make
+   the demand signal less accurate as a board ages. **Therefore the ratchet is a creator-level
+   toggle**, so a creator who wants a live signal can turn it off.
+
+### Consequences elsewhere
+
+- **Tiers are archived, never deleted.** Once votes reference a tier, deleting it destroys the
+  meaning of historical votes. The codebase already refuses to delete tiers referenced by policy
+  (`onDelete: Restrict`, so a deletion cannot silently widen access); votes extend that.
+- **Show headcount alongside weight.** "210 points" hides whether that is forty people or three.
+  Both numbers are honest and they answer different questions.
+- **Free/public is not weight zero — it is the `UPVOTE` capability denied.** The access resolver
+  already handles this. A zero-weight vote would otherwise sit in the tallies contributing nothing
+  while still counting as a person.
+
+---
+
+## 3. Grouping related entries
+
+Broader than de-duplication, which is the narrow case. Three things that should live on one card:
+
+- **The same work under different titles** — "Your Name" / "君の名は。"
+- **Seasons and parts** — Re:Zero season 3 when 1 and 2 are already on the board.
+- **The same work reachable on different platforms or regions.**
+
+**Grouping preserves; merging destroys.** Seasons must remain individually visible, so this is a
+group with a canonical head and ordered members — closer to the parent/child nesting that already
+exists for franchises than to the theme merge built in Plan 19.
+
+**Reuse the existing parent/child relation** rather than introducing a fourth grouping concept
+alongside de-dupe, nesting and themes. A group is a head entry with ordered children; the board
+shows the head with its children nested and collapsible.
+
+Rules:
+
+- Only staff with the right permission may group or ungroup.
+- **Grouping must de-duplicate voters.** Someone who upvoted two entries that are then grouped
+  counts once, at their highest tier. Getting this wrong inflates the head's weight silently — the
+  same trap Plan 19's theme merge hit with title assignments.
+- Ungrouping restores children as independent entries; it does not delete anything.
+
+**OPEN:** whether a group's displayed weight is the sum across children or the head's own. Sum is
+more useful for ranking; head-only is easier to reason about.
+
+---
+
+## 4. Where watch links come from
+
+Two sources that must not be conflated:
+
+**Provider availability (data).** TMDB's watch-providers endpoint, already integrated in Plan 10,
+gives "on Crunchyroll in CA, Netflix in AU" per region, refreshed on a schedule. This is
+authoritative and is where "you'll need a VPN for this one" comes from — derived from data rather
+than from patrons pasting regional links.
+
+**Suggested links (claims).** URLs submitted by people. These are *candidates*, not published
+links.
+
+> **A URL from a non-staff submitter is a candidate visible to staff, never a live link on the
+> board.** Otherwise any patron can attach a URL to any existing card by submitting a duplicate —
+> link injection on someone else's board, carrying the creator's implicit endorsement. The
+> moderation pipeline screens for profanity, not for phishing.
+
+Handling:
+
+- A submission matching an existing entry **contributes its link as a candidate** rather than
+  being rejected as a duplicate. The submitter is told the entry exists and invited to upvote.
+- Staff **promote** a candidate to a published link, or discard it.
+- Staff may **lock a preferred link** for an entry. Once locked, later submissions stop queueing
+  candidates for it.
+- **Regional variants canonicalise** for the known platforms: Netflix uses the same numeric id
+  across TLDs, YouTube ids are global, Crunchyroll slugs are consistent. Unknown domains are
+  treated as distinct rather than guessed at.
+
+### What is not achievable
+
+Searching the platforms directly is **not available for free, and mostly not available at all**:
+Netflix has had no public API since 2014; Crunchyroll has no public search API; Amazon's PA-API
+requires affiliate approval and ongoing sales; IMDb has no free API and its datasets are licensed
+non-commercial. YouTube's Data API is free but capped at 10,000 units/day with search costing 100,
+i.e. **~100 searches per day across all users combined**.
+
+Scraping them is rejected: it violates their terms, breaks without notice, and is the one part of
+this product that could attract a legal letter.
+
+**So: one search against TMDB.** Once a title resolves we already know its platforms and regions.
+TMDB returns a JustWatch deep link rather than a platform-native URL, so autofill lands on a
+chooser — worth saying in the UI rather than implying otherwise.
+
+---
+
+## 5. Search and submission
+
+**One input, not two.** The current form has a catalogue search *and* a separate free-text title
+field, and at submit time read only the second — a playtester typed the title into the search box
+and the form silently refused. Partially fixed already; the real fix is that the search box **is**
+the title field.
+
+- Debounce **500ms** after typing stops, so a title costs one request rather than one per
+  keystroke.
+- An empty result says so plainly and offers **"add it anyway"**, rather than leaving the reader to
+  discover a second field.
+- Picking a catalogue result binds the canonical title and, where available, prefills a link.
+
+---
+
+## 6. Disputes and contact tickets
+
+These are one mechanism, not two: **a message from a reader, routed to staff, with a resolution
+and an optional reply.** The subject is either a card (a dispute — "this is season 3, not a
+duplicate") or nothing (general contact).
+
+- Staff work them from one inbox, alongside the review queue.
+- Resolutions: **confirm** (the reader is right — then place, group or create the card),
+  **deny**, **link to an existing entry**, or **close**.
+- Replies: canned text per resolution, editable, plus a deliberately uninformative
+  "handled internally" for cases where the honest answer is one you do not want to explain.
+- **Signed-in by default.** A public contact form on a public board is the highest-value spam
+  target in the app; the creator may opt into accepting messages from signed-out readers.
+- Creators may filter general contact out of their own notifications and leave it to mods.
+
+An **About** section is separate: creator-authored text on the profile, with no inbox behind it,
+so it cannot become an unattended support channel.
+
+---
+
+## 7. Granular moderator permissions
+
+Today: `StaffRole = OWNER | MOD`, with `MODERATE` covering all mod actions and `ADMINISTER`
+reserved for the owner. This adds a permission set per staff member, granted by the owner.
+
+Candidate permissions: move cards · edit/redact · resolve flags · handle tickets · group/ungroup ·
+manage links · manage themes · manage the blocklist.
+
+**Fail closed.** A new permission is denied to everyone until explicitly granted, and the resolver
+stays a pure function so it remains testable in isolation. This is the area with the worst history
+in this codebase — review previously caught a mod being able to make a paid board public and forge
+webhook secrets — so defaults matter more here than anywhere else.
+
+Anything a mod can do, an owner can do. No creator or mod can affect another creator's board;
+this already holds and is the most heavily tested property in the system.
+
+A **permissions page** for owners: grant, revoke, and see what each mod currently holds.
+
+---
+
+## 8. Viewing as moderator
+
+A mode switch in the header, with the banner, accent colour and logo badge changing so the current
+mode is obvious at a glance.
+
+- **No re-authentication on every switch.** It trains people to click through auth prompts and
+  makes the feature hated.
+- **Acknowledge on switch after inactivity.** If the session has been idle beyond a threshold,
+  switching into moderator view asks for confirmation, with **"don't remind me for 24 hours"** to
+  keep the friction low. This stops a long-abandoned tab being used to make changes nobody meant
+  to make.
+- **The mode is presentation only.** The server keeps enforcing real capabilities regardless of
+  what the tab believes. If the mode became an authorization input, a client-side toggle would be
+  a security boundary, which it must never be.
+
+**Tier and role badges:** a curated palette with guaranteed contrast, not colours generated from a
+tier index — generated values routinely fail contrast, and colour alone excludes colourblind
+readers. Always pair the colour with a text label. The logo stays put; the badge sits beside it,
+so the page keeps one fixed landmark.
+
+---
+
+## 9. Supporting the developers
+
+A single app-level page reachable from the footer. **Not on creator boards** — a donation ask on a
+creator's page competes with that creator's own Patreon ask, in front of an audience that came for
+them, and creators would reasonably read it as monetising their audience.
+
+- Preset amounts **2 / 5 / 10 / custom**, with **5 preselected**, custom validated as a positive
+  number, currency stated explicitly.
+- **Link out; do not integrate payments.** A PayPal.me / Ko-fi / Buy Me a Coffee link accepts the
+  amount as a URL parameter, keeps every payment credential outside this system, and avoids
+  webhook confirmation, refunds, chargebacks and PCI scope for a feature whose purpose is covering
+  a domain fee.
+- **Disclaimer**, as uBlock and similar carry: a voluntary gift supporting development, may not be
+  tax-deductible, and following local rules is the giver's responsibility.
+
+### **OPEN:** a premium tier
+
+Proposed: paid relief from rate limits, with a token-style budget.
+
+The token presentation is worth building **regardless of payment** — "3 suggestions left, next
+unlocks at 14:20" is far better than an opaque 429, and reads as a budget rather than a
+punishment.
+
+Selling *relief from the limits* is unresolved and recorded here rather than decided. The concern:
+the limiter is the control that stops a board being flooded, the noise lands on creators' boards
+while the fee accrues to the app, and a recurring subscription turns this into a payment business
+(dunning, refunds, chargebacks, GST/HST past the small-supplier threshold). Alternatives that
+scale with value rather than risk: custom branding, analytics and export, longer retention, more
+themes, priority support.
+
+---
+
+## 10. Sequencing
+
+Cheapest and highest-value first; each produces something usable on its own.
+
+1. Entry detail page and shareable URL
+2. Kanban layout with arrow moves (no drag-and-drop yet) and column collapse
+3. Per-column sorting, including creator-favourited
+4. Weighted voting: tier weights, tallies, the ratchet, the my-votes page
+5. Granular permissions and the permissions page
+6. View-as mode with the inactivity acknowledgement
+7. Disputes and tickets inbox
+8. Grouping and the link/candidate model
+9. Donation page
+10. Drag-and-drop, as an enhancement over arrows that already work
+
+## Open questions
+
+- Group weight: sum across children, or head only? (§3)
+- Premium tier: sell rate-limit relief, sell something else, or nothing? (§9)
+- Which permissions belong in the granular set, and which stay bundled under `MODERATE`? (§7)
