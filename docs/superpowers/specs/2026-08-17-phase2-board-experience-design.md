@@ -296,6 +296,33 @@ perk eventually would.
 nothing to serve and withhold no functionality: colour schemes, profile flair, board themes for
 one's own view.
 
+### Creator-gifted cosmetics
+
+A creator may **opt in** to gifting the expanded palette to a tier of their patrons, or stay
+entirely disconnected from the app's paywall and let their community buy premium individually.
+Both are supported; neither is required.
+
+**Gifted cosmetics are free — no revenue share.** A percentage of a Patreon pledge is not
+collectable in any case: Patreon has no revenue-share or split-payment API for third parties, so
+the money never passes through us and there is nothing to take a cut of. The buildable version
+would be a separate bill to the creator, calculated from tier price × headcount — usage-based
+billing, with metering, proration as patrons come and go, count disputes, invoicing and dunning.
+
+It is not worth it, because **the palette has zero marginal cost**: it is a curated set we ship,
+deliberately with no uploads, no storage and no CDN bill, so serving it to ten thousand people
+costs what serving it to ten costs. Metered billing to recover cents against a cost that does not
+scale is a great deal of machinery for very little. It also has a nasty failure mode — a creator's
+card fails and the community loses cosmetics they did nothing to lose.
+
+Two further constraints if this is ever revisited: metering on tier prices and headcount means
+holding business-sensitive campaign data as a billing input, and Patreon's platform terms govern
+what third parties may do with campaign data and with monetisation layered on pledges. Read them
+first, not after.
+
+**If creator-side revenue ever matters, make it a flat plan** — predictable, no proration, no
+headcount disputes, and it degrades gracefully because what lapses is the creator's own features
+rather than their community's.
+
 ---
 
 ## 10. Reactions
