@@ -33,11 +33,24 @@ export function SubmitForm({ slug, onCreated, canUpvote = false, onUpvoted }: Su
   const [results, setResults] = useState<CatalogResult[]>([]);
   const [picked, setPicked] = useState<CatalogResult | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
+  /** Whether a search has come back for what is currently typed — not merely that it is empty. */
+  const [searched, setSearched] = useState(false);
   const [customTitle, setCustomTitle] = useState('');
   const [description, setDescription] = useState('');
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  /**
+   * Whether the last message is the reason nothing happened. An alert interrupts a screen reader
+   * and a status does not — and "why did my press do nothing" is exactly the case worth
+   * interrupting for. A confirmation is not.
+   */
+  const [messageIsError, setMessageIsError] = useState(false);
+
+  const say = (text: string, isError: boolean) => {
+    setMessage(text);
+    setMessageIsError(isError);
+  };
   const [mode, setMode] = useState<'SINGLE' | 'WATCH_ORDER'>('SINGLE');
   const [items, setItems] = useState<DraftItem[]>([]);
 
@@ -51,16 +64,16 @@ export function SubmitForm({ slug, onCreated, canUpvote = false, onUpvoted }: Su
       (item) => item.tmdbId !== undefined || (item.customTitle ?? '').trim().length > 0,
     );
     if (customTitle.trim().length === 0) {
-      setMessage('Give the watch order a name.');
+      say('Give the watch order a name.', true);
       return;
     }
     if (filled.length === 0) {
-      setMessage('A watch order needs at least one step.');
+      say('A watch order needs at least one step.', true);
       return;
     }
     // Mirrors the DTO's cap so the mistake costs no round-trip; the server's 400 still wins.
     if (filled.length > MAX_ITEMS) {
-      setMessage('A watch order can have at most fifty steps.');
+      say('A watch order can have at most fifty steps.', true);
       return;
     }
 
@@ -98,7 +111,7 @@ export function SubmitForm({ slug, onCreated, canUpvote = false, onUpvoted }: Su
       setDescription('');
       setItems([]);
     } catch (err) {
-      setMessage(messageFor(err));
+      say(messageFor(err), true);
     } finally {
       setBusy(false);
     }
@@ -109,8 +122,10 @@ export function SubmitForm({ slug, onCreated, canUpvote = false, onUpvoted }: Su
   useEffect(() => {
     if (picked || query.trim().length < 2) {
       setResults([]);
+      setSearched(false);
       return;
     }
+    setSearched(false);
     const seq = ++searchSeq.current;
     const timer = setTimeout(async () => {
       try {
@@ -121,6 +136,7 @@ export function SubmitForm({ slug, onCreated, canUpvote = false, onUpvoted }: Su
         if (seq !== searchSeq.current) return;
         setResults(response.results);
         setSearchError(null);
+        setSearched(true);
       } catch {
         if (seq !== searchSeq.current) return;
         setResults([]);
@@ -134,10 +150,15 @@ export function SubmitForm({ slug, onCreated, canUpvote = false, onUpvoted }: Su
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (mode === 'WATCH_ORDER') return submitWatchOrder();
+    // The search box counts as a title when nothing was picked from it. Someone who types a name,
+    // sees no suggestions because the catalogue does not carry it, and presses Suggest means that
+    // name — refusing because they typed it in the first box rather than the second is the form
+    // being pedantic about its own internals.
+    const freeTitle = customTitle.trim() || (picked ? '' : query.trim());
     // Mirrors the DTO's bounds so the common mistake costs no round-trip — a convenience, not a
     // control; the server's 400 is still rendered when it disagrees.
-    if (!picked && customTitle.trim().length === 0) {
-      setMessage('Search for a title, or give it one yourself.');
+    if (!picked && freeTitle.length === 0) {
+      say('Search for a title, or give it one yourself.', true);
       return;
     }
     setBusy(true);
@@ -154,15 +175,15 @@ export function SubmitForm({ slug, onCreated, canUpvote = false, onUpvoted }: Su
             }
           : {
               type: 'EXTERNAL_LINK',
-              customTitle: customTitle.trim(),
+              customTitle: freeTitle,
               ...(description.trim() ? { description: description.trim() } : {}),
               ...(url.trim() ? { links: [{ url: url.trim() }] } : {}),
             },
       );
       if (result.duplicate) {
-        setMessage('That one is already on the board — upvote it instead.');
+        say('That one is already on the board — upvote it instead.', false);
       } else {
-        setMessage('Added. It is pending review.');
+        say('Added. It is pending review.', false);
       }
       onCreated(result.recommendation);
       setCustomTitle('');
@@ -172,7 +193,7 @@ export function SubmitForm({ slug, onCreated, canUpvote = false, onUpvoted }: Su
       setPicked(null);
       setResults([]);
     } catch (err) {
-      setMessage(messageFor(err));
+      say(messageFor(err), true);
     } finally {
       setBusy(false);
     }
@@ -258,6 +279,24 @@ export function SubmitForm({ slug, onCreated, canUpvote = false, onUpvoted }: Su
                     {searchError}
                   </p>
                 ) : null}
+                {/* Only once a search has actually come back empty — saying "nothing matches"
+                    while the reader is still typing the second letter would be wrong and
+                    would flicker. */}
+                {searched && !searchError && results.length === 0 ? (
+                  <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                    Nothing in the catalogue matches that.{' '}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomTitle(query.trim());
+                        setQuery('');
+                      }}
+                      className="underline focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                    >
+                      Add “{query.trim()}” anyway
+                    </button>
+                  </p>
+                ) : null}
               </>
             )}
           </div>
@@ -330,7 +369,10 @@ export function SubmitForm({ slug, onCreated, canUpvote = false, onUpvoted }: Su
         {busy ? 'Sending…' : 'Suggest'}
       </button>
       {message ? (
-        <p role="status" className="mt-3 text-sm text-slate-600 dark:text-slate-300">
+        <p
+          role={messageIsError ? 'alert' : 'status'}
+          className="mt-3 text-sm text-slate-600 dark:text-slate-300"
+        >
           {message}
         </p>
       ) : null}

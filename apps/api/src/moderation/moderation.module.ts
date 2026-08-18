@@ -4,6 +4,7 @@ import { FlagsService } from './flags.service';
 import { ModerationController } from './moderation.controller';
 import { ModerationService } from './moderation.service';
 import { ReviewQueueService } from './review-queue.service';
+import { CreatorBlocklistModerator } from './creator-blocklist.moderator';
 import { WordlistModerator } from './wordlist-moderator';
 
 @Global()
@@ -11,6 +12,7 @@ import { WordlistModerator } from './wordlist-moderator';
   controllers: [ModerationController],
   providers: [
     WordlistModerator,
+    CreatorBlocklistModerator,
     ModerationService,
     ModerationActionsService,
     FlagsService,

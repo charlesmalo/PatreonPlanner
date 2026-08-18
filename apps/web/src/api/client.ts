@@ -18,6 +18,23 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Notified whenever the API says the caller is not signed in.
+ *
+ * The session is fetched once at mount, so without this the app never learns that it ended —
+ * an expired or revoked session, a sign-out in another tab, or a server that lost its session
+ * store all left the header showing a name while every write failed telling the reader to sign
+ * in, recoverable only by reloading the page by hand.
+ */
+const unauthorizedListeners = new Set<() => void>();
+
+export function onUnauthorized(listener: () => void): () => void {
+  unauthorizedListeners.add(listener);
+  return () => {
+    unauthorizedListeners.delete(listener);
+  };
+}
+
 /** Readable by script on purpose — the API expects it echoed back in a header. */
 export function readCsrfToken(): string | null {
   const match = document.cookie.match(/(?:^|;\s*)pp_csrf=([^;]*)/);
@@ -53,6 +70,11 @@ async function request<T>(
   });
 
   if (!response.ok) {
+    // Only a 401. A 403 is "not allowed" — a rate limit, a capability the reader lacks — and
+    // treating that as a lost session would sign people out for hitting a limiter.
+    if (response.status === 401) {
+      for (const listener of unauthorizedListeners) listener();
+    }
     // Only `retryAt`, and only on a 403: everything else about the body is deliberately ignored.
     let retryAt: string | undefined;
     if (response.status === 403) {

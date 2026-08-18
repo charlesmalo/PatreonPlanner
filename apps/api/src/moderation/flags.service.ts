@@ -44,7 +44,10 @@ export class FlagsService {
 
     // The note is attacker-chosen text that a moderator will read. Design §6.5 puts every user
     // string through the pipeline, and a report is not an exemption from it.
-    const verdict = await this.moderation.review([note]);
+    const verdict = await this.moderation.review(
+      { creatorId, userId, type: 'FLAG_NOTE', id: recommendationId },
+      [note],
+    );
     if (verdict.verdict === 'BLOCK') {
       this.logger.warn(`Blocked flag note from user ${userId} on recommendation ${rec.id}`);
       // Design §6.5: a BLOCK is a strike wherever the pipeline runs. Without this, flag notes

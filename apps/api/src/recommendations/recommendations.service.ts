@@ -236,13 +236,18 @@ export class RecommendationsService {
     // Link labels and URLs are user-controlled and rendered on the board, so they go through
     // the pipeline too. Reviewing only title and description left the whole content-safety
     // control bypassable by putting the text in a label.
-    const moderation = await this.moderation.review([
-      dto.customTitle,
-      dto.description,
-      ...(dto.links?.flatMap((link) => [link.label, link.url]) ?? []),
-      // Item text is exactly where a submitter would route around a title-only check.
-      ...(dto.items?.flatMap((item) => [item.customTitle, item.note]) ?? []),
-    ]);
+    const moderation = await this.moderation.review(
+      // No id: the entry does not exist yet, and on a BLOCK it never will — which is exactly the
+      // case the record is evidence for.
+      { creatorId, userId, type: 'RECOMMENDATION' },
+      [
+        dto.customTitle,
+        dto.description,
+        ...(dto.links?.flatMap((link) => [link.label, link.url]) ?? []),
+        // Item text is exactly where a submitter would route around a title-only check.
+        ...(dto.items?.flatMap((item) => [item.customTitle, item.note]) ?? []),
+      ],
+    );
     if (moderation.verdict === 'BLOCK') {
       // Generic to the caller, specific in the log: design §9 wants no probing of the rules.
       this.logger.warn(`Blocked submission from user ${userId} to creator ${creatorId}`);
@@ -294,7 +299,7 @@ export class RecommendationsService {
     }
 
     try {
-      return await this.create(
+      const created = await this.create(
         creatorId,
         userId,
         dto,
@@ -303,6 +308,11 @@ export class RecommendationsService {
         title?.id ?? null,
         items,
       );
+      // A FLAG is reviewed before the entry exists — it has to be, or a BLOCK would create one —
+      // so the record was written with no subject. Linked now there is something to link to,
+      // which is what lets the review queue find it.
+      await this.moderation.attachSubject(moderation.recordId, created.recommendation.id);
+      return created;
     } catch (error) {
       // Two patrons submitting the same title concurrently both miss the read above; the unique
       // index is what actually enforces de-duplication, and the loser resolves to the winner's

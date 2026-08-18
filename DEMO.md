@@ -1,0 +1,85 @@
+# Playtest demo
+
+A seeded board you can click around, running the same containers CI builds — the real API, the
+real nginx proxy, the real OAuth flow. Patreon and TMDB are stubbed, because signing in to a real
+campaign is not something a demo should need.
+
+## Start it
+
+```bash
+docker compose -f docker-compose.demo.yml up -d --build
+```
+
+First run takes a few minutes to build. Then:
+
+- **The board** — <http://localhost:8081/c/ada-watches-things>
+- **Sign in as…** — <http://localhost:4001/__be>
+
+Stop with `docker compose -f docker-compose.demo.yml down`. Add `-v` to throw the data away and
+get a fresh board next time; without it, whatever you did survives the restart.
+
+It runs on 8081/4001 so it can sit alongside the e2e stack (8080/4000) without either disturbing
+the other.
+
+## Who you can be
+
+Pick from <http://localhost:4001/__be>. Signing in as someone else replaces your session, so the
+way to see two sides of an interaction is to switch back and forth.
+
+| Person       | What they are | What that means                                                  |
+| ------------ | ------------- | ---------------------------------------------------------------- |
+| Ada Lovelace | Owner         | Everything, including policy and the blocklist                   |
+| Mo Ferran    | Moderator     | Moves entries, works the review queue — **cannot** change policy |
+| Bea Okonjo   | Patron, $5    | Read, upvote, submit                                             |
+| Cal Nguyen   | Patron, $15   | Same, on the higher tier                                         |
+| Dee Alvarez  | Lapsed patron | Read only — cannot upvote or submit                              |
+| _(nobody)_   | Signed out    | Read only, on a public board                                     |
+
+The Mo/Ada split is worth poking at deliberately: a moderator who arrived by invite link can
+moderate content but cannot make a paid board public or change the webhook secret. That was a real
+bug found in review, and it is visible from the UI.
+
+## Things worth trying
+
+**The board, as a patron.** Sign in as Bea. Upvote something. Submit a title. Sign in as Dee and
+watch the same controls disappear — a lapsed patron keeps reading but stops being able to act.
+
+**Moderation.** As Mo, open the review queue. Paprika has been reported by Bea and is waiting.
+Resolve it, or move an entry between Suggestions → Accepted → Now Playing → Completed. Then sign
+back in as Bea and open the bell: she has been told what happened to hers, and she was not told
+about anything she did herself.
+
+**The blocklist.** As Ada, the board already blocks _ganondorf_ and flags _spoiler_:
+
+```
+POST /api/v1/creators/ada-watches-things/blocklist   { "pattern": "…", "action": "BLOCK" | "FLAG" }
+```
+
+Then as Bea, submit "The Ganondorf Cut" — refused. Submit something with "spoiler" in it — it goes
+through, and a moderator finds it waiting. Both are recorded in `ModerationResult` with what
+matched and why; the offending text itself is deliberately never stored.
+
+**Search.** Try a misspelling ("cowbay bebop"), and try describing something instead of naming it.
+Trigram matching and semantic search are fused, so both routes find the entry.
+
+**Notifications.** The bell polls once a minute, so it is not instant by design. Opening it marks
+what it showed as read, and nothing else.
+
+## What is stubbed
+
+- **Patreon** — a local process at :4001. Real OAuth shape, real redirect, real state cookie; it
+  simply approves whoever `/__be` last selected.
+- **TMDB** — the same process. It knows about a handful of Studio Ghibli films, so catalogue
+  search is thin: "Spirited Away" and "My Neighbor Totoro" resolve, most other things do not and
+  come through as free text.
+- **Embeddings** run locally on CPU. The first semantic search after a cold start pauses while the
+  model loads (~120MB, downloaded once).
+
+## Reset
+
+```bash
+docker compose -f docker-compose.demo.yml down -v && docker compose -f docker-compose.demo.yml up -d
+```
+
+The seed is idempotent, so re-running it against a live stack changes nothing — the way to get a
+clean board is to drop the volume.

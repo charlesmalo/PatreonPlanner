@@ -1,4 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
+import { api } from './client';
 import { UNREAD_POLL_MS, useBoard, useNotifications, useSession } from './hooks';
 import { fakeApi, recommendation } from '../test-support';
 
@@ -133,6 +134,53 @@ describe('useBoard', () => {
     });
     // Previously this rejected into the click handler and the button just stopped spinning.
     expect(result.current.moreError).toMatch(/could not load more/i);
+  });
+});
+
+describe('useSession reconciliation', () => {
+  const originalFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('drops the signed-in user when a later request comes back unauthorized', async () => {
+    // The session is fetched once at mount and never re-checked, so anything that ends it later
+    // — an expired or revoked session, a sign-out in another tab, a server that lost its session
+    // store — left the header confidently showing a name while every write failed telling the
+    // reader to sign in, with no way back except reloading by hand.
+    global.fetch = fakeApi({
+      'GET /api/v1/me': { id: 'u1', patreonUserId: 'p1', fullName: 'Ada', avatarUrl: null },
+      'POST /api/v1/creators/ada-writes/recommendations/rec-1/flags': new Error('401'),
+    });
+    const { result } = renderHook(() => useSession());
+    await waitFor(() => expect(result.current.user?.fullName).toBe('Ada'));
+
+    await act(async () => {
+      await api
+        .post('/creators/ada-writes/recommendations/rec-1/flags', { reason: 'SPAM' })
+        .catch(() => undefined);
+    });
+
+    expect(result.current.user).toBeNull();
+  });
+
+  it('leaves the session alone when a request fails for any other reason', async () => {
+    // A 403 is "not allowed", not "not signed in". Treating every failure as a lost session would
+    // sign people out for hitting a rate limit.
+    global.fetch = fakeApi({
+      'GET /api/v1/me': { id: 'u1', patreonUserId: 'p1', fullName: 'Ada', avatarUrl: null },
+      'POST /api/v1/creators/ada-writes/recommendations/rec-1/flags': new Error('403'),
+    });
+    const { result } = renderHook(() => useSession());
+    await waitFor(() => expect(result.current.user?.fullName).toBe('Ada'));
+
+    await act(async () => {
+      await api
+        .post('/creators/ada-writes/recommendations/rec-1/flags', { reason: 'SPAM' })
+        .catch(() => undefined);
+    });
+
+    expect(result.current.user?.fullName).toBe('Ada');
   });
 });
 

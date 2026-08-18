@@ -43,6 +43,93 @@ let catalog = [
     belongs_to_collection: { id: 10, name: 'Studio Ghibli Collection' },
     genres: [{ name: 'Animation' }],
   },
+  // Beyond what the e2e suite needs, and deliberately so: the first playtester typed a famous
+  // show, got nothing, and reasonably read the empty dropdown as a broken search rather than a
+  // two-film fixture. These are the titles someone actually reaches for, including several that
+  // share a franchise so nesting and grouping have something to work with.
+  {
+    id: 85937,
+    media_type: 'tv',
+    name: 'Demon Slayer: Kimetsu no Yaiba',
+    first_air_date: '2019-04-06',
+    poster_path: '/demonslayer.jpg',
+    overview: 'A boy sells charcoal until a demon takes his family.',
+    genres: [{ name: 'Animation' }, { name: 'Action & Adventure' }],
+  },
+  {
+    id: 65942,
+    media_type: 'tv',
+    name: 'Re:ZERO -Starting Life in Another World-',
+    first_air_date: '2016-04-04',
+    poster_path: '/rezero.jpg',
+    overview: 'A boy is pulled into another world, and dies his way through it.',
+    genres: [{ name: 'Animation' }, { name: 'Sci-Fi & Fantasy' }],
+  },
+  {
+    id: 30991,
+    media_type: 'tv',
+    name: 'Cowboy Bebop',
+    first_air_date: '1998-04-03',
+    poster_path: '/bebop.jpg',
+    overview: 'Bounty hunters chase a living across the solar system.',
+    genres: [{ name: 'Animation' }, { name: 'Sci-Fi & Fantasy' }],
+  },
+  {
+    id: 1429,
+    media_type: 'tv',
+    name: 'Attack on Titan',
+    first_air_date: '2013-04-07',
+    poster_path: '/aot.jpg',
+    overview: 'Humanity lives behind walls, and the walls stop being enough.',
+    genres: [{ name: 'Animation' }, { name: 'Action & Adventure' }],
+  },
+  {
+    id: 149,
+    media_type: 'movie',
+    title: 'Akira',
+    release_date: '1988-07-16',
+    poster_path: '/akira.jpg',
+    overview: 'Neo-Tokyo, a biker gang, and a power nobody can hold.',
+    genres: [{ name: 'Animation' }, { name: 'Science Fiction' }],
+  },
+  {
+    id: 372058,
+    media_type: 'movie',
+    title: 'Your Name.',
+    release_date: '2016-08-26',
+    poster_path: '/yourname.jpg',
+    overview: 'Two strangers keep waking up in each other\u2019s lives.',
+    genres: [{ name: 'Animation' }, { name: 'Romance' }],
+  },
+  {
+    id: 4935,
+    media_type: 'movie',
+    title: "Howl's Moving Castle",
+    release_date: '2004-11-20',
+    poster_path: '/howl.jpg',
+    overview: 'A hat-maker is cursed into old age and takes work in a walking castle.',
+    belongs_to_collection: { id: 10, name: 'Studio Ghibli Collection' },
+    genres: [{ name: 'Animation' }],
+  },
+  {
+    id: 128,
+    media_type: 'movie',
+    title: 'Princess Mononoke',
+    release_date: '1997-07-12',
+    poster_path: '/mononoke.jpg',
+    overview: 'A prince walks into a war between a forest and an ironworks.',
+    belongs_to_collection: { id: 10, name: 'Studio Ghibli Collection' },
+    genres: [{ name: 'Animation' }],
+  },
+  {
+    id: 110316,
+    media_type: 'tv',
+    name: 'Alice in Borderland',
+    first_air_date: '2020-12-10',
+    poster_path: '/alice.jpg',
+    overview: 'Tokyo empties, and the games begin.',
+    genres: [{ name: 'Sci-Fi & Fantasy' }, { name: 'Drama' }],
+  },
 ];
 
 // Collections are a separate TMDB search endpoint and a separate detail path, so they are a
@@ -55,6 +142,46 @@ let collections = [
     overview: 'Films from Studio Ghibli.',
   },
 ];
+
+/**
+ * Named people the demo stack can sign in as. The e2e suite drives identity through `/__control`;
+ * a human playtester needs something they can click, and switching account has to be one step or
+ * nobody will try the board from more than one angle.
+ *
+ * Kept in step with apps/api/scripts/seed-demo.ts.
+ */
+const PERSONAS = {
+  ada: {
+    identity: { id: 'demo-ada', full_name: 'Ada Lovelace', email: 'ada@example.com' },
+    memberships: [],
+    campaigns: [{ campaignId: 'demo-campaign', displayName: 'Ada Watches Things' }],
+    note: 'owner of the board',
+  },
+  mo: {
+    identity: { id: 'demo-mo', full_name: 'Mo Ferran', email: 'mo@example.com' },
+    memberships: [],
+    campaigns: [],
+    note: 'moderator',
+  },
+  bea: {
+    identity: { id: 'demo-bea', full_name: 'Bea Okonjo', email: 'bea@example.com' },
+    memberships: [{ campaignId: 'demo-campaign', amountCents: 500, isActivePatron: true }],
+    campaigns: [],
+    note: 'patron, $5 tier',
+  },
+  cal: {
+    identity: { id: 'demo-cal', full_name: 'Cal Nguyen', email: 'cal@example.com' },
+    memberships: [{ campaignId: 'demo-campaign', amountCents: 1500, isActivePatron: true }],
+    campaigns: [],
+    note: 'patron, $15 tier',
+  },
+  dee: {
+    identity: { id: 'demo-dee', full_name: 'Dee Alvarez', email: 'dee@example.com' },
+    memberships: [{ campaignId: 'demo-campaign', amountCents: 0, isActivePatron: false }],
+    campaigns: [],
+    note: 'lapsed patron — can read, cannot submit',
+  },
+};
 
 function json(res, body, status = 200) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -78,6 +205,37 @@ const server = createServer(async (req, res) => {
     if (body.campaigns) campaigns = body.campaigns;
     if (body.catalog) catalog = body.catalog;
     return json(res, { ok: true });
+  }
+
+  // Who to be. Sets the identity the next login will report, then sends the browser into the
+  // real login route — so the demo exercises the same OAuth flow as everything else rather than
+  // a shortcut that skips it.
+  const persona = url.pathname.match(/^\/__be\/([a-z]+)$/);
+  if (persona) {
+    const chosen = PERSONAS[persona[1]];
+    if (!chosen) return json(res, { error: 'unknown persona' }, 404);
+    identity = chosen.identity;
+    memberships = chosen.memberships;
+    campaigns = chosen.campaigns;
+    res.writeHead(302, { Location: `${WEB_ORIGIN}/auth/patreon/login` });
+    return res.end();
+  }
+
+  // A plain index, so the demo needs no cheat sheet open beside it.
+  if (url.pathname === '/__be') {
+    const rows = Object.entries(PERSONAS)
+      .map(
+        ([key, p]) =>
+          `<li><a href="/__be/${key}">${p.identity.full_name}</a> — ${p.note}</li>`,
+      )
+      .join('');
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    return res.end(
+      `<!doctype html><meta charset="utf-8"><title>Sign in as</title>` +
+        `<body style="font:16px system-ui;max-width:34rem;margin:3rem auto">` +
+        `<h1>Sign in as…</h1><ul>${rows}</ul>` +
+        `<p>Signing in as someone else replaces the current session.</p></body>`,
+    );
   }
 
   // The consent screen: approve immediately and bounce back with the state we were given, which

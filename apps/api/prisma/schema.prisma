@@ -120,20 +120,21 @@ model User {
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
-  ownedCreators   Creator[]        @relation("CreatorOwner")
-  memberships     Membership[]
-  staffRoles      CreatorStaff[]   @relation("StaffMember")
-  staffAssigned   CreatorStaff[]   @relation("StaffAssigner")
-  recommendations Recommendation[]
-  upvotes         Upvote[]
-  abuseRecord     AbuseRecord?
-  notesWritten    CreatorNote[]      @relation("NoteAuthor")
-  invitesSent     StaffInvite[]      @relation("InviteAuthor")
-  invitesAccepted StaffInvite[]      @relation("InviteAcceptor")
-  notifications   Notification[]
-  flagsRaised     Flag[]             @relation("FlagAuthor")
-  flagsResolved   Flag[]             @relation("FlagResolver")
-  moderationActs  ModerationAction[] @relation("ModerationActor")
+  ownedCreators     Creator[]          @relation("CreatorOwner")
+  memberships       Membership[]
+  staffRoles        CreatorStaff[]     @relation("StaffMember")
+  staffAssigned     CreatorStaff[]     @relation("StaffAssigner")
+  recommendations   Recommendation[]
+  upvotes           Upvote[]
+  abuseRecord       AbuseRecord?
+  notesWritten      CreatorNote[]      @relation("NoteAuthor")
+  invitesSent       StaffInvite[]      @relation("InviteAuthor")
+  invitesAccepted   StaffInvite[]      @relation("InviteAcceptor")
+  notifications     Notification[]
+  moderationResults ModerationResult[]
+  flagsRaised       Flag[]             @relation("FlagAuthor")
+  flagsResolved     Flag[]             @relation("FlagResolver")
+  moderationActs    ModerationAction[] @relation("ModerationActor")
 }
 
 model AbuseRecord {
@@ -173,16 +174,18 @@ model Creator {
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
-  owner           User             @relation("CreatorOwner", fields: [ownerUserId], references: [id])
-  tiers           Tier[]
-  memberships     Membership[]
-  staff           CreatorStaff[]
-  policy          CreatorPolicy?
-  recommendations Recommendation[]
-  themes          Theme[]
-  themeSources    ThemeSource[]
-  notifications   Notification[]
-  staffInvites    StaffInvite[]
+  owner             User               @relation("CreatorOwner", fields: [ownerUserId], references: [id])
+  tiers             Tier[]
+  memberships       Membership[]
+  staff             CreatorStaff[]
+  policy            CreatorPolicy?
+  recommendations   Recommendation[]
+  themes            Theme[]
+  themeSources      ThemeSource[]
+  notifications     Notification[]
+  moderationResults ModerationResult[]
+  blockwords        CreatorBlockword[]
+  staffInvites      StaffInvite[]
 
   // Postgres does not index foreign keys automatically, and the cascade from Creator scans them.
   @@index([ownerUserId])
@@ -314,17 +317,17 @@ model Recommendation {
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
 
-  creator     Creator              @relation(fields: [creatorId], references: [id], onDelete: Cascade)
-  submittedBy User                 @relation(fields: [submittedByUserId], references: [id], onDelete: Cascade)
-  title       Title?               @relation(fields: [titleId], references: [id])
+  creator         Creator              @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  submittedBy     User                 @relation(fields: [submittedByUserId], references: [id], onDelete: Cascade)
+  title           Title?               @relation(fields: [titleId], references: [id])
   links           RecommendationLink[]
   watchOrderItems WatchOrderItem[]
-  upvotes     Upvote[]
-  flags       Flag[]
-  actions     ModerationAction[]
+  upvotes         Upvote[]
+  flags           Flag[]
+  actions         ModerationAction[]
   // `notes` is already a scalar on this model (the submitter's own free text from Plan 05), so
   // the relation carries the model's name instead.
-  creatorNotes CreatorNote[]
+  creatorNotes    CreatorNote[]
 
   // De-duplication is enforced here, not by the read-then-write check: two concurrent
   // submissions of the same title both miss that read.
@@ -477,8 +480,8 @@ model Title {
   recommendations Recommendation[]
   availability    StreamingAvailability[]
   watchOrderItems WatchOrderItem[]
-  relationsFrom   TitleRelation[]        @relation("RelationFrom")
-  relationsTo     TitleRelation[]        @relation("RelationTo")
+  relationsFrom   TitleRelation[]         @relation("RelationFrom")
+  relationsTo     TitleRelation[]         @relation("RelationTo")
   themes          TitleTheme[]
 
   // TMDB ids are only unique within a media type: film 123 and series 123 are different works.
@@ -556,6 +559,61 @@ model Theme {
 //
 // Many labels per theme, because that is what a merge produces: fold "sci-fi" into "science
 // fiction" and the survivor legitimately owns both.
+enum BlockwordAction {
+  BLOCK
+  FLAG
+}
+
+// Design §6.5(a): the per-creator half of the wordlist stage. The global `obscenity` list handles
+// profanity everywhere; this is a board's own terms — a spoiler, a handle, a running joke that
+// stopped being funny.
+model CreatorBlockword {
+  id        String          @id @default(uuid()) @db.Uuid
+  creatorId String          @db.Uuid
+  // Stored normalised (trimmed, lowercased): it is matched, never displayed back as typed.
+  pattern   String
+  action    BlockwordAction @default(BLOCK)
+  createdAt DateTime        @default(now())
+
+  creator Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@unique([creatorId, pattern])
+}
+
+enum ModerationSubjectType {
+  RECOMMENDATION
+  NOTE
+  THEME
+  FLAG_NOTE
+}
+
+// Design §6.5: the pipeline's verdicts, kept. Only FLAG and BLOCK are written — every submission,
+// note and rename passes through the pipeline and almost all of them pass, so recording those
+// would be the largest table in the database holding nothing anyone reads.
+//
+// The offending text is deliberately absent. A BLOCK on a slur would otherwise mean the database
+// keeps that slur for ever, on a row nobody reads, for a board that never accepted it — and §6.6
+// gives moderators redaction precisely so text like that can be removed.
+model ModerationResult {
+  id          String                @id @default(uuid()) @db.Uuid
+  creatorId   String                @db.Uuid
+  userId      String                @db.Uuid
+  subjectType ModerationSubjectType
+  // Null when the content was rejected outright: there is nothing to point at, and that is
+  // exactly the case where the record matters, since it is the evidence behind an abuse strike.
+  subjectId   String?               @db.Uuid
+  verdict     String
+  categories  String[]
+  source      String
+  createdAt   DateTime              @default(now())
+
+  creator Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([creatorId, createdAt(sort: Desc)])
+  @@index([subjectId])
+}
+
 enum NotificationType {
   ENTRY_STATUS_CHANGED
   ENTRY_FLAGGED
