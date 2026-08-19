@@ -120,9 +120,9 @@ describe('Board visibility (integration)', () => {
       const res = await column('ACCEPTED', patron).expect(200);
 
       expect(res.body.items.length).toBeGreaterThan(0);
-      expect(
-        res.body.items.every((item: { status: string }) => item.status === 'ACCEPTED'),
-      ).toBe(true);
+      expect(res.body.items.every((item: { status: string }) => item.status === 'ACCEPTED')).toBe(
+        true,
+      );
     });
 
     it('never widens what the reader may see', async () => {

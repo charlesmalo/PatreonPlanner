@@ -52,7 +52,10 @@ export function RecommendationCard({
 }: RecommendationCardProps) {
   const Heading = headingLevel === 1 ? 'h1' : 'h3';
   return (
-    <li className="flex gap-4 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+    // flex-wrap, and a floor on the content: a card nested inside another one inside a column is
+    // narrow enough that the fixed-width upvote control and poster together left the text zero
+    // width to occupy — present in the DOM, and invisible on the page.
+    <li className="flex flex-wrap gap-4 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
       <UpvoteButton
         slug={slug}
         recommendationId={recommendation.id}
@@ -74,7 +77,7 @@ export function RecommendationCard({
           className="h-[69px] w-[46px] shrink-0 rounded object-cover"
         />
       ) : null}
-      <div className="min-w-0 flex-1">
+      <div className="min-w-[10rem] flex-1">
         {/* Rendered as text, never as HTML: every field here is submitter-controlled. */}
         <Heading
           className={

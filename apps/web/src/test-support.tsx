@@ -51,7 +51,7 @@ export function recommendation(overrides: Partial<Recommendation> = {}): Recomme
  * match `/recommendations/:id/upvote`, so a test could silently receive the wrong payload —
  * which is how the upvote path went untested without anyone noticing.
  */
-export function fakeApi(routes: Record<string, unknown | (() => unknown)>) {
+export function fakeApi(routes: Record<string, unknown | ((url: URL) => unknown)>) {
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), 'http://localhost');
     const key = `${(init?.method ?? 'GET').toUpperCase()} ${url.pathname}`;
@@ -59,7 +59,9 @@ export function fakeApi(routes: Record<string, unknown | (() => unknown)>) {
       throw new Error(`No fake route for ${key}. Known: ${Object.keys(routes).join(', ')}`);
     }
     const value = routes[key];
-    const resolved = typeof value === 'function' ? (value as () => unknown)() : value;
+    // Passed the URL so a route can answer per query — the board asks for one column at a time,
+    // and a fake that ignores the status hands every column every entry.
+    const resolved = typeof value === 'function' ? (value as (url: URL) => unknown)(url) : value;
     if (resolved instanceof Error) {
       return { ok: false, status: Number(resolved.message) || 500 } as Response;
     }

@@ -217,8 +217,30 @@ test('a moderator accepts a suggestion and it moves to the Accepted column', asy
   await page.getByRole('button', { name: /move “Princess Mononoke”/i }).click();
   await page.getByRole('menuitem', { name: 'Accepted' }).click();
 
-  await expect(page.getByRole('heading', { name: 'Accepted' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Suggestions' })).toHaveCount(0);
+  // The card changes column; the columns themselves stay put. A kanban whose columns vanish when
+  // they empty loses its shape, and there is nowhere left to move the next card to.
+  const accepted = page.getByRole('region', { name: /^accepted/i });
+  const suggestions = page.getByRole('region', { name: /suggestions/i });
+  await expect(accepted.getByText('Princess Mononoke')).toBeVisible();
+  await expect(suggestions.getByText('Princess Mononoke')).toHaveCount(0);
+  await expect(suggestions.getByText(/nothing suggested yet/i)).toBeVisible();
+});
+
+test('a reader folds a column away and it stays folded', async ({ page }) => {
+  seedEntryFrom('patreon-other-e2e', 'Ponyo');
+  await page.goto(`/c/${CREATOR.slug}`);
+  const suggestions = page.getByRole('region', { name: /suggestions/i });
+  await expect(suggestions.getByText('Ponyo')).toBeVisible();
+
+  await page.getByRole('button', { name: /collapse suggestions/i }).click();
+  await expect(suggestions.getByText('Ponyo')).toBeHidden();
+
+  await page.reload();
+
+  // Per reader and local: it is not board configuration, so it survives a reload without ever
+  // being sent to the server.
+  await expect(page.getByRole('button', { name: /expand suggestions/i })).toBeVisible();
+  await expect(page.getByRole('region', { name: /suggestions/i }).getByText('Ponyo')).toBeHidden();
 });
 
 test('a patron reports an entry and a moderator dismisses it', async ({ page }) => {
