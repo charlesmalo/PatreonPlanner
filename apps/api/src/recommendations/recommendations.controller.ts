@@ -49,7 +49,14 @@ export class RecommendationsController {
     @CurrentViewer() viewer: Viewer,
     @Query() query: ListRecommendationsQuery,
   ) {
-    return this.recommendations.list(creator, query.cursor, query.limit, viewer, query.theme);
+    return this.recommendations.list(
+      creator,
+      query.cursor,
+      query.limit,
+      viewer,
+      query.theme,
+      query.status,
+    );
   }
 
   /**

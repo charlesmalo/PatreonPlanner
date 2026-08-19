@@ -99,6 +99,13 @@ describe('Board visibility (integration)', () => {
     return auth ? req.set('Cookie', [auth.session, auth.csrf]) : req;
   };
 
+  const column = (status: string, auth?: Auth, extra = '') => {
+    const req = request(ctx.app.getHttpServer()).get(
+      `/api/v1/creators/visibility-co/recommendations?status=${status}${extra}`,
+    );
+    return auth ? req.set('Cookie', [auth.session, auth.csrf]) : req;
+  };
+
   const ids = (body: { items: Array<{ id: string }> }) => body.items.map((i) => i.id);
 
   const setHidePending = (hidePendingFromPublic: boolean) =>
@@ -106,6 +113,55 @@ describe('Board visibility (integration)', () => {
 
   beforeEach(async () => {
     await setHidePending(false);
+  });
+
+  describe('asking for one column', () => {
+    it('returns only that column', async () => {
+      const res = await column('ACCEPTED', patron).expect(200);
+
+      expect(res.body.items.length).toBeGreaterThan(0);
+      expect(
+        res.body.items.every((item: { status: string }) => item.status === 'ACCEPTED'),
+      ).toBe(true);
+    });
+
+    it('never widens what the reader may see', async () => {
+      // The filter narrows visibility rather than replacing it. Asking for a column a patron
+      // cannot see has to be empty — if this ever returns rows, the status filter has been
+      // composed in a way that overwrites the visibility rule.
+      expect((await column('REJECTED', patron).expect(200)).body.items).toEqual([]);
+      expect((await column('DELETED', patron).expect(200)).body.items).toEqual([]);
+    });
+
+    it('is empty for an anonymous visitor too', async () => {
+      expect((await column('REJECTED').expect(200)).body.items).toEqual([]);
+    });
+
+    it('hides a pending column from other patrons when the toggle is on', async () => {
+      await setHidePending(true);
+
+      expect((await column('PENDING', otherPatron).expect(200)).body.items).toEqual([]);
+    });
+
+    it('shows staff the column they work', async () => {
+      const res = await column('REJECTED', staff).expect(200);
+
+      expect(ids(res.body)).toContain(rejectedId);
+    });
+
+    it('paginates within the column rather than across the board', async () => {
+      const first = await column('ACCEPTED', staff, '&limit=1').expect(200);
+      expect(first.body.items).toHaveLength(1);
+
+      if (first.body.nextCursor) {
+        const second = await column('ACCEPTED', staff, `&limit=1&cursor=${first.body.nextCursor}`);
+        expect(second.body.items[0]?.id).not.toBe(first.body.items[0].id);
+      }
+    });
+
+    it('rejects a status that is not one', async () => {
+      await column('BANANA', patron).expect(400);
+    });
   });
 
   it('hides rejected and deleted entries from patrons', async () => {
