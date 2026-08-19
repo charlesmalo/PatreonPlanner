@@ -1,5 +1,16 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, IsUUID, Length, Matches, Max, Min } from 'class-validator';
+import type { RecommendationStatus } from '@prisma/client';
+import {
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Length,
+  Matches,
+  Max,
+  Min,
+} from 'class-validator';
 
 export class ListRecommendationsQuery {
   // Opaque, base64url-encoded boundary values — not an id, so it is not a UUID.
@@ -19,6 +30,14 @@ export class ListRecommendationsQuery {
   @IsOptional()
   @IsUUID()
   theme?: string;
+
+  /**
+   * One kanban column. Narrows what visibility already allows and can never widen it — a patron
+   * asking for REJECTED gets an empty column, not the column.
+   */
+  @IsOptional()
+  @IsIn(['PENDING', 'ACCEPTED', 'ACTIVE', 'COMPLETED', 'REJECTED', 'DELETED'])
+  status?: RecommendationStatus;
 }
 
 export class SimilarQuery {

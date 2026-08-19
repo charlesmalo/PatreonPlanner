@@ -14,6 +14,15 @@ function renderBoard() {
   );
 }
 
+/**
+ * The board asks for one column at a time, so a fake that ignores the status query hands every
+ * column every entry — which is not what the server does and not what the page renders.
+ */
+function byColumn<T extends { status?: string }>(url: URL, items: T[]): T[] {
+  const status = url.searchParams.get('status');
+  return status ? items.filter((item) => (item.status ?? 'PENDING') === status) : items;
+}
+
 describe('CreatorBoard', () => {
   const originalFetch = global.fetch;
   afterEach(() => {
@@ -23,10 +32,10 @@ describe('CreatorBoard', () => {
   it('shows a loading state, then the creator and its entries', async () => {
     global.fetch = fakeApi({
       'GET /api/v1/creators/ada-writes/capabilities': viewOnly,
-      'GET /api/v1/creators/ada-writes/recommendations': {
-        items: [recommendation()],
+      'GET /api/v1/creators/ada-writes/recommendations': (url: URL) => ({
+        items: byColumn(url, [recommendation()]),
         nextCursor: null,
-      },
+      }),
       'GET /api/v1/creators/ada-writes': creator,
     });
     renderBoard();
@@ -60,10 +69,10 @@ describe('CreatorBoard', () => {
   it('renders a title containing markup as text, never as HTML', async () => {
     global.fetch = fakeApi({
       'GET /api/v1/creators/ada-writes/capabilities': viewOnly,
-      'GET /api/v1/creators/ada-writes/recommendations': {
-        items: [recommendation({ customTitle: '<img src=x onerror=alert(1)>' })],
+      'GET /api/v1/creators/ada-writes/recommendations': (url: URL) => ({
+        items: byColumn(url, [recommendation({ customTitle: '<img src=x onerror=alert(1)>' })]),
         nextCursor: null,
-      },
+      }),
       'GET /api/v1/creators/ada-writes': creator,
     });
     const { container } = renderBoard();
@@ -75,10 +84,12 @@ describe('CreatorBoard', () => {
   it('opens external links safely', async () => {
     global.fetch = fakeApi({
       'GET /api/v1/creators/ada-writes/capabilities': viewOnly,
-      'GET /api/v1/creators/ada-writes/recommendations': {
-        items: [recommendation({ links: [{ url: 'https://example.com/x', label: 'Trailer' }] })],
+      'GET /api/v1/creators/ada-writes/recommendations': (url: URL) => ({
+        items: byColumn(url, [
+          recommendation({ links: [{ url: 'https://example.com/x', label: 'Trailer' }] }),
+        ]),
         nextCursor: null,
-      },
+      }),
       'GET /api/v1/creators/ada-writes': creator,
     });
     renderBoard();
@@ -92,7 +103,10 @@ describe('CreatorBoard', () => {
     let call = 0;
     global.fetch = fakeApi({
       'GET /api/v1/creators/ada-writes/capabilities': viewOnly,
-      'GET /api/v1/creators/ada-writes/recommendations': () => {
+      'GET /api/v1/creators/ada-writes/recommendations': (url: URL) => {
+        // Only the Suggestions column pages here; the others answer empty, so "Load more" belongs
+        // to one column rather than to the board.
+        if (url.searchParams.get('status') !== 'PENDING') return { items: [], nextCursor: null };
         call += 1;
         return call === 1
           ? { items: [recommendation({ id: 'a', customTitle: 'First' })], nextCursor: 'cur' }
@@ -141,11 +155,14 @@ describe('CreatorBoard columns', () => {
 
   const moderator = { view: true, upvote: true, submit: true, moderate: true };
 
-  function boardWith(items: unknown[], capabilities: unknown = viewOnly) {
+  function boardWith(items: Array<{ status?: string }>, capabilities: unknown = viewOnly) {
     global.fetch = fakeApi({
       'GET /api/v1/creators/ada-writes': creator,
       'GET /api/v1/creators/ada-writes/capabilities': capabilities,
-      'GET /api/v1/creators/ada-writes/recommendations': { items, nextCursor: null },
+      'GET /api/v1/creators/ada-writes/recommendations': (url: URL) => ({
+        items: byColumn(url, items),
+        nextCursor: null,
+      }),
     });
   }
 
@@ -164,11 +181,17 @@ describe('CreatorBoard columns', () => {
     expect(screen.getByRole('heading', { name: 'Completed' })).toBeInTheDocument();
   });
 
-  it('does not render a heading for an empty column', async () => {
+  it('keeps every column on screen, so the board holds its shape', async () => {
+    // The vertical board hid an empty section, because four headings over nothing read as a
+    // broken page. A kanban is the opposite: a column that vanishes when it empties takes the
+    // board's shape with it, and there is nowhere left to move a card to.
     boardWith([recommendation({ id: 'a', status: 'PENDING' })]);
     renderBoard();
+
     expect(await screen.findByRole('heading', { name: 'Suggestions' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Now Playing' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Now Playing' })).toBeInTheDocument();
+    const empty = screen.getByRole('region', { name: /now playing/i });
+    expect(within(empty).getByText(/nothing here yet/i)).toBeInTheDocument();
   });
 
   it('offers moderator controls only when the viewer moderates', async () => {
@@ -189,21 +212,30 @@ describe('CreatorBoard columns', () => {
   });
 
   it('moves a card to its new column when a moderator changes the status', async () => {
+    let status = 'PENDING';
     global.fetch = fakeApi({
       'GET /api/v1/creators/ada-writes': creator,
       'GET /api/v1/creators/ada-writes/capabilities': moderator,
-      'GET /api/v1/creators/ada-writes/recommendations': {
-        items: [recommendation({ id: 'a', status: 'PENDING' })],
+      'GET /api/v1/creators/ada-writes/recommendations': (url: URL) => ({
+        items: byColumn(url, [recommendation({ id: 'a', status })]),
         nextCursor: null,
+      }),
+      'POST /api/v1/creators/ada-writes/recommendations/a/status': () => {
+        // The fake has to move the entry too, or the columns refetch and find it where it was.
+        status = 'ACCEPTED';
+        return { id: 'a', status };
       },
-      'POST /api/v1/creators/ada-writes/recommendations/a/status': { id: 'a', status: 'ACCEPTED' },
     });
     renderBoard();
     await userEvent.click(await screen.findByRole('button', { name: /move “Spirited Away”/i }));
     await userEvent.click(screen.getByRole('menuitem', { name: 'Accepted' }));
 
-    expect(await screen.findByRole('heading', { name: 'Accepted' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Suggestions' })).not.toBeInTheDocument();
+    // The card leaves the column it was in and turns up in the one it moved to. Both columns
+    // stay on screen — a kanban keeps its shape whether or not a column is holding anything.
+    const suggestions = screen.getByRole('region', { name: /suggestions/i });
+    const accepted = screen.getByRole('region', { name: /^accepted/i });
+    await waitFor(() => expect(within(accepted).getByText('Spirited Away')).toBeInTheDocument());
+    expect(within(suggestions).queryByText('Spirited Away')).not.toBeInTheDocument();
   });
 
   // Shown to everyone rather than gated on a session the board does not fetch: FlagButton
@@ -223,11 +255,14 @@ describe('CreatorBoard nesting and themes', () => {
     global.fetch = originalFetch;
   });
 
-  function boardWith(items: unknown[], themes: unknown[] = []) {
+  function boardWith(items: Array<{ status?: string }>, themes: unknown[] = []) {
     global.fetch = fakeApi({
       'GET /api/v1/creators/ada-writes': creator,
       'GET /api/v1/creators/ada-writes/capabilities': viewOnly,
-      'GET /api/v1/creators/ada-writes/recommendations': { items, nextCursor: null },
+      'GET /api/v1/creators/ada-writes/recommendations': (url: URL) => ({
+        items: byColumn(url, items),
+        nextCursor: null,
+      }),
       'GET /api/v1/creators/ada-writes/themes': { items: themes },
     });
   }
@@ -275,10 +310,10 @@ describe('CreatorBoard nesting and themes', () => {
     const fetchMock = fakeApi({
       'GET /api/v1/creators/ada-writes': creator,
       'GET /api/v1/creators/ada-writes/capabilities': viewOnly,
-      'GET /api/v1/creators/ada-writes/recommendations': {
-        items: [recommendation()],
+      'GET /api/v1/creators/ada-writes/recommendations': (url: URL) => ({
+        items: byColumn(url, [recommendation()]),
         nextCursor: null,
-      },
+      }),
       'GET /api/v1/creators/ada-writes/themes': {
         items: [{ id: 't1', name: 'Anime', entryCount: 1 }],
       },
@@ -300,10 +335,13 @@ describe('CreatorBoard nesting and themes', () => {
     global.fetch = fakeApi({
       'GET /api/v1/creators/ada-writes': creator,
       'GET /api/v1/creators/ada-writes/capabilities': viewOnly,
-      'GET /api/v1/creators/ada-writes/recommendations': () => ({
-        items: filtered
-          ? [recommendation({ id: 'b', customTitle: 'Only Themed' })]
-          : [recommendation({ id: 'a', customTitle: 'Everything' })],
+      'GET /api/v1/creators/ada-writes/recommendations': (url: URL) => ({
+        items: byColumn(
+          url,
+          filtered
+            ? [recommendation({ id: 'b', customTitle: 'Only Themed' })]
+            : [recommendation({ id: 'a', customTitle: 'Everything' })],
+        ),
         nextCursor: null,
       }),
       'GET /api/v1/creators/ada-writes/themes': {
@@ -327,11 +365,14 @@ describe('CreatorBoard nesting resilience', () => {
     global.fetch = originalFetch;
   });
 
-  function boardWith(items: unknown[]) {
+  function boardWith(items: Array<{ status?: string }>) {
     global.fetch = fakeApi({
       'GET /api/v1/creators/ada-writes': creator,
       'GET /api/v1/creators/ada-writes/capabilities': viewOnly,
-      'GET /api/v1/creators/ada-writes/recommendations': { items, nextCursor: null },
+      'GET /api/v1/creators/ada-writes/recommendations': (url: URL) => ({
+        items: byColumn(url, items),
+        nextCursor: null,
+      }),
       'GET /api/v1/creators/ada-writes/themes': { items: [] },
     });
   }

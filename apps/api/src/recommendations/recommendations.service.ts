@@ -704,6 +704,7 @@ export class RecommendationsService {
     limit: number | undefined,
     viewer: { userId: string | null; staffRole: StaffRoleValue | null },
     themeId?: string,
+    status?: RecommendationStatus,
   ) {
     const take = Math.min(Math.max(limit ?? 20, 1), MAX_PAGE);
     const cursor = decodeCursor(rawCursor);
@@ -729,6 +730,10 @@ export class RecommendationsService {
         // entries to anyone who clicked "Load more".
         AND: [
           visibilityWhere(creator, viewer),
+          // Inside the AND with everything else: a status filter spread alongside the visibility
+          // rule would overwrite it, and asking for REJECTED would return the column rather than
+          // nothing. Narrowing only ever intersects.
+          ...(status ? [{ status }] : []),
           ...(cursor
             ? [
                 {
