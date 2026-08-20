@@ -226,6 +226,26 @@ test('a moderator accepts a suggestion and it moves to the Accepted column', asy
   await expect(suggestions.getByText(/nothing suggested yet/i)).toBeVisible();
 });
 
+test('a creator pick leads its column whatever the sort', async ({ page }) => {
+  seedEntryFrom('patreon-other-e2e', 'Laputa', 'PENDING');
+  seedEntryFrom('patreon-other-e2e', 'Ponyo', 'PENDING');
+  await signIn(page, 500, 'patreon-pick-e2e');
+  makeStaff('patreon-pick-e2e');
+  await page.goto(`/c/${CREATOR.slug}`);
+
+  const suggestions = page.getByRole('region', { name: /suggestions/i });
+  await suggestions.getByRole('button', { name: /pick “Ponyo”/i }).click();
+  await expect(suggestions.getByRole('button', { name: /unpick “Ponyo”/i })).toBeVisible();
+
+  await page.reload();
+  // Survives a reload because the server holds it, and leads whichever way the column is sorted.
+  for (const sort of ['Newest', 'Oldest']) {
+    await page.getByLabel(/sort suggestions/i).selectOption({ label: sort });
+    // Level 3: the column's own name is a heading too, and it is always first.
+    await expect(suggestions.getByRole('heading', { level: 3 }).first()).toHaveText('Ponyo');
+  }
+});
+
 test('a reader folds a column away and it stays folded', async ({ page }) => {
   seedEntryFrom('patreon-other-e2e', 'Ponyo');
   await page.goto(`/c/${CREATOR.slug}`);

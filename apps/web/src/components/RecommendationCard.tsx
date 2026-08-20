@@ -20,6 +20,7 @@ export function isSafeHttpUrl(value: string): boolean {
 import { AvailabilityBadges } from './AvailabilityBadges';
 import { FlagButton } from './FlagButton';
 import { NoteList } from './NoteList';
+import { PickButton } from './PickButton';
 import { StatusControl } from './StatusControl';
 import { WatchOrderList } from './WatchOrderList';
 import { UpvoteButton } from './UpvoteButton';
@@ -102,6 +103,11 @@ export function RecommendationCard({
             </span>
           ) : null}
         </Heading>
+        {recommendation.isCreatorPick ? (
+          <span className="mt-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">
+            Creator pick
+          </span>
+        ) : null}
         {recommendation.description ? (
           <p className="mt-1 whitespace-pre-line break-words text-sm text-slate-600 dark:text-slate-300">
             {recommendation.description}
@@ -164,6 +170,14 @@ export function RecommendationCard({
             recommendationId={recommendation.id}
             title={recommendation.customTitle}
           />
+          {canModerate ? (
+            <PickButton
+              slug={slug}
+              recommendationId={recommendation.id}
+              title={recommendation.customTitle}
+              isPick={recommendation.isCreatorPick ?? false}
+            />
+          ) : null}
           {canModerate ? (
             <StatusControl
               slug={slug}

@@ -302,6 +302,9 @@ model CreatorPolicy {
 
 model Recommendation {
   id                String               @id @default(uuid()) @db.Uuid
+  // The creator's own shortlist, floated to the top of its column whatever the sort. A filter
+  // would make a reader ask for it; this makes the answer visible without being asked.
+  isCreatorPick     Boolean              @default(false)
   creatorId         String               @db.Uuid
   submittedByUserId String               @db.Uuid
   type              RecommendationType

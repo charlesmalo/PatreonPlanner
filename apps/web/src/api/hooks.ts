@@ -205,7 +205,13 @@ export function useThemes(slug: string, enabled: boolean) {
   return themes;
 }
 
-export function useBoard(slug: string, enabled: boolean, themeId?: string | null, status?: string) {
+export function useBoard(
+  slug: string,
+  enabled: boolean,
+  themeId?: string | null,
+  status?: string,
+  sort?: string,
+) {
   const [items, setItems] = useState<Board['items']>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   // Which path the state above belongs to. Without it, navigating between creators rendered the
@@ -216,11 +222,13 @@ export function useBoard(slug: string, enabled: boolean, themeId?: string | null
   const [error, setError] = useState<ApiError | null>(null);
   const [moreError, setMoreError] = useState<string | null>(null);
 
-  // The theme and the column are part of the path, so changing either refetches and resets
-  // paging — a cursor from one filtered list means nothing in a differently filtered one.
+  // The theme, the column and the sort are all part of the path, so changing any of them
+  // refetches and resets paging — a cursor from one ordering means nothing in another, and
+  // re-sorting a page already fetched would sort one page of a list with more behind it.
   const query = new URLSearchParams();
   if (themeId) query.set('theme', themeId);
   if (status) query.set('status', status);
+  if (sort) query.set('sort', sort);
   const search = query.toString();
   const path = `/creators/${encodeURIComponent(slug)}/recommendations${search ? `?${search}` : ''}`;
 

@@ -55,7 +55,7 @@ describe('BoardColumn', () => {
     stub();
     setup();
 
-    expect(await screen.findByText(/Suggestions/)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Suggestions' })).toBeInTheDocument();
     expect(screen.getByText('1')).toBeInTheDocument();
   });
 
@@ -93,6 +93,34 @@ describe('BoardColumn', () => {
     // Per reader and local: which columns are folded away is not board configuration.
     expect(await screen.findByRole('button', { name: /expand suggestions/i })).toBeInTheDocument();
     expect(screen.queryByText('Spirited Away')).not.toBeInTheDocument();
+  });
+
+  it('sorts by upvotes without being asked', async () => {
+    const queries = stub();
+    setup();
+
+    await screen.findByText('Spirited Away');
+    // The board is a demand signal, so its default order is the demand.
+    expect(queries[0]).not.toMatch(/sort=/);
+  });
+
+  it('re-asks the server when the reader changes the sort', async () => {
+    // Sorting a page already fetched would sort one page of a list that has more behind it.
+    const queries = stub();
+    setup();
+    await screen.findByText('Spirited Away');
+
+    await userEvent.selectOptions(screen.getByLabelText(/sort suggestions/i), 'newest');
+
+    await waitFor(() => expect(queries.at(-1)).toMatch(/sort=newest/));
+    expect(queries.at(-1)).toMatch(/status=PENDING/);
+  });
+
+  it('marks an entry the creator picked', async () => {
+    stub([{ ...entry, isCreatorPick: true }]);
+    setup();
+
+    expect(await screen.findByText(/creator pick/i)).toBeInTheDocument();
   });
 
   it('loads the next page into the same column', async () => {
