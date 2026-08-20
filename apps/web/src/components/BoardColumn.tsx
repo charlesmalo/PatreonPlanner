@@ -26,6 +26,12 @@ const collapseKey = (slug: string, status: string) => `pp.board.${slug}.collapse
  * be entirely one status, so a column sharing that list would show nothing while entries sat
  * further down a page nobody had fetched — and "Load more" would mean the board, not the column.
  */
+const SORTS: Array<[string, string]> = [
+  ['', 'Most upvoted'],
+  ['newest', 'Newest'],
+  ['oldest', 'Oldest'],
+];
+
 export function BoardColumn({
   slug,
   status,
@@ -36,7 +42,8 @@ export function BoardColumn({
   onMoved,
   emptyText = 'Nothing here yet.',
 }: BoardColumnProps) {
-  const board = useBoard(slug, true, theme, status);
+  const [sort, setSort] = useState('');
+  const board = useBoard(slug, true, theme, status, sort);
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
@@ -96,6 +103,21 @@ export function BoardColumn({
 
       {collapsed ? null : (
         <div className="flex-1 space-y-3 overflow-y-auto px-3 pb-3">
+          <label className="sr-only" htmlFor={`sort-${status}`}>
+            Sort {label}
+          </label>
+          <select
+            id={`sort-${status}`}
+            value={sort}
+            onChange={(event) => setSort(event.target.value)}
+            className="w-full rounded border border-slate-300 bg-white px-1 py-0.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-slate-700 dark:bg-slate-950"
+          >
+            {SORTS.map(([value, text]) => (
+              <option key={value || 'default'} value={value}>
+                {text}
+              </option>
+            ))}
+          </select>
           {board.loading ? (
             <p role="status" className="text-sm text-slate-600 dark:text-slate-300">
               Loading…

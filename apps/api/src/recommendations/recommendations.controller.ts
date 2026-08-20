@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -56,6 +57,7 @@ export class RecommendationsController {
       viewer,
       query.theme,
       query.status,
+      query.sort,
     );
   }
 
@@ -128,6 +130,24 @@ export class RecommendationsController {
   // VIEW, not SUBMIT: anyone who can read the board can report what is on it. Gating reports
   // behind a pledge tier leaves the cheapest accounts looking at the worst content with no
   // recourse, and a report costs the platform nothing to accept.
+  // MODERATE, not ADMINISTER: this is day-to-day curation of what the board shows first, not a
+  // change to what the board allows.
+  @Post(':id/pick')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RequireCapability('MODERATE')
+  @UseGuards(CreatorAccessGuard, SessionGuard)
+  pick(@CurrentCreator() creator: ResolvedCreator, @Param('id', ParseUUIDPipe) id: string) {
+    return this.recommendations.setCreatorPick(creator.id, id, true);
+  }
+
+  @Delete(':id/pick')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RequireCapability('MODERATE')
+  @UseGuards(CreatorAccessGuard, SessionGuard)
+  unpick(@CurrentCreator() creator: ResolvedCreator, @Param('id', ParseUUIDPipe) id: string) {
+    return this.recommendations.setCreatorPick(creator.id, id, false);
+  }
+
   @Post(':id/flags')
   @RequireCapability('VIEW')
   @UseGuards(CreatorAccessGuard, SessionGuard)

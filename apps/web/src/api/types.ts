@@ -97,6 +97,8 @@ export interface ThemeSummary {
 }
 
 export interface Recommendation {
+  /** Floated to the top of its column by the server, whatever the sort. */
+  isCreatorPick?: boolean;
   id: string;
   type: string;
   customTitle: string;

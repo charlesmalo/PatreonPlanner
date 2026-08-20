@@ -80,6 +80,43 @@ const MEDIA_TYPES: Record<'MOVIE' | 'SHOW' | 'FRANCHISE', MediaType> = {
 const HIDDEN_STATUSES: RecommendationStatus[] = ['DELETED', 'REJECTED'];
 
 /**
+ * How a column is ordered, and the keyset that pages it.
+ *
+ * Both are derived from one place on purpose: an ordering and a cursor comparison that disagree
+ * page the wrong way silently — rows repeat or vanish, and nothing errors.
+ */
+function boardOrdering(sort: BoardSort): Prisma.RecommendationOrderByWithRelationInput[] {
+  // The creator's picks lead every sort. Below them the chosen order applies as usual.
+  const pick = { isCreatorPick: 'desc' } as const;
+  if (sort === 'newest') return [pick, { createdAt: 'desc' }, { id: 'desc' }];
+  if (sort === 'oldest') return [pick, { createdAt: 'asc' }, { id: 'asc' }];
+  return [pick, { upvoteCount: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }];
+}
+
+function afterCursor(sort: BoardSort, cursor: BoardCursor): Prisma.RecommendationWhereInput {
+  const ascending = sort === 'oldest';
+  const beyond = ascending ? { gt: cursor.createdAt } : { lt: cursor.createdAt };
+  const tie = ascending ? { gt: cursor.id } : { lt: cursor.id };
+
+  const withinPickGroup: Prisma.RecommendationWhereInput[] =
+    sort === 'upvotes'
+      ? [
+          { upvoteCount: { lt: cursor.upvoteCount } },
+          { upvoteCount: cursor.upvoteCount, createdAt: { lt: cursor.createdAt } },
+          { upvoteCount: cursor.upvoteCount, createdAt: cursor.createdAt, id: { lt: cursor.id } },
+        ]
+      : [{ createdAt: beyond }, { createdAt: cursor.createdAt, id: tie }];
+
+  return {
+    OR: [
+      // Picks sort first, so once past them everything unpicked follows.
+      ...(cursor.isCreatorPick ? [{ isCreatorPick: false }] : []),
+      { isCreatorPick: cursor.isCreatorPick, OR: withinPickGroup },
+    ],
+  };
+}
+
+/**
  * Design §7: staff read the whole board including the bin, patrons read only the visible
  * statuses — minus pending entries when the creator hides them, except their own.
  */
@@ -99,15 +136,29 @@ export function visibilityWhere(
   };
 }
 
+export type BoardSort = 'upvotes' | 'newest' | 'oldest';
+
 interface BoardCursor {
   upvoteCount: number;
   createdAt: Date;
   id: string;
+  /** Leads every ordering, so it has to lead the cursor comparison too. */
+  isCreatorPick: boolean;
 }
 
-function encodeCursor(row: { upvoteCount: number; createdAt: Date; id: string }): string {
+function encodeCursor(row: {
+  upvoteCount: number;
+  createdAt: Date;
+  id: string;
+  isCreatorPick: boolean;
+}): string {
   return Buffer.from(
-    JSON.stringify({ u: row.upvoteCount, c: row.createdAt.toISOString(), i: row.id }),
+    JSON.stringify({
+      u: row.upvoteCount,
+      c: row.createdAt.toISOString(),
+      i: row.id,
+      p: row.isCreatorPick,
+    }),
   ).toString('base64url');
 }
 
@@ -118,12 +169,18 @@ function decodeCursor(raw: string | undefined): BoardCursor | null {
       u: number;
       c: string;
       i: string;
+      p?: boolean;
     };
     const createdAt = new Date(parsed.c);
     if (typeof parsed.u !== 'number' || Number.isNaN(createdAt.getTime()) || !parsed.i) {
       throw new Error('malformed');
     }
-    return { upvoteCount: parsed.u, createdAt, id: parsed.i };
+    return {
+      upvoteCount: parsed.u,
+      createdAt,
+      id: parsed.i,
+      isCreatorPick: parsed.p === true,
+    };
   } catch {
     // A cursor we did not mint is a client bug, not an empty board.
     throw new BadRequestException('Invalid cursor');
@@ -139,6 +196,7 @@ export const RECOMMENDATION_FIELDS = {
   description: true,
   status: true,
   upvoteCount: true,
+  isCreatorPick: true,
   createdAt: true,
   title: {
     // `id` is what GET /catalog/titles/:id/availability keys on. Without it the endpoint is
@@ -368,6 +426,18 @@ export class RecommendationsService {
     return viewer.userId
       ? this.withUpvoted(entry, viewer.userId)
       : { ...present(entry), hasUpvoted: false, ...BOARD_ONLY_DEFAULTS };
+  }
+
+  /**
+   * The creator's own shortlist. Scoped by creator as well as id — an id alone says nothing about
+   * which board an entry is on.
+   */
+  async setCreatorPick(creatorId: string, id: string, isCreatorPick: boolean): Promise<void> {
+    const { count } = await this.prisma.recommendation.updateMany({
+      where: { id, creatorId },
+      data: { isCreatorPick },
+    });
+    if (count === 0) throw new NotFoundException();
   }
 
   private async withUpvoted<T extends { id: string; creatorNotes?: unknown[] }>(
@@ -705,6 +775,7 @@ export class RecommendationsService {
     viewer: { userId: string | null; staffRole: StaffRoleValue | null },
     themeId?: string,
     status?: RecommendationStatus,
+    sort: BoardSort = 'upvotes',
   ) {
     const take = Math.min(Math.max(limit ?? 20, 1), MAX_PAGE);
     const cursor = decodeCursor(rawCursor);
@@ -734,27 +805,10 @@ export class RecommendationsService {
           // rule would overwrite it, and asking for REJECTED would return the column rather than
           // nothing. Narrowing only ever intersects.
           ...(status ? [{ status }] : []),
-          ...(cursor
-            ? [
-                {
-                  OR: [
-                    { upvoteCount: { lt: cursor.upvoteCount } },
-                    {
-                      upvoteCount: cursor.upvoteCount,
-                      createdAt: { lt: cursor.createdAt },
-                    },
-                    {
-                      upvoteCount: cursor.upvoteCount,
-                      createdAt: cursor.createdAt,
-                      id: { lt: cursor.id },
-                    },
-                  ],
-                },
-              ]
-            : []),
+          ...(cursor ? [afterCursor(sort, cursor)] : []),
         ],
       },
-      orderBy: [{ upvoteCount: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+      orderBy: boardOrdering(sort),
       take: take + 1,
       select: {
         ...RECOMMENDATION_FIELDS,
@@ -771,6 +825,7 @@ export class RecommendationsService {
     })) as Array<{
       id: string;
       upvoteCount: number;
+      isCreatorPick: boolean;
       createdAt: Date;
       titleId: string | null;
       upvotes?: Array<{ id: string }>;

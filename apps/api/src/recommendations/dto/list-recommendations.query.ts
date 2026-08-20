@@ -38,6 +38,11 @@ export class ListRecommendationsQuery {
   @IsOptional()
   @IsIn(['PENDING', 'ACCEPTED', 'ACTIVE', 'COMPLETED', 'REJECTED', 'DELETED'])
   status?: RecommendationStatus;
+
+  /** How the column is ordered beneath the creator's own picks, which always lead. */
+  @IsOptional()
+  @IsIn(['upvotes', 'newest', 'oldest'])
+  sort?: 'upvotes' | 'newest' | 'oldest';
 }
 
 export class SimilarQuery {
