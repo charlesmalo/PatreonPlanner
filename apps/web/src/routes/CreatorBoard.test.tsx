@@ -181,6 +181,24 @@ describe('CreatorBoard columns', () => {
     expect(screen.getByRole('heading', { name: 'Completed' })).toBeInTheDocument();
   });
 
+  it('shows the weight alongside the headcount when they differ', async () => {
+    // Two different questions: how much support, and from how many people. A creator deciding
+    // what to watch next wants both, and 'twenty points' hides whether that is four patrons or
+    // one.
+    boardWith([recommendation({ id: 'a', status: 'PENDING', upvoteCount: 2, weightedScore: 20 })]);
+    renderBoard();
+
+    expect(await screen.findByText(/20 points from 2 patrons/i)).toBeInTheDocument();
+  });
+
+  it('shows one number when the board does not weight its tiers', async () => {
+    boardWith([recommendation({ id: 'a', status: 'PENDING', upvoteCount: 2, weightedScore: 2 })]);
+    renderBoard();
+
+    await screen.findByText('Spirited Away');
+    expect(screen.queryByText(/points from/i)).not.toBeInTheDocument();
+  });
+
   it('keeps every column on screen, so the board holds its shape', async () => {
     // The vertical board hid an empty section, because four headings over nothing read as a
     // broken page. A kanban is the opposite: a column that vanishes when it empties takes the

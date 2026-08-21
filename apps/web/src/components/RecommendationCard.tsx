@@ -103,6 +103,15 @@ export function RecommendationCard({
             </span>
           ) : null}
         </Heading>
+        {/* Only when it differs from the headcount. Two identical numbers side by side is noise,
+            and a board that never weights its tiers should not have to read one. */}
+        {typeof recommendation.weightedScore === 'number' &&
+        recommendation.weightedScore !== recommendation.upvoteCount ? (
+          <span className="mt-1 mr-2 inline-block text-xs text-slate-500 dark:text-slate-400">
+            {recommendation.weightedScore} points from {recommendation.upvoteCount}{' '}
+            {recommendation.upvoteCount === 1 ? 'patron' : 'patrons'}
+          </span>
+        ) : null}
         {recommendation.isCreatorPick ? (
           <span className="mt-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">
             Creator pick
