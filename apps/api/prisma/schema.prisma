@@ -199,12 +199,16 @@ model Tier {
   patreonTierId String
   title         String
   amountCents   Int
+  // What an upvote from this tier is worth. One until a creator says otherwise, so a board that
+  // never touches this ranks by headcount exactly as it did before.
+  voteWeight    Int      @default(1)
   order         Int
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   creator        Creator         @relation(fields: [creatorId], references: [id], onDelete: Cascade)
   memberships    Membership[]
+  upvotes        Upvote[]
   submitPolicies CreatorPolicy[] @relation("SubmitMinTier")
   upvotePolicies CreatorPolicy[] @relation("UpvoteMinTier")
 
@@ -305,6 +309,9 @@ model Recommendation {
   // The creator's own shortlist, floated to the top of its column whatever the sort. A filter
   // would make a reader ask for it; this makes the answer visible without being asked.
   isCreatorPick     Boolean              @default(false)
+  // What the board ranks by. Denormalised like upvoteCount beside it, and for the same reason:
+  // it is the sort key, and a keyset cursor has to compare a column.
+  weightedScore     Int                  @default(0)
   creatorId         String               @db.Uuid
   submittedByUserId String               @db.Uuid
   type              RecommendationType
@@ -386,14 +393,23 @@ model Upvote {
   id               String   @id @default(uuid()) @db.Uuid
   recommendationId String   @db.Uuid
   userId           String   @db.Uuid
+  // The tier held when the vote was cast — a reference, never a copied number, so a creator
+  // rebalancing changes what votes already cast are worth. Null is a voter with no tier, which
+  // counts as one: a board that lets them vote is letting them vote.
+  tierId           String?  @db.Uuid
   createdAt        DateTime @default(now())
 
   recommendation Recommendation @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
   user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Restrict, not SetNull: a tier with votes against it is not deletable, because dropping the
+  // reference would silently reprice every vote cast at it.
+  tier           Tier?          @relation(fields: [tierId], references: [id], onDelete: Restrict)
 
   // Design §5: one upvote per person per entry.
   @@unique([recommendationId, userId])
   @@index([userId])
+  // A rebalance recomputes from these, grouped by tier.
+  @@index([tierId])
 }
 
 model CreatorNote {

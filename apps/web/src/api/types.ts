@@ -99,6 +99,8 @@ export interface ThemeSummary {
 export interface Recommendation {
   /** Floated to the top of its column by the server, whatever the sort. */
   isCreatorPick?: boolean;
+  /** What the board ranks by: the sum of what each voter's tier is worth. */
+  weightedScore?: number;
   id: string;
   type: string;
   customTitle: string;

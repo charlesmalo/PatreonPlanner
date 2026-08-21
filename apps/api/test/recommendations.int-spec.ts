@@ -457,10 +457,10 @@ describe('Recommendations (integration)', () => {
       await makePatron('up-toggler', 300);
 
       const on = await upvote(auth, recommendationId).expect(201);
-      expect(on.body).toEqual({ upvoted: true, upvoteCount: 1 });
+      expect(on.body).toEqual({ upvoted: true, upvoteCount: 1, weightedScore: 1 });
 
       const off = await upvote(auth, recommendationId).expect(201);
-      expect(off.body).toEqual({ upvoted: false, upvoteCount: 0 });
+      expect(off.body).toEqual({ upvoted: false, upvoteCount: 0, weightedScore: 0 });
     });
 
     it('counts a second user separately', async () => {
@@ -568,7 +568,7 @@ describe('Recommendations (integration)', () => {
       try {
         const expected = await ctx.prisma.recommendation.findMany({
           where: { creatorId, status: { notIn: ['DELETED', 'REJECTED'] } },
-          orderBy: [{ upvoteCount: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+          orderBy: [{ weightedScore: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
           select: { id: true },
         });
         const next: request.Response = await request(ctx.app.getHttpServer())
@@ -605,7 +605,7 @@ describe('Recommendations (integration)', () => {
       // sorted-equals-itself tautology.
       await ctx.prisma.recommendation.update({
         where: { id: created.body.recommendation.id },
-        data: { upvoteCount: 999 },
+        data: { upvoteCount: 999, weightedScore: 999 },
       });
 
       const res = await request(ctx.app.getHttpServer())

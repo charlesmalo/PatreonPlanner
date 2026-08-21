@@ -62,6 +62,9 @@ describe('Board sorting (integration)', () => {
             normalizedTitle: title.toLowerCase(),
             status: 'PENDING',
             upvoteCount,
+            // Every vote is worth one until a creator rebalances, so the two match here — and
+            // the board ranks on the weight.
+            weightedScore: upvoteCount,
             createdAt,
           },
         })

@@ -90,7 +90,7 @@ function boardOrdering(sort: BoardSort): Prisma.RecommendationOrderByWithRelatio
   const pick = { isCreatorPick: 'desc' } as const;
   if (sort === 'newest') return [pick, { createdAt: 'desc' }, { id: 'desc' }];
   if (sort === 'oldest') return [pick, { createdAt: 'asc' }, { id: 'asc' }];
-  return [pick, { upvoteCount: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }];
+  return [pick, { weightedScore: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }];
 }
 
 function afterCursor(sort: BoardSort, cursor: BoardCursor): Prisma.RecommendationWhereInput {
@@ -101,9 +101,13 @@ function afterCursor(sort: BoardSort, cursor: BoardCursor): Prisma.Recommendatio
   const withinPickGroup: Prisma.RecommendationWhereInput[] =
     sort === 'upvotes'
       ? [
-          { upvoteCount: { lt: cursor.upvoteCount } },
-          { upvoteCount: cursor.upvoteCount, createdAt: { lt: cursor.createdAt } },
-          { upvoteCount: cursor.upvoteCount, createdAt: cursor.createdAt, id: { lt: cursor.id } },
+          { weightedScore: { lt: cursor.weightedScore } },
+          { weightedScore: cursor.weightedScore, createdAt: { lt: cursor.createdAt } },
+          {
+            weightedScore: cursor.weightedScore,
+            createdAt: cursor.createdAt,
+            id: { lt: cursor.id },
+          },
         ]
       : [{ createdAt: beyond }, { createdAt: cursor.createdAt, id: tie }];
 
@@ -139,7 +143,7 @@ export function visibilityWhere(
 export type BoardSort = 'upvotes' | 'newest' | 'oldest';
 
 interface BoardCursor {
-  upvoteCount: number;
+  weightedScore: number;
   createdAt: Date;
   id: string;
   /** Leads every ordering, so it has to lead the cursor comparison too. */
@@ -147,14 +151,14 @@ interface BoardCursor {
 }
 
 function encodeCursor(row: {
-  upvoteCount: number;
+  weightedScore: number;
   createdAt: Date;
   id: string;
   isCreatorPick: boolean;
 }): string {
   return Buffer.from(
     JSON.stringify({
-      u: row.upvoteCount,
+      u: row.weightedScore,
       c: row.createdAt.toISOString(),
       i: row.id,
       p: row.isCreatorPick,
@@ -176,7 +180,7 @@ function decodeCursor(raw: string | undefined): BoardCursor | null {
       throw new Error('malformed');
     }
     return {
-      upvoteCount: parsed.u,
+      weightedScore: parsed.u,
       createdAt,
       id: parsed.i,
       isCreatorPick: parsed.p === true,
@@ -196,6 +200,7 @@ export const RECOMMENDATION_FIELDS = {
   description: true,
   status: true,
   upvoteCount: true,
+  weightedScore: true,
   isCreatorPick: true,
   createdAt: true,
   title: {
@@ -730,29 +735,59 @@ export class RecommendationsService {
     });
     if (!rec) throw new NotFoundException();
 
-    // The row and the counter move together, so the number on the board cannot drift from the
-    // rows behind it.
+    // The tier the voter holds *now*. Stored on the vote as a reference, so a creator rebalancing
+    // later changes what this vote is worth — which is the point of recording the tier rather
+    // than the number.
+    const membership = await this.prisma.membership.findUnique({
+      where: { userId_creatorId: { userId, creatorId } },
+      select: { currentTierId: true, currentTier: { select: { voteWeight: true } } },
+    });
+    const tierId = membership?.currentTierId ?? null;
+    // No tier is worth one: a board that lets someone vote is letting them vote, and free is
+    // decided by the UPVOTE capability rather than by making the vote count for nothing.
+    const weight = membership?.currentTier?.voteWeight ?? 1;
+
+    // The row and both counters move together, so the numbers on the board cannot drift from the
+    // rows behind them.
     return this.prisma.$transaction(async (tx) => {
       const existing = await tx.upvote.findUnique({
         where: { recommendationId_userId: { recommendationId, userId } },
-        select: { id: true },
+        select: { id: true, tierId: true },
       });
       if (existing) {
+        // Priced at what the vote was cast at, not at what the voter is worth today — otherwise
+        // withdrawing after an upgrade would take away more than it ever added.
+        const cast = existing.tierId
+          ? ((
+              await tx.tier.findUnique({
+                where: { id: existing.tierId },
+                select: { voteWeight: true },
+              })
+            )?.voteWeight ?? 1)
+          : 1;
         await tx.upvote.delete({ where: { id: existing.id } });
         const updated = await tx.recommendation.update({
           where: { id: recommendationId },
-          data: { upvoteCount: { decrement: 1 } },
-          select: { upvoteCount: true },
+          data: { upvoteCount: { decrement: 1 }, weightedScore: { decrement: cast } },
+          select: { upvoteCount: true, weightedScore: true },
         });
-        return { upvoted: false, upvoteCount: updated.upvoteCount };
+        return {
+          upvoted: false,
+          upvoteCount: updated.upvoteCount,
+          weightedScore: updated.weightedScore,
+        };
       }
-      await tx.upvote.create({ data: { recommendationId, userId } });
+      await tx.upvote.create({ data: { recommendationId, userId, tierId } });
       const updated = await tx.recommendation.update({
         where: { id: recommendationId },
-        data: { upvoteCount: { increment: 1 } },
-        select: { upvoteCount: true },
+        data: { upvoteCount: { increment: 1 }, weightedScore: { increment: weight } },
+        select: { upvoteCount: true, weightedScore: true },
       });
-      return { upvoted: true, upvoteCount: updated.upvoteCount };
+      return {
+        upvoted: true,
+        upvoteCount: updated.upvoteCount,
+        weightedScore: updated.weightedScore,
+      };
     });
   }
 
@@ -813,6 +848,7 @@ export class RecommendationsService {
       select: {
         ...RECOMMENDATION_FIELDS,
         upvoteCount: true,
+        weightedScore: true,
         createdAt: true,
         // Selected for the availability and relation joins, then dropped from the response.
         titleId: true,
@@ -825,6 +861,7 @@ export class RecommendationsService {
     })) as Array<{
       id: string;
       upvoteCount: number;
+      weightedScore: number;
       isCreatorPick: boolean;
       createdAt: Date;
       titleId: string | null;
