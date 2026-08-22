@@ -1,5 +1,6 @@
 import request from 'supertest';
 import { AuthTestContext, pickCookie, startAuthApp } from './support/auth-app';
+import { ALL_STAFF_PERMISSIONS } from '../src/access/permissions';
 
 describe('Weighted voting (integration)', () => {
   let ctx: AuthTestContext;
@@ -40,7 +41,12 @@ describe('Weighted voting (integration)', () => {
 
     mod = await loginAs('wv-mod');
     await ctx.prisma.creatorStaff.create({
-      data: { creatorId, userId: await userId('wv-mod'), role: 'MOD' },
+      data: {
+        creatorId,
+        userId: await userId('wv-mod'),
+        role: 'MOD',
+        permissions: ALL_STAFF_PERMISSIONS,
+      },
     });
     big = await loginAs('wv-big');
     small = await loginAs('wv-small');

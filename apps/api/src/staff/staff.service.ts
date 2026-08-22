@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ALL_STAFF_PERMISSIONS, type StaffPermissionValue } from '../access/permissions';
 
 const TOKEN_BYTES = 32;
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -57,6 +58,7 @@ export class StaffService {
         select: {
           userId: true,
           role: true,
+          permissions: true,
           createdAt: true,
           user: { select: { fullName: true, avatarUrl: true } },
         },
@@ -138,15 +140,59 @@ export class StaffService {
       // would strip a creator of their own board for following their own link.
       if (!existing) {
         await tx.creatorStaff.create({
-          data: { creatorId: invite.creatorId, userId, role: invite.role, assignedByUserId: null },
+          data: {
+            creatorId: invite.creatorId,
+            userId,
+            role: invite.role,
+            // An invite says "come and moderate this board". Someone who accepts it and finds
+            // every action refused has been told something untrue — so a new moderator starts
+            // able to work, and the owner narrows from there on the staff page.
+            //
+            // This is not a hole in fail-closed: that governs a permission invented *later*,
+            // which no existing grant can have meant. This is the grant the invite itself makes.
+            permissions: ALL_STAFF_PERMISSIONS as never,
+            assignedByUserId: null,
+          },
         });
       }
 
       return {
         creator: invite.creator,
         role: existing?.role ?? invite.role,
+        permissions: existing ? undefined : ALL_STAFF_PERMISSIONS,
       };
     });
+  }
+
+  /**
+   * Replaces a moderator's permission set outright rather than adding or removing one at a time:
+   * the page edits a set of checkboxes, and a partial update would race two open tabs into a
+   * merge nobody asked for.
+   *
+   * An owner's set is not editable. Their powers come from the role short-circuiting the check,
+   * so writing to it would be theatre — and an owner whose permissions could be edited is an
+   * owner who can be locked out of their own board.
+   */
+  async setPermissions(
+    creatorId: string,
+    userId: string,
+    permissions: StaffPermissionValue[],
+  ): Promise<{ userId: string; permissions: StaffPermissionValue[] }> {
+    const member = await this.prisma.creatorStaff.findUnique({
+      where: { creatorId_userId: { creatorId, userId } },
+      select: { id: true, role: true },
+    });
+    if (!member) throw new NotFoundException();
+    if (member.role === 'OWNER') {
+      throw new ConflictException('An owner already holds every permission');
+    }
+
+    const updated = await this.prisma.creatorStaff.update({
+      where: { id: member.id },
+      data: { permissions: permissions as never },
+      select: { userId: true, permissions: true },
+    });
+    return updated as { userId: string; permissions: StaffPermissionValue[] };
   }
 
   async removeMember(creatorId: string, userId: string): Promise<void> {

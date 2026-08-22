@@ -3,6 +3,7 @@ import { ModerationActionsService } from '../src/moderation/moderation-actions.s
 import { NotificationsService } from '../src/notifications/notifications.service';
 import { StaffService } from '../src/staff/staff.service';
 import { AuthTestContext, startAuthApp } from './support/auth-app';
+import { ALL_STAFF_PERMISSIONS } from '../src/access/permissions';
 
 describe('Notification triggers (integration)', () => {
   let ctx: AuthTestContext;
@@ -38,7 +39,9 @@ describe('Notification triggers (integration)', () => {
         },
       })
     ).id;
-    await ctx.prisma.creatorStaff.create({ data: { creatorId, userId: moderator, role: 'MOD' } });
+    await ctx.prisma.creatorStaff.create({
+      data: { creatorId, userId: moderator, role: 'MOD', permissions: ALL_STAFF_PERMISSIONS },
+    });
   }, 240_000);
 
   afterAll(async () => {
@@ -186,7 +189,7 @@ describe('Notification triggers (integration)', () => {
       const staff = ctx.app.get(StaffService);
       const leaving = await ctx.prisma.user.create({ data: { patreonUserId: 'tg-leaving' } });
       await ctx.prisma.creatorStaff.create({
-        data: { creatorId, userId: leaving.id, role: 'MOD' },
+        data: { creatorId, userId: leaving.id, role: 'MOD', permissions: ALL_STAFF_PERMISSIONS },
       });
       await flags.raise(creatorId, recId, patron, 'SPAM');
       expect(await notifications.unreadCount(leaving.id)).toBe(1);
@@ -216,7 +219,12 @@ describe('Notification triggers (integration)', () => {
       });
       const theirMod = await ctx.prisma.user.create({ data: { patreonUserId: 'tg-their-mod' } });
       await ctx.prisma.creatorStaff.create({
-        data: { creatorId: otherCreator.id, userId: theirMod.id, role: 'MOD' },
+        data: {
+          creatorId: otherCreator.id,
+          userId: theirMod.id,
+          role: 'MOD',
+          permissions: ALL_STAFF_PERMISSIONS,
+        },
       });
 
       await flags.raise(creatorId, recId, patron, 'SPAM');

@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { startDatabase, type TestDatabase } from './support/database';
+import { ALL_STAFF_PERMISSIONS } from '../src/access/permissions';
 
 describe('Creator staff and policy models (integration)', () => {
   let pg: TestDatabase;
@@ -36,7 +37,12 @@ describe('Creator staff and policy models (integration)', () => {
     });
     await expect(
       prisma.creatorStaff.create({
-        data: { creatorId: creator.id, userId: owner.id, role: 'MOD' },
+        data: {
+          creatorId: creator.id,
+          userId: owner.id,
+          role: 'MOD',
+          permissions: ALL_STAFF_PERMISSIONS,
+        },
       }),
     ).rejects.toThrow();
   });

@@ -16,6 +16,7 @@ import {
   ResolvedCreator,
 } from '../access/creator-access.guard';
 import { RequireCapability } from '../access/require-capability.decorator';
+import { RequirePermission } from '../access/require-permission.decorator';
 import { CurrentUser, CurrentUserPayload, SessionGuard } from '../session/session.guard';
 import { EditNoteDto, WriteNoteDto } from './dto/write-note.dto';
 import { NotesService } from './notes.service';
@@ -23,6 +24,7 @@ import { NotesService } from './notes.service';
 // Staff only, declared once on the class: a note is the creator's voice on their own board.
 @Controller('creators/:slug')
 @RequireCapability('MODERATE')
+@RequirePermission('WRITE_NOTES')
 @UseGuards(CreatorAccessGuard, SessionGuard)
 export class NotesController {
   constructor(private readonly notes: NotesService) {}

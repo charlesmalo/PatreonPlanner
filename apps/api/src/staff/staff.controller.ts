@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   Post,
   UseGuards,
+  Patch,
 } from '@nestjs/common';
 import {
   CreatorAccessGuard,
@@ -18,6 +19,7 @@ import {
 import { RequireCapability } from '../access/require-capability.decorator';
 import { CurrentUser, CurrentUserPayload, SessionGuard } from '../session/session.guard';
 import { AcceptInviteDto } from './dto/accept-invite.dto';
+import { SetPermissionsDto } from './dto/set-permissions.dto';
 import { StaffService } from './staff.service';
 
 // Everything here is owner-only, so the capability is declared once on the class and the guard
@@ -45,6 +47,17 @@ export class StaffController {
   @HttpCode(HttpStatus.NO_CONTENT)
   revokeInvite(@CurrentCreator() creator: ResolvedCreator, @Param('id', ParseUUIDPipe) id: string) {
     return this.staff.revokeInvite(creator.id, id);
+  }
+
+  // ADMINISTER, like every other staff change: a moderator who could grant permissions could
+  // grant themselves the ones they were deliberately not given.
+  @Patch(':userId/permissions')
+  setPermissions(
+    @CurrentCreator() creator: ResolvedCreator,
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Body() dto: SetPermissionsDto,
+  ) {
+    return this.staff.setPermissions(creator.id, userId, dto.permissions);
   }
 
   @Delete(':userId')

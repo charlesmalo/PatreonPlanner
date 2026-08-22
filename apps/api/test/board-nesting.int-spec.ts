@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { AuthTestContext, pickCookie, startAuthApp } from './support/auth-app';
+import { ALL_STAFF_PERMISSIONS } from '../src/access/permissions';
 
 describe('Board nesting and theme filtering (integration)', () => {
   let ctx: AuthTestContext;
@@ -77,6 +78,7 @@ describe('Board nesting and theme filtering (integration)', () => {
           await ctx.prisma.user.findUniqueOrThrow({ where: { patreonUserId: 'nest-staff' } })
         ).id,
         role: 'MOD',
+        permissions: ALL_STAFF_PERMISSIONS,
       },
     });
   }, 240_000);

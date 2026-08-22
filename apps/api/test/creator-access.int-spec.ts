@@ -1,5 +1,6 @@
 import request from 'supertest';
 import { AuthTestContext, pickCookie, startAuthApp } from './support/auth-app';
+import { ALL_STAFF_PERMISSIONS } from '../src/access/permissions';
 
 describe('CreatorAccessGuard (integration)', () => {
   let ctx: AuthTestContext;
@@ -124,7 +125,9 @@ describe('CreatorAccessGuard (integration)', () => {
     const user = await ctx.prisma.user.findUniqueOrThrow({
       where: { patreonUserId: 'guard-staff' },
     });
-    await ctx.prisma.creatorStaff.create({ data: { creatorId, userId: user.id, role: 'MOD' } });
+    await ctx.prisma.creatorStaff.create({
+      data: { creatorId, userId: user.id, role: 'MOD', permissions: ALL_STAFF_PERMISSIONS },
+    });
     await get(cookie).expect(200);
   });
 

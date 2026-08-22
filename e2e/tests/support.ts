@@ -156,8 +156,12 @@ export function setTierWeights(weights: Record<string, number>): void {
 
 export function makeStaff(patreonUserId: string): void {
   seed(`
-    INSERT INTO "CreatorStaff"(id,"creatorId","userId",role,"createdAt","updatedAt")
-      SELECT gen_random_uuid(),'${CREATOR.id}',u.id,'MOD',now(),now()
+    -- The full set, matching what accepting an invite grants: an invitation says "come and
+    -- moderate this board", and a moderator who can do nothing has been told something untrue.
+    INSERT INTO "CreatorStaff"(id,"creatorId","userId",role,permissions,"createdAt","updatedAt")
+      SELECT gen_random_uuid(),'${CREATOR.id}',u.id,'MOD',
+             ARRAY['MOVE_ENTRIES','EDIT_ENTRIES','HANDLE_REPORTS','WRITE_NOTES','MANAGE_THEMES']::"StaffPermission"[],
+             now(),now()
       FROM "User" u WHERE u."patreonUserId"=${sqlLiteral(patreonUserId)}
       ON CONFLICT ("creatorId","userId") DO NOTHING;
   `);

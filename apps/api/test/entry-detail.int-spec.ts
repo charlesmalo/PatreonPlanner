@@ -1,5 +1,6 @@
 import request from 'supertest';
 import { AuthTestContext, pickCookie, startAuthApp } from './support/auth-app';
+import { ALL_STAFF_PERMISSIONS } from '../src/access/permissions';
 
 describe('Entry detail (integration)', () => {
   let ctx: AuthTestContext;
@@ -50,7 +51,12 @@ describe('Entry detail (integration)', () => {
     }
     staff = await loginAs('ed-staff');
     await ctx.prisma.creatorStaff.create({
-      data: { creatorId, userId: await userId('ed-staff'), role: 'MOD' },
+      data: {
+        creatorId,
+        userId: await userId('ed-staff'),
+        role: 'MOD',
+        permissions: ALL_STAFF_PERMISSIONS,
+      },
     });
   }, 240_000);
 

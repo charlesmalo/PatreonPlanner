@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { MAX_PENDING_INVITES } from '../src/staff/staff.service';
 import { AuthTestContext, pickCookie, startAuthApp } from './support/auth-app';
+import { ALL_STAFF_PERMISSIONS } from '../src/access/permissions';
 
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
 
@@ -67,8 +68,8 @@ describe('Staff management (integration)', () => {
     await ctx.prisma.creatorStaff.deleteMany({ where: { userId: { not: ownerUserId } } });
     await ctx.prisma.creatorStaff.upsert({
       where: { creatorId_userId: { creatorId, userId: modUserId } },
-      create: { creatorId, userId: modUserId, role: 'MOD' },
-      update: { role: 'MOD' },
+      create: { creatorId, userId: modUserId, role: 'MOD', permissions: ALL_STAFF_PERMISSIONS },
+      update: { role: 'MOD', permissions: ALL_STAFF_PERMISSIONS },
     });
   });
 
@@ -177,7 +178,12 @@ describe('Staff management (integration)', () => {
       // tolerates extras — dropping the creatorId filter would leak every tenant's roster,
       // names and all, and the looser assertion passed anyway.
       await ctx.prisma.creatorStaff.create({
-        data: { creatorId: otherCreatorId, userId: strangerUserId, role: 'MOD' },
+        data: {
+          creatorId: otherCreatorId,
+          userId: strangerUserId,
+          role: 'MOD',
+          permissions: ALL_STAFF_PERMISSIONS,
+        },
       });
       await invite().expect(201);
       await invite(owner, 'st-other').expect(201);
@@ -239,7 +245,11 @@ describe('Staff management (integration)', () => {
     it('makes the accepter a moderator', async () => {
       const { token } = (await invite().expect(201)).body;
       const res = await post(stranger, '/staff/invites/accept', { token }).expect(201);
-      expect(res.body).toMatchObject({ role: 'MOD', creator: { slug: 'staff-co' } });
+      expect(res.body).toMatchObject({
+        role: 'MOD',
+        permissions: ALL_STAFF_PERMISSIONS,
+        creator: { slug: 'staff-co' },
+      });
       expect(await roleOf(strangerUserId)).toBe('MOD');
     });
 
@@ -346,7 +356,12 @@ describe('Staff management (integration)', () => {
 
     it('refuses to remove someone staffed on another creator only', async () => {
       await ctx.prisma.creatorStaff.create({
-        data: { creatorId: otherCreatorId, userId: strangerUserId, role: 'MOD' },
+        data: {
+          creatorId: otherCreatorId,
+          userId: strangerUserId,
+          role: 'MOD',
+          permissions: ALL_STAFF_PERMISSIONS,
+        },
       });
       await del(owner, `/creators/staff-co/staff/${strangerUserId}`).expect(404);
       expect(await roleOf(strangerUserId, otherCreatorId)).toBe('MOD');

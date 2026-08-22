@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { MAX_NOTES_PER_ENTRY } from '../src/notes/notes.service';
 import { AuthTestContext, pickCookie, startAuthApp } from './support/auth-app';
+import { ALL_STAFF_PERMISSIONS } from '../src/access/permissions';
 
 describe('Creator notes (integration)', () => {
   let ctx: AuthTestContext;
@@ -43,7 +44,9 @@ describe('Creator notes (integration)', () => {
     staffUserId = (
       await ctx.prisma.user.findUniqueOrThrow({ where: { patreonUserId: 'nt-staff' } })
     ).id;
-    await ctx.prisma.creatorStaff.create({ data: { creatorId, userId: staffUserId, role: 'MOD' } });
+    await ctx.prisma.creatorStaff.create({
+      data: { creatorId, userId: staffUserId, role: 'MOD', permissions: ALL_STAFF_PERMISSIONS },
+    });
 
     patron = await loginAs('nt-patron');
     patronUserId = (

@@ -1,5 +1,6 @@
 import request from 'supertest';
 import { AuthTestContext, pickCookie, startAuthApp } from './support/auth-app';
+import { ALL_STAFF_PERMISSIONS } from '../src/access/permissions';
 
 describe('Moderation results (integration)', () => {
   let ctx: AuthTestContext;
@@ -48,6 +49,7 @@ describe('Moderation results (integration)', () => {
         userId: (await ctx.prisma.user.findUniqueOrThrow({ where: { patreonUserId: 'mr-staff' } }))
           .id,
         role: 'MOD',
+        permissions: ALL_STAFF_PERMISSIONS,
       },
     });
   }, 240_000);

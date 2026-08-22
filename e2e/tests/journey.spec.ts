@@ -276,6 +276,33 @@ test('a patron sees what their votes are worth and lifts them after upgrading', 
   await expect(page.getByRole('listitem').filter({ hasText: 'Totoro' })).toContainText('worth 20');
 });
 
+test('an owner narrows what a moderator may do, and the board obeys', async ({ page }) => {
+  seedEntryFrom('patreon-other-e2e', 'Laputa');
+  await signIn(page, 500, 'patreon-limited-e2e');
+  makeStaff('patreon-limited-e2e');
+  await signOut(page);
+
+  // The owner takes away report handling, leaving everything else.
+  await signIn(page, 500, 'patreon-user-e2e');
+  makeOwner('patreon-user-e2e');
+  await page.goto(`/c/${CREATOR.slug}/staff`);
+  const row = page.getByRole('listitem').filter({ hasText: /MOD/ });
+  // A plain click, not uncheck(): the control disables itself while the request is in flight, and
+  // uncheck() retries against a moving target rather than waiting for it to settle.
+  const reports = row.getByRole('checkbox', { name: /handle reports/i });
+  await expect(reports).toBeChecked();
+  await reports.click();
+  await expect(reports).not.toBeChecked();
+  await signOut(page);
+
+  await signIn(page, 500, 'patreon-limited-e2e');
+  await page.goto(`/c/${CREATOR.slug}`);
+  // Still a moderator — the queue is still theirs to open.
+  await expect(page.getByRole('link', { name: /review queue/i })).toBeVisible();
+  // But the one power that was taken away is gone: moving entries still works.
+  await expect(page.getByRole('button', { name: /move “Laputa”/i })).toBeVisible();
+});
+
 test('a reader folds a column away and it stays folded', async ({ page }) => {
   seedEntryFrom('patreon-other-e2e', 'Ponyo');
   await page.goto(`/c/${CREATOR.slug}`);

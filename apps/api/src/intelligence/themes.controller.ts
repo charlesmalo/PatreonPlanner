@@ -21,6 +21,7 @@ import {
   ResolvedCreator,
 } from '../access/creator-access.guard';
 import { RequireCapability } from '../access/require-capability.decorator';
+import { RequirePermission } from '../access/require-permission.decorator';
 import { ModerationService } from '../moderation/moderation.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CurrentUser, CurrentUserPayload, SessionGuard } from '../session/session.guard';
@@ -74,6 +75,7 @@ export class ThemesController {
 
   @Patch(':id')
   @RequireCapability('MODERATE')
+  @RequirePermission('MANAGE_THEMES')
   @UseGuards(CreatorAccessGuard, SessionGuard)
   async rename(
     @CurrentCreator() creator: ResolvedCreator,
@@ -116,6 +118,7 @@ export class ThemesController {
   // 200, not Nest's default 201: nothing is created here, and the body is the surviving theme.
   @HttpCode(HttpStatus.OK)
   @RequireCapability('MODERATE')
+  @RequirePermission('MANAGE_THEMES')
   @UseGuards(CreatorAccessGuard, SessionGuard)
   async merge(
     @CurrentCreator() creator: ResolvedCreator,
@@ -128,6 +131,7 @@ export class ThemesController {
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @RequireCapability('MODERATE')
+  @RequirePermission('MANAGE_THEMES')
   @UseGuards(CreatorAccessGuard, SessionGuard)
   async remove(@CurrentCreator() creator: ResolvedCreator, @Param('id', ParseUUIDPipe) id: string) {
     const theme = await this.find(creator.id, id);

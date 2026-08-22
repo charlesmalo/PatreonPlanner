@@ -10,6 +10,16 @@ datasource db {
   extensions = [vector, pg_trgm]
 }
 
+// What a moderator may do beyond being staff. An owner holds all of these implicitly, by the
+// check short-circuiting on the role rather than by being granted the set.
+enum StaffPermission {
+  MOVE_ENTRIES
+  EDIT_ENTRIES
+  HANDLE_REPORTS
+  WRITE_NOTES
+  MANAGE_THEMES
+}
+
 enum StaffRole {
   OWNER
   MOD
@@ -242,6 +252,10 @@ model CreatorStaff {
   creatorId        String    @db.Uuid
   userId           String    @db.Uuid
   role             StaffRole
+  // Empty for a new moderator: a permission absent from this set is denied, so a permission
+  // added in future is denied to every existing mod until an owner grants it. An OWNER row's
+  // contents are ignored — the check short-circuits on the role.
+  permissions      StaffPermission[]
   assignedByUserId String?   @db.Uuid
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt

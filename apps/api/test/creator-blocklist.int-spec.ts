@@ -1,5 +1,6 @@
 import request from 'supertest';
 import { AuthTestContext, pickCookie, startAuthApp } from './support/auth-app';
+import { ALL_STAFF_PERMISSIONS } from '../src/access/permissions';
 
 describe('Creator blocklist (integration)', () => {
   let ctx: AuthTestContext;
@@ -54,7 +55,12 @@ describe('Creator blocklist (integration)', () => {
 
     mod = await loginAs('bl-mod');
     await ctx.prisma.creatorStaff.create({
-      data: { creatorId, userId: await userId('bl-mod'), role: 'MOD' },
+      data: {
+        creatorId,
+        userId: await userId('bl-mod'),
+        role: 'MOD',
+        permissions: ALL_STAFF_PERMISSIONS,
+      },
     });
     patron = await loginAs('bl-patron');
     for (const [id, target] of [

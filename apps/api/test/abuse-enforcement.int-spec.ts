@@ -5,6 +5,7 @@ import {
   RATE_LIMIT_STRIKE_THRESHOLD,
 } from '../src/recommendations/recommendations.service';
 import { AuthTestContext, pickCookie, startAuthApp } from './support/auth-app';
+import { ALL_STAFF_PERMISSIONS } from '../src/access/permissions';
 
 describe('Abuse enforcement (integration)', () => {
   let ctx: AuthTestContext;
@@ -49,7 +50,7 @@ describe('Abuse enforcement (integration)', () => {
       await ctx.prisma.user.findUniqueOrThrow({ where: { patreonUserId: 'ae-staff' } })
     ).id;
     await ctx.prisma.creatorStaff.create({
-      data: { creatorId, userId: staffUserId, role: 'MOD' },
+      data: { creatorId, userId: staffUserId, role: 'MOD', permissions: ALL_STAFF_PERMISSIONS },
     });
   }, 240_000);
 

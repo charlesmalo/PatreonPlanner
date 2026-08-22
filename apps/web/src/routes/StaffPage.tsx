@@ -2,7 +2,16 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ApiError, api } from '../api/client';
 import { useCreator } from '../api/hooks';
-import type { StaffList, StaffMember } from '../api/types';
+import type { StaffList, StaffMember, StaffPermission } from '../api/types';
+
+/** Named for what they let someone do, not for the enum. */
+const PERMISSIONS: Array<[StaffPermission, string]> = [
+  ['MOVE_ENTRIES', 'Move entries'],
+  ['EDIT_ENTRIES', 'Edit entries'],
+  ['HANDLE_REPORTS', 'Handle reports'],
+  ['WRITE_NOTES', 'Write notes'],
+  ['MANAGE_THEMES', 'Manage themes'],
+];
 
 export function StaffPage() {
   const { slug = '' } = useParams();
@@ -76,6 +85,33 @@ export function StaffPage() {
     }
   }
 
+  async function togglePermission(member: StaffMember, permission: StaffPermission, on: boolean) {
+    // The whole set, not a change to it: the API replaces it outright, so two tabs cannot race
+    // into a merge nobody asked for.
+    const held = member.permissions ?? [];
+    const next = on ? [...held, permission] : held.filter((p) => p !== permission);
+    setBusy(true);
+    setMessage(null);
+    try {
+      await api.patch(`${path}/${member.userId}/permissions`, { permissions: next });
+      setStaff((current) =>
+        current
+          ? {
+              ...current,
+              members: current.members.map((m) =>
+                m.userId === member.userId ? { ...m, permissions: next } : m,
+              ),
+            }
+          : current,
+      );
+    } catch {
+      // Left as it was rather than showing a checkbox the server disagrees with.
+      setMessage('Could not change that. Try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function remove(member: StaffMember) {
     setBusy(true);
     setMessage(null);
@@ -122,26 +158,54 @@ export function StaffPage() {
         {staff.members.map((member) => (
           <li
             key={member.userId}
-            className="flex items-center justify-between rounded border border-slate-200 px-3 py-2 dark:border-slate-800"
+            className="rounded border border-slate-200 px-3 py-2 dark:border-slate-800"
           >
-            <span className="text-sm">
-              {/* Text, never markup: a display name comes from Patreon. */}
-              {member.fullName ?? 'A moderator'}
-              <span className="ml-2 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                {member.role}
+            <div className="flex items-center justify-between">
+              <span className="text-sm">
+                {/* Text, never markup: a display name comes from Patreon. */}
+                {member.fullName ?? 'A moderator'}
+                <span className="ml-2 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  {member.role}
+                </span>
               </span>
-            </span>
-            {/* No control for the owner: the API refuses, and a button that cannot work is a lie. */}
+              {/* No control for the owner: the API refuses, and a button that cannot work is a lie. */}
+              {member.role === 'OWNER' ? null : (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => remove(member)}
+                  aria-label={`Remove ${member.fullName ?? 'this moderator'}`}
+                  className="rounded border border-slate-300 px-2 py-0.5 text-xs disabled:opacity-50 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-slate-700 dark:hover:bg-slate-800"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+            {/* An owner's row shows nothing to edit: they hold everything by role, and the API
+                refuses to write to it. A moderator holding nothing is a real state and says so,
+                since otherwise the board offers them work that every action refuses. */}
             {member.role === 'OWNER' ? null : (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => remove(member)}
-                aria-label={`Remove ${member.fullName ?? 'this moderator'}`}
-                className="rounded border border-slate-300 px-2 py-0.5 text-xs disabled:opacity-50 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-slate-700 dark:hover:bg-slate-800"
-              >
-                Remove
-              </button>
+              <fieldset className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                <legend className="sr-only">
+                  What {member.fullName ?? 'this moderator'} may do
+                </legend>
+                {PERMISSIONS.map(([value, label]) => (
+                  <label key={value} className="flex items-center gap-1.5 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={(member.permissions ?? []).includes(value)}
+                      disabled={busy}
+                      onChange={(event) => togglePermission(member, value, event.target.checked)}
+                    />
+                    {label}
+                  </label>
+                ))}
+                {(member.permissions ?? []).length === 0 ? (
+                  <span className="text-xs text-amber-700 dark:text-amber-300">
+                    Cannot do anything yet
+                  </span>
+                ) : null}
+              </fieldset>
             )}
           </li>
         ))}
