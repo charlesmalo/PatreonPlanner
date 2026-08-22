@@ -1,10 +1,12 @@
 import { Module } from '@nestjs/common';
 import { RecommendationsController } from './recommendations.controller';
+import { MyVotesController } from './my-votes.controller';
+import { MyVotesService } from './my-votes.service';
 import { RecommendationsService } from './recommendations.service';
 import { SearchService } from './search.service';
 
 @Module({
-  controllers: [RecommendationsController],
-  providers: [RecommendationsService, SearchService],
+  controllers: [RecommendationsController, MyVotesController],
+  providers: [RecommendationsService, SearchService, MyVotesService],
 })
 export class RecommendationsModule {}
