@@ -55,7 +55,11 @@ describe('BoardColumn', () => {
     stub();
     setup();
 
-    expect(await screen.findByRole('heading', { name: 'Suggestions' })).toBeInTheDocument();
+    // Waits for the entries, not the heading: the heading renders immediately and the count is
+    // zero until the fetch lands, so asserting on it first is a race — one that passed locally
+    // and failed in CI.
+    await screen.findByText('Spirited Away');
+    expect(screen.getByRole('heading', { name: 'Suggestions' })).toBeInTheDocument();
     expect(screen.getByText('1')).toBeInTheDocument();
   });
 
