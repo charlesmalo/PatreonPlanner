@@ -3,6 +3,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import request from 'supertest';
 import { ThemesService } from '../src/intelligence/themes.service';
 import { AuthTestContext, pickCookie, startAuthApp } from './support/auth-app';
+import { ALL_STAFF_PERMISSIONS } from '../src/access/permissions';
 
 describe('Theme curation (integration)', () => {
   let ctx: AuthTestContext;
@@ -55,6 +56,7 @@ describe('Theme curation (integration)', () => {
         userId: (await ctx.prisma.user.findUniqueOrThrow({ where: { patreonUserId: 'th-staff' } }))
           .id,
         role: 'MOD',
+        permissions: ALL_STAFF_PERMISSIONS,
       },
     });
   }, 240_000);

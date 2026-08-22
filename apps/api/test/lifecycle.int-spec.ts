@@ -1,5 +1,6 @@
 import request from 'supertest';
 import { AuthTestContext, pickCookie, startAuthApp } from './support/auth-app';
+import { ALL_STAFF_PERMISSIONS } from '../src/access/permissions';
 
 describe('Submission lifecycle (integration)', () => {
   let ctx: AuthTestContext;
@@ -39,7 +40,7 @@ describe('Submission lifecycle (integration)', () => {
       await ctx.prisma.user.findUniqueOrThrow({ where: { patreonUserId: 'lc-staff' } })
     ).id;
     await ctx.prisma.creatorStaff.create({
-      data: { creatorId, userId: staffUserId, role: 'MOD' },
+      data: { creatorId, userId: staffUserId, role: 'MOD', permissions: ALL_STAFF_PERMISSIONS },
     });
 
     patron = await loginAs('lc-patron');

@@ -14,6 +14,7 @@ import {
   ResolvedCreator,
 } from '../access/creator-access.guard';
 import { RequireCapability } from '../access/require-capability.decorator';
+import { RequirePermission } from '../access/require-permission.decorator';
 import { CurrentUser, CurrentUserPayload, SessionGuard } from '../session/session.guard';
 import { RedactDto } from './dto/redact.dto';
 import { ResolveFlagDto } from './dto/resolve-flag.dto';
@@ -24,6 +25,7 @@ import { ReviewQueueService } from './review-queue.service';
 // throws if a handler is ever added without one.
 @Controller('creators/:slug')
 @RequireCapability('MODERATE')
+@RequirePermission('HANDLE_REPORTS')
 @UseGuards(CreatorAccessGuard, SessionGuard)
 export class ModerationController {
   constructor(private readonly reviewQueue: ReviewQueueService) {}
@@ -33,6 +35,9 @@ export class ModerationController {
     return this.reviewQueue.list(creator.id, query.offset, query.limit);
   }
 
+  // Overrides the controller's HANDLE_REPORTS: rewriting a patron's words is a different power
+  // from deciding what happens to a report about them.
+  @RequirePermission('EDIT_ENTRIES')
   @Patch('recommendations/:id')
   redact(
     @CurrentCreator() creator: ResolvedCreator,

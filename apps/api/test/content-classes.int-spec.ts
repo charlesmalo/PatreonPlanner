@@ -1,5 +1,6 @@
 import request from 'supertest';
 import { AuthTestContext, pickCookie, startAuthApp } from './support/auth-app';
+import { ALL_STAFF_PERMISSIONS } from '../src/access/permissions';
 
 describe('Franchise and watch-order submissions (integration)', () => {
   let ctx: AuthTestContext;
@@ -32,7 +33,7 @@ describe('Franchise and watch-order submissions (integration)', () => {
       where: { patreonUserId: 'cc-staff' },
     });
     await ctx.prisma.creatorStaff.create({
-      data: { creatorId, userId: staffUser.id, role: 'MOD' },
+      data: { creatorId, userId: staffUser.id, role: 'MOD', permissions: ALL_STAFF_PERMISSIONS },
     });
   }, 240_000);
 

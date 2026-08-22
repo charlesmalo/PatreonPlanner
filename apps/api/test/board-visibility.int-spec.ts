@@ -1,5 +1,6 @@
 import request from 'supertest';
 import { AuthTestContext, pickCookie, startAuthApp } from './support/auth-app';
+import { ALL_STAFF_PERMISSIONS } from '../src/access/permissions';
 
 describe('Board visibility (integration)', () => {
   let ctx: AuthTestContext;
@@ -32,7 +33,7 @@ describe('Board visibility (integration)', () => {
       where: { patreonUserId: 'bv-staff' },
     });
     await ctx.prisma.creatorStaff.create({
-      data: { creatorId, userId: staffUser.id, role: 'MOD' },
+      data: { creatorId, userId: staffUser.id, role: 'MOD', permissions: ALL_STAFF_PERMISSIONS },
     });
 
     patron = await loginAs('bv-patron');

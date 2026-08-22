@@ -6,6 +6,7 @@ const anonymous: Viewer = {
   isActivePatron: false,
   pledgeAmountCents: null,
   staffRole: null,
+  permissions: [],
 };
 const loggedIn: Viewer = { ...anonymous, userId: 'user-1', isAuthenticated: true };
 const patron: Viewer = { ...loggedIn, isActivePatron: true, pledgeAmountCents: 500 };
@@ -120,6 +121,7 @@ describe('can(ADMINISTER)', () => {
     isActivePatron: false,
     pledgeAmountCents: null,
     staffRole: null,
+    permissions: [],
   };
 
   it('lets an owner manage staff', () => {

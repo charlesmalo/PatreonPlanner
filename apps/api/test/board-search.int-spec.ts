@@ -2,6 +2,7 @@ import request from 'supertest';
 import { EmbedTitlesJob } from '../src/jobs/embed-titles.job';
 import { MAX_SEARCH_RESULTS } from '../src/recommendations/search.service';
 import { AuthTestContext, pickCookie, startAuthApp } from './support/auth-app';
+import { ALL_STAFF_PERMISSIONS } from '../src/access/permissions';
 
 describe('Board search (integration)', () => {
   let ctx: AuthTestContext;
@@ -73,6 +74,7 @@ describe('Board search (integration)', () => {
         userId: (await ctx.prisma.user.findUniqueOrThrow({ where: { patreonUserId: 'bs-staff' } }))
           .id,
         role: 'MOD',
+        permissions: ALL_STAFF_PERMISSIONS,
       },
     });
   }, 240_000);

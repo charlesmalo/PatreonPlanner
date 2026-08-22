@@ -13,7 +13,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SESSION_COOKIE } from '../session/session.cookie';
 import { SessionService } from '../session/session.service';
 import { Capability, Policy, Viewer, can } from './capability';
+import { hasPermission, type StaffPermissionValue } from './permissions';
 import { REQUIRED_CAPABILITY } from './require-capability.decorator';
+import { REQUIRED_PERMISSION } from './require-permission.decorator';
 
 export interface ResolvedCreator {
   id: string;
@@ -68,6 +70,17 @@ export class CreatorAccessGuard implements CanActivate {
       // 401 when logging in could fix it, 403 when it could not — so a caller is never told to
       // authenticate for something authentication will not grant.
       throw viewer.isAuthenticated ? new ForbiddenException() : new UnauthorizedException();
+    }
+
+    // The finer half. Being staff got them this far; this decides whether *this* action is
+    // theirs. Always a 403: reaching here means they are authenticated staff, so logging in
+    // again would not help.
+    const permission = this.reflector.getAllAndOverride<StaffPermissionValue | undefined>(
+      REQUIRED_PERMISSION,
+      [context.getHandler(), context.getClass()],
+    );
+    if (permission && !hasPermission(viewer, permission)) {
+      throw new ForbiddenException();
     }
 
     request.creator = {
@@ -125,6 +138,7 @@ export class CreatorAccessGuard implements CanActivate {
         isActivePatron: false,
         pledgeAmountCents: null,
         staffRole: null,
+        permissions: [],
       };
     }
     const [user, membership, staff] = await Promise.all([
@@ -135,8 +149,10 @@ export class CreatorAccessGuard implements CanActivate {
       }),
       this.prisma.creatorStaff.findUnique({
         where: { creatorId_userId: { creatorId, userId } },
-        // The role, not merely existence: managing staff is the owner's alone.
-        select: { role: true },
+        // The role, not merely existence: managing staff is the owner's alone. The permission
+        // set comes with it, so a moderated request costs no extra query to answer "and may
+        // they do this in particular".
+        select: { role: true, permissions: true },
       }),
     ]);
     // A session can outlive its user. Falling back to anonymous keeps deleting the row
@@ -148,6 +164,7 @@ export class CreatorAccessGuard implements CanActivate {
         isActivePatron: false,
         pledgeAmountCents: null,
         staffRole: null,
+        permissions: [],
       };
     }
     return {
@@ -159,6 +176,7 @@ export class CreatorAccessGuard implements CanActivate {
       // imported here, denying a creator's highest-paying patrons.
       pledgeAmountCents: membership?.amountCents ?? null,
       staffRole: staff?.role ?? null,
+      permissions: staff?.permissions ?? [],
     };
   }
 }

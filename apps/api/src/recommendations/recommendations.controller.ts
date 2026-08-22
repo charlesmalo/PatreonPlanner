@@ -21,6 +21,7 @@ import {
   ResolvedCreator,
 } from '../access/creator-access.guard';
 import { RequireCapability } from '../access/require-capability.decorator';
+import { RequirePermission } from '../access/require-permission.decorator';
 import { ChangeStatusDto } from '../moderation/dto/change-status.dto';
 import { CreateFlagDto } from '../moderation/dto/create-flag.dto';
 import { FlagsService } from '../moderation/flags.service';
@@ -117,6 +118,7 @@ export class RecommendationsController {
   // a new resource at a new location, and there is none.
   @HttpCode(HttpStatus.OK)
   @RequireCapability('MODERATE')
+  @RequirePermission('MOVE_ENTRIES')
   @UseGuards(CreatorAccessGuard, SessionGuard)
   changeStatus(
     @CurrentCreator() creator: ResolvedCreator,
@@ -135,6 +137,7 @@ export class RecommendationsController {
   @Post(':id/pick')
   @HttpCode(HttpStatus.NO_CONTENT)
   @RequireCapability('MODERATE')
+  @RequirePermission('MOVE_ENTRIES')
   @UseGuards(CreatorAccessGuard, SessionGuard)
   pick(@CurrentCreator() creator: ResolvedCreator, @Param('id', ParseUUIDPipe) id: string) {
     return this.recommendations.setCreatorPick(creator.id, id, true);
@@ -143,6 +146,7 @@ export class RecommendationsController {
   @Delete(':id/pick')
   @HttpCode(HttpStatus.NO_CONTENT)
   @RequireCapability('MODERATE')
+  @RequirePermission('MOVE_ENTRIES')
   @UseGuards(CreatorAccessGuard, SessionGuard)
   unpick(@CurrentCreator() creator: ResolvedCreator, @Param('id', ParseUUIDPipe) id: string) {
     return this.recommendations.setCreatorPick(creator.id, id, false);

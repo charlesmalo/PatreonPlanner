@@ -1,3 +1,5 @@
+import type { StaffPermissionValue } from './permissions';
+
 export type Capability = 'VIEW' | 'UPVOTE' | 'SUBMIT' | 'MODERATE' | 'ADMINISTER';
 
 export type StaffRoleValue = 'OWNER' | 'MOD';
@@ -22,6 +24,11 @@ export interface Viewer {
    * comment below has asked for since Plan 03.
    */
   staffRole: StaffRoleValue | null;
+  /**
+   * What this staff member may do beyond being staff. Empty for anyone who is not staff here,
+   * and ignored entirely for an OWNER, whose powers come from the role.
+   */
+  permissions: StaffPermissionValue[];
 }
 
 export interface Policy {
