@@ -1,12 +1,26 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { StaffPage } from './StaffPage';
 import { creator, fakeApi } from '../test-support';
 
 const members = [
-  { userId: 'u1', role: 'OWNER', fullName: 'Ada', avatarUrl: null, createdAt: '2026-01-01' },
-  { userId: 'u2', role: 'MOD', fullName: 'Grace', avatarUrl: null, createdAt: '2026-01-02' },
+  {
+    userId: 'u1',
+    role: 'OWNER',
+    permissions: [],
+    fullName: 'Ada',
+    avatarUrl: null,
+    createdAt: '2026-01-01',
+  },
+  {
+    userId: 'u2',
+    role: 'MOD',
+    permissions: [],
+    fullName: 'Grace',
+    avatarUrl: null,
+    createdAt: '2026-01-02',
+  },
 ];
 
 function renderPage() {
@@ -63,13 +77,94 @@ describe('StaffPage', () => {
       'GET /api/v1/creators/ada-writes': creator,
       'GET /api/v1/creators/ada-writes/staff': {
         members,
-        invites: [{ id: 'i1', role: 'MOD', expiresAt: '2026-02-01', createdAt: '2026-01-01' }],
+        invites: [
+          {
+            id: 'i1',
+            role: 'MOD',
+            permissions: [],
+            expiresAt: '2026-02-01',
+            createdAt: '2026-01-01',
+          },
+        ],
       },
       'DELETE /api/v1/creators/ada-writes/staff/invites/i1': null,
     });
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: /revoke the invitation/i }));
     expect(await screen.findByText(/no longer valid/i)).toBeInTheDocument();
+  });
+
+  it('shows what each moderator may do, and lets an owner change it', async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = new URL(String(input), 'http://localhost').pathname;
+      if ((init?.method ?? 'GET') === 'PATCH') {
+        calls.push(JSON.parse(String(init?.body)));
+        return { ok: true, status: 200, json: async () => ({}) } as Response;
+      }
+      if (path.endsWith('/staff')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            members: [
+              {
+                userId: 'u2',
+                role: 'MOD',
+                permissions: ['MOVE_ENTRIES'],
+                fullName: 'Mo',
+                avatarUrl: null,
+                createdAt: '2026-01-01T00:00:00.000Z',
+              },
+            ],
+            invites: [],
+          }),
+        } as Response;
+      }
+      return { ok: true, status: 200, json: async () => creator } as Response;
+    });
+    renderPage();
+
+    const granted = await screen.findByRole('checkbox', { name: /move entries/i });
+    expect(granted).toBeChecked();
+    const notGranted = screen.getByRole('checkbox', { name: /handle reports/i });
+    expect(notGranted).not.toBeChecked();
+
+    await userEvent.click(notGranted);
+
+    // The whole set, not a change to it: the API replaces it, so two tabs cannot race into a
+    // merge nobody asked for.
+    await waitFor(() =>
+      expect(calls).toEqual([{ permissions: ['MOVE_ENTRIES', 'HANDLE_REPORTS'] }]),
+    );
+  });
+
+  it('says when a moderator has been left able to do nothing', async () => {
+    // A confusing state otherwise: they are staff, the board offers them the queue, and every
+    // action refuses them.
+    global.fetch = fakeApi(
+      routes({
+        'GET /api/v1/creators/ada-writes/staff': {
+          members: [{ ...members[1], permissions: [] }],
+          invites: [],
+        },
+      }),
+    );
+    renderPage();
+
+    expect(await screen.findByText(/cannot do anything yet/i)).toBeInTheDocument();
+  });
+
+  it('offers nothing to edit on the owner row, who holds everything by role', async () => {
+    global.fetch = fakeApi(
+      routes({
+        'GET /api/v1/creators/ada-writes/staff': { members: [members[0]], invites: [] },
+      }),
+    );
+    renderPage();
+
+    await screen.findByText('Ada');
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
   });
 
   it('offers no remove control for the owner', async () => {

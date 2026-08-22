@@ -70,9 +70,18 @@ export interface CreatorNote {
   author: { id: string; fullName: string | null; avatarUrl: string | null };
 }
 
+export type StaffPermission =
+  | 'MOVE_ENTRIES'
+  | 'EDIT_ENTRIES'
+  | 'HANDLE_REPORTS'
+  | 'WRITE_NOTES'
+  | 'MANAGE_THEMES';
+
 export interface StaffMember {
   userId: string;
   role: string;
+  /** Ignored for an owner, who holds everything by role. */
+  permissions: StaffPermission[];
   fullName: string | null;
   avatarUrl: string | null;
   createdAt: string;
