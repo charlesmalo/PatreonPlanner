@@ -141,6 +141,19 @@ export function clearReaderState(): void {
   seed(`DELETE FROM "CreatorFavorite"; DELETE FROM "Notification";`);
 }
 
+/** Weights per Patreon tier id, creating the tier row if the sync has not yet made one. */
+export function setTierWeights(weights: Record<string, number>): void {
+  const rows = Object.entries(weights)
+    .map(
+      ([patreonTierId, weight], index) =>
+        `INSERT INTO "Tier"(id,"creatorId","patreonTierId",title,"amountCents","voteWeight","order","createdAt","updatedAt")
+           VALUES (gen_random_uuid(),'${CREATOR.id}','${patreonTierId}','${patreonTierId}',${weight * 100},${weight},${index},now(),now())
+           ON CONFLICT ("creatorId","patreonTierId") DO UPDATE SET "voteWeight"=${weight};`,
+    )
+    .join('\n');
+  seed(rows);
+}
+
 export function makeStaff(patreonUserId: string): void {
   seed(`
     INSERT INTO "CreatorStaff"(id,"creatorId","userId",role,"createdAt","updatedAt")

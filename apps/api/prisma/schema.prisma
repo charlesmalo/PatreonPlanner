@@ -290,6 +290,10 @@ model CreatorPolicy {
   submitMinTierId       String?        @db.Uuid
   upvoteMinTierId       String?        @db.Uuid
   hidePendingFromPublic Boolean        @default(false)
+  // Whether a patron may lift votes cast at a cheaper tier to their current one. On by default:
+  // paying more, even once, is not meant to be taken back. A creator who wants the board to
+  // reflect current support rather than historical generosity turns it off.
+  allowVoteRatchet      Boolean        @default(true)
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
 

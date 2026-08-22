@@ -7,6 +7,7 @@ import {
   clearIntelligence,
   clearReaderState,
   clearStaff,
+  setTierWeights,
   makeOwner,
   makeStaff,
   seedCreator,
@@ -40,6 +41,7 @@ async function signIn(
   page: import('@playwright/test').Page,
   patronCents?: number,
   patreonUserId = 'patreon-user-e2e',
+  tierId = 'tier-e2e',
 ) {
   await setPatreonIdentity({
     id: patreonUserId,
@@ -50,7 +52,7 @@ async function signIn(
             campaignId: CREATOR.campaignId,
             amountCents: patronCents,
             isActivePatron: true,
-            tierIds: ['tier-e2e'],
+            tierIds: [tierId],
           },
         ]
       : [],
@@ -244,6 +246,34 @@ test('a creator pick leads its column whatever the sort', async ({ page }) => {
     // Level 3: the column's own name is a heading too, and it is always first.
     await expect(suggestions.getByRole('heading', { level: 3 }).first()).toHaveText('Ponyo');
   }
+});
+
+test('a patron sees what their votes are worth and lifts them after upgrading', async ({
+  page,
+}) => {
+  seedEntryFrom('patreon-other-e2e', 'Totoro');
+  setTierWeights({ 'tier-e2e': 2, 'tier-e2e-big': 20 });
+  await signIn(page, 500, 'patreon-voter-e2e');
+  await page.goto(`/c/${CREATOR.slug}`);
+  // The upvote control names its entry without quoting it, unlike the report control.
+  await page.getByRole('button', { name: /upvote Totoro/i }).click();
+
+  await page.getByRole('link', { name: /your votes/i }).click();
+  await page.waitForURL((url) => url.pathname.endsWith('/my-votes'));
+  // Scoped to the row: the sentence above it also says what the reader's tier is currently worth.
+  const vote = page.getByRole('listitem').filter({ hasText: 'Totoro' });
+  await expect(vote).toContainText('worth 2');
+  // Nothing to lift while the tier has not changed.
+  await expect(page.getByRole('button', { name: /bring them up to date/i })).toBeHidden();
+
+  // Upgrade, and sign in again so the new tier is synced from Patreon.
+  await signOut(page);
+  await signIn(page, 2000, 'patreon-voter-e2e', 'tier-e2e-big');
+  await page.goto(`/c/${CREATOR.slug}/my-votes`);
+
+  await page.getByRole('button', { name: /bring them up to date/i }).click();
+  await expect(page.getByText(/updated 1 vote/i)).toBeVisible();
+  await expect(page.getByRole('listitem').filter({ hasText: 'Totoro' })).toContainText('worth 20');
 });
 
 test('a reader folds a column away and it stays folded', async ({ page }) => {

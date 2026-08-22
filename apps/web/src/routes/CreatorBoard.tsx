@@ -49,6 +49,14 @@ export function CreatorBoard() {
             Moderators
           </Link>
         ) : null}
+        {capabilities.upvote ? (
+          <Link
+            to={`/c/${encodeURIComponent(slug)}/my-votes`}
+            className="text-sm text-sky-700 underline focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:text-sky-400"
+          >
+            Your votes
+          </Link>
+        ) : null}
         {capabilities.moderate ? (
           <Link
             to={`/c/${encodeURIComponent(slug)}/review`}
