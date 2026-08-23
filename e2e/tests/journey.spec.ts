@@ -303,6 +303,28 @@ test('an owner narrows what a moderator may do, and the board obeys', async ({ p
   await expect(page.getByRole('button', { name: /move “Laputa”/i })).toBeVisible();
 });
 
+test('a moderator looks at their own board as a patron sees it', async ({ page }) => {
+  seedEntryFrom('patreon-other-e2e', 'Ponyo');
+  await signIn(page, 500, 'patreon-viewas-e2e');
+  makeStaff('patreon-viewas-e2e');
+  await page.goto(`/c/${CREATOR.slug}`);
+  await expect(page.getByRole('button', { name: /move “Ponyo”/i })).toBeVisible();
+
+  await page.getByLabel(/viewing as/i).selectOption('patron');
+
+  await expect(page.getByText(/viewing as a/i)).toBeVisible();
+  await expect(page.getByRole('button', { name: /move “Ponyo”/i })).toBeHidden();
+  // Still a patron's board, not a broken one: reading and upvoting are untouched.
+  await expect(page.getByRole('button', { name: /upvote Ponyo/i })).toBeVisible();
+
+  // Survives a reload, since it is the reader's own choice about this board.
+  await page.reload();
+  await expect(page.getByLabel(/viewing as/i)).toHaveValue('patron');
+
+  await page.getByLabel(/viewing as/i).selectOption('moderator');
+  await expect(page.getByRole('button', { name: /move “Ponyo”/i })).toBeVisible();
+});
+
 test('a reader folds a column away and it stays folded', async ({ page }) => {
   seedEntryFrom('patreon-other-e2e', 'Ponyo');
   await page.goto(`/c/${CREATOR.slug}`);

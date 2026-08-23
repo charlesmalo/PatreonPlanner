@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError, api, onUnauthorized } from './client';
+import {
+  ACK_AFTER_MS,
+  ACK_SUPPRESS_MS,
+  narrowCapabilities,
+  viewModeKey,
+  type ViewMode,
+} from './view-mode';
 import type {
   Board,
   Capabilities,
@@ -60,6 +67,52 @@ export function useSession() {
   }, []);
 
   return { user, loading, signOut };
+}
+
+/**
+ * Which view the reader has chosen for this board, and whether switching back into moderator
+ * view should ask first.
+ *
+ * Per board and local, like column collapse: a moderator on one board is a patron on another, and
+ * the choice is nobody else's business.
+ */
+export function useViewMode(slug: string) {
+  const [mode, setMode] = useState<ViewMode>('moderator');
+  const [needsAck, setNeedsAck] = useState(false);
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem(viewModeKey(slug));
+    setMode(stored === 'patron' ? 'patron' : 'moderator');
+
+    const suppressedUntil = Number(
+      window.localStorage.getItem(`${viewModeKey(slug)}.ackUntil`) ?? 0,
+    );
+    const lastSeen = Number(window.localStorage.getItem('pp.lastSeen') ?? 0);
+    // Idle long enough that the reader may not remember what this tab was doing — and not inside
+    // a window where they have already said not to ask.
+    setNeedsAck(
+      lastSeen > 0 && Date.now() - lastSeen > ACK_AFTER_MS && Date.now() > suppressedUntil,
+    );
+    window.localStorage.setItem('pp.lastSeen', String(Date.now()));
+  }, [slug]);
+
+  const choose = useCallback(
+    (next: ViewMode, suppress?: boolean) => {
+      setMode(next);
+      window.localStorage.setItem(viewModeKey(slug), next);
+      if (suppress) {
+        window.localStorage.setItem(
+          `${viewModeKey(slug)}.ackUntil`,
+          String(Date.now() + ACK_SUPPRESS_MS),
+        );
+      }
+      // Asked once per return, not once per switch.
+      setNeedsAck(false);
+    },
+    [slug],
+  );
+
+  return { mode, needsAck, choose };
 }
 
 export function useCreator(slug: string) {

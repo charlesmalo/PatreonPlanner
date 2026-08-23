@@ -27,6 +27,7 @@ describe('CreatorBoard', () => {
   const originalFetch = global.fetch;
   afterEach(() => {
     global.fetch = originalFetch;
+    window.localStorage.clear();
   });
 
   it('shows a loading state, then the creator and its entries', async () => {
@@ -151,6 +152,7 @@ describe('CreatorBoard columns', () => {
   const originalFetch = global.fetch;
   afterEach(() => {
     global.fetch = originalFetch;
+    window.localStorage.clear();
   });
 
   const moderator = { view: true, upvote: true, submit: true, moderate: true };
@@ -197,6 +199,37 @@ describe('CreatorBoard columns', () => {
 
     await screen.findByText('Spirited Away');
     expect(screen.queryByText(/points from/i)).not.toBeInTheDocument();
+  });
+
+  it('hides moderator controls when the reader looks as a patron', async () => {
+    boardWith([recommendation({ id: 'a', status: 'PENDING' })], moderator);
+    renderBoard();
+    await screen.findByRole('button', { name: /move “Spirited Away”/i });
+
+    await userEvent.selectOptions(screen.getByLabelText(/viewing as/i), 'patron');
+
+    expect(screen.queryByRole('button', { name: /move “Spirited Away”/i })).not.toBeInTheDocument();
+    // Named, since a column's loading state is also a status.
+    expect(screen.getByText(/viewing as a/i)).toBeInTheDocument();
+  });
+
+  it('offers the switch only to someone with moderator powers', async () => {
+    boardWith([recommendation({ id: 'a', status: 'PENDING' })]);
+    renderBoard();
+    await screen.findByText('Spirited Away');
+
+    expect(screen.queryByLabelText(/viewing as/i)).not.toBeInTheDocument();
+  });
+
+  it('keeps offering the switch itself while in patron view', async () => {
+    // Otherwise the way back is gone, and the reader is stuck until they clear storage.
+    boardWith([recommendation({ id: 'a', status: 'PENDING' })], moderator);
+    renderBoard();
+    await screen.findByLabelText(/viewing as/i);
+
+    await userEvent.selectOptions(screen.getByLabelText(/viewing as/i), 'patron');
+
+    expect(screen.getByLabelText(/viewing as/i)).toBeInTheDocument();
   });
 
   it('keeps every column on screen, so the board holds its shape', async () => {
@@ -271,6 +304,7 @@ describe('CreatorBoard nesting and themes', () => {
   const originalFetch = global.fetch;
   afterEach(() => {
     global.fetch = originalFetch;
+    window.localStorage.clear();
   });
 
   function boardWith(items: Array<{ status?: string }>, themes: unknown[] = []) {
@@ -381,6 +415,7 @@ describe('CreatorBoard nesting resilience', () => {
   const originalFetch = global.fetch;
   afterEach(() => {
     global.fetch = originalFetch;
+    window.localStorage.clear();
   });
 
   function boardWith(items: Array<{ status?: string }>) {
@@ -425,6 +460,7 @@ describe('CreatorBoard admin link', () => {
   const originalFetch = global.fetch;
   afterEach(() => {
     global.fetch = originalFetch;
+    window.localStorage.clear();
   });
 
   function boardWith(capabilities: unknown) {

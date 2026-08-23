@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { useCreator, useThemes } from '../api/hooks';
+import { useCreator, useThemes, useViewMode } from '../api/hooks';
+import { narrowCapabilities } from '../api/view-mode';
+import { ModeBanner } from '../components/ModeBanner';
+import { ViewModeSwitch } from '../components/ViewModeSwitch';
 import { BoardColumn } from '../components/BoardColumn';
 import { SubmitForm } from '../components/SubmitForm';
 import { ThemeFilter } from '../components/ThemeFilter';
@@ -19,7 +22,11 @@ const COLUMNS: Array<[string, string]> = [
 
 export function CreatorBoard() {
   const { slug = '' } = useParams();
-  const { creator, capabilities, error, loading } = useCreator(slug);
+  const { creator, capabilities: granted, error, loading } = useCreator(slug);
+  const { mode, needsAck, choose } = useViewMode(slug);
+  // Applied once, here, rather than at each gate: a call site that forgot would keep offering a
+  // control the reader asked not to see. Narrowing only — see `narrowCapabilities`.
+  const capabilities = narrowCapabilities(granted, mode);
   const [theme, setTheme] = useState<string | null>(null);
   const themes = useThemes(slug, !loading && !error);
   // Bumped when a submission lands or a card moves, which remounts the columns so they refetch.
@@ -41,6 +48,10 @@ export function CreatorBoard() {
     <section>
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <h1 className="text-2xl font-semibold tracking-tight">{creator?.displayName}</h1>
+        {/* Offered only to someone who has moderator powers to give up. */}
+        {granted.moderate ? (
+          <ViewModeSwitch mode={mode} onChange={choose} needsAck={needsAck} />
+        ) : null}
         {capabilities.administer ? (
           <Link
             to={`/c/${encodeURIComponent(slug)}/staff`}
@@ -66,6 +77,8 @@ export function CreatorBoard() {
           </Link>
         ) : null}
       </div>
+
+      <ModeBanner mode={mode} />
 
       <ThemeFilter themes={themes} selected={theme} onSelect={setTheme} />
 
