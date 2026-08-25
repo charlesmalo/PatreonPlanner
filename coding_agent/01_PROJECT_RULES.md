@@ -67,7 +67,7 @@ If any of these fails, the work is not done. See `07_TESTING_STANDARDS.md`.
      containers give it.** Integration tests migrate a fresh schema, where a
      de-duplication step has nothing to de-duplicate and passes vacuously.
    - **De-duplication needs a total order.** `DELETE ... WHERE a.createdAt >
-     b.createdAt` keeps *both* rows when two share a timestamp — and rows written
+b.createdAt` keeps _both_ rows when two share a timestamp — and rows written
      by one statement always do. The unique index that follows then fails, and it
      fails on deploy rather than in CI. Order on `(createdAt, id)`.
 7. **Multi-tenancy is absolute.** Every creator-scoped query filters on
