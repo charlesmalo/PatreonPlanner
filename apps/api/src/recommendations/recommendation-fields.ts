@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { NOTE_FIELDS } from '../notes/notes.service';
+import type { PrismaService } from '../prisma/prisma.service';
 import { visibleLinks, type LinkViewer } from './links.service';
 import type { ReactionCount } from '../reactions/reactions.service';
 
@@ -104,3 +105,22 @@ export const recommendationFields = (viewer: LinkViewer) =>
     },
     submittedBy: { select: { id: true, fullName: true, avatarUrl: true } },
   }) satisfies Prisma.RecommendationSelect;
+
+/**
+ * A card, with this viewer's own upvote resolved.
+ *
+ * Here rather than on a service because both the board read and the submission path need it, and
+ * the alternative was one of them importing the other. Takes its client explicitly so a caller
+ * inside a transaction can pass that instead.
+ */
+export async function withUpvoted<T extends { id: string; creatorNotes?: unknown[] }>(
+  prisma: PrismaService,
+  recommendation: T,
+  userId: string,
+) {
+  const upvote = await prisma.upvote.findUnique({
+    where: { recommendationId_userId: { recommendationId: recommendation.id, userId } },
+    select: { id: true },
+  });
+  return { ...present(recommendation), hasUpvoted: upvote !== null, ...BOARD_ONLY_DEFAULTS };
+}
