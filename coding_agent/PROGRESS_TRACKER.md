@@ -8,7 +8,7 @@ being built in sequence. Every sequenced step has shipped, including the
 link/candidate model (design §4), which was split out of grouping rather than
 dropped.
 
-The verification baseline at the time of writing: **840 API + 279 web + 38 e2e
+The verification baseline at the time of writing: **877 API + 279 web + 39 e2e
 tests passing**, typecheck clean across every package.
 
 ## Milestones
@@ -65,6 +65,7 @@ coverage`); vitest needs `@vitest/coverage-v8`, a new dependency and so the
 
 ## Session Log
 
-| Date       | Event                                                       |
-| ---------- | ----------------------------------------------------------- |
-| 2026-08-24 | `coding_agent/` ruleset added to an already-running project |
+| Date       | Event                                                                        |
+| ---------- | ---------------------------------------------------------------------------- |
+| 2026-08-24 | `coding_agent/` ruleset added to an already-running project                  |
+| 2026-08-25 | Link candidates shipped (plans 09, 10); every recorded API debt item cleared |
