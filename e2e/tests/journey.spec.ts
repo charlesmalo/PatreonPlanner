@@ -7,6 +7,7 @@ import {
   clearIntelligence,
   clearReaderState,
   clearStaff,
+  clearTickets,
   setTierWeights,
   makeOwner,
   makeStaff,
@@ -33,6 +34,7 @@ test.beforeEach(() => {
   clearAbuse();
   clearStaff();
   clearReaderState();
+  clearTickets();
   // Every test starts from the same state regardless of what ran before, including CI retries.
   resetRateLimits();
 });
@@ -323,6 +325,43 @@ test('a moderator looks at their own board as a patron sees it', async ({ page }
 
   await page.getByLabel(/viewing as/i).selectOption('moderator');
   await expect(page.getByRole('button', { name: /move “Ponyo”/i })).toBeVisible();
+});
+
+test('a patron disputes an entry and a moderator answers', async ({ page }) => {
+  seedEntryFrom('patreon-other-e2e', 'Re Zero');
+  await signIn(page, 500, 'patreon-tickets-mod-e2e');
+  makeStaff('patreon-tickets-mod-e2e');
+  await signOut(page);
+
+  await signIn(page, 500, 'patreon-disputer-e2e');
+  await page.goto(`/c/${CREATOR.slug}`);
+  await page
+    .getByLabel(/message the moderators/i)
+    .fill('This is season 3, not a duplicate of season 1.');
+  await page.getByRole('button', { name: /^send$/i }).click();
+  await expect(page.getByText(/a moderator will take a look/i)).toBeVisible();
+  await signOut(page);
+
+  await signIn(page, 500, 'patreon-tickets-mod-e2e');
+  await page.goto(`/c/${CREATOR.slug}`);
+  await page.getByRole('link', { name: /^messages$/i }).click();
+  await page.waitForURL((url) => url.pathname.endsWith('/tickets'));
+
+  const ticket = page.getByRole('listitem').filter({ hasText: /season 3/ });
+  await expect(ticket).toBeVisible();
+  await ticket.getByRole('radio', { name: /^confirm$/i }).check();
+  await ticket.getByRole('button', { name: /send reply/i }).click();
+
+  // It leaves the open list, and is findable among the resolved.
+  await expect(page.getByText(/nothing here/i)).toBeVisible();
+  await page.getByLabel(/show/i).selectOption('RESOLVED');
+  await expect(page.getByText(/season 3/)).toBeVisible();
+
+  // And the reader is told.
+  await signOut(page);
+  await signIn(page, 500, 'patreon-disputer-e2e');
+  await page.goto(`/c/${CREATOR.slug}`);
+  await expect(page.getByRole('button', { name: /1 unread notification/i })).toBeVisible();
 });
 
 test('a reader folds a column away and it stays folded', async ({ page }) => {

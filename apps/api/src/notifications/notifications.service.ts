@@ -15,6 +15,10 @@ export interface NotificationPayload {
   creatorName: string;
   status?: RecommendationStatus;
   reason?: FlagReason;
+  /** Tickets only: which one, and what staff decided about it. */
+  ticketId?: string;
+  resolution?: string;
+  reply?: string;
 }
 
 export interface EmitRow {
@@ -34,6 +38,12 @@ export interface EmitRow {
  * duplicate is housekeeping. OTHER sits at the bottom deliberately: an unclassified report must
  * not outrank one whose seriousness is known.
  */
+/**
+ * A ticket ranks above a status change and below a report: someone has taken the trouble to
+ * write, but nothing has been reported as wrong with the board.
+ */
+export const TICKET_SEVERITY = 15;
+
 export const SEVERITY_BY_REASON: Record<string, number> = {
   HARASSMENT: 50,
   SEXUAL_CONTENT: 40,
@@ -67,7 +77,10 @@ export class NotificationsService {
     await tx.notification.createMany({
       data: rows.map((row) => ({
         ...row,
-        severity: row.severity ?? SEVERITY_BY_REASON[row.payload.reason ?? ''] ?? 0,
+        severity:
+          row.severity ??
+          SEVERITY_BY_REASON[row.payload.reason ?? ''] ??
+          (row.type === 'TICKET_RAISED' ? TICKET_SEVERITY : 0),
         payload: row.payload as unknown as Prisma.InputJsonValue,
       })),
     });

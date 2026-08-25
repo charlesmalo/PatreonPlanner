@@ -374,7 +374,7 @@ Cheapest and highest-value first; each produces something usable on its own.
 4. Weighted voting: tier weights, tallies, the ratchet, the my-votes page
 5. Granular permissions and the permissions page
 6. View-as mode with the inactivity acknowledgement
-7. Disputes and tickets inbox
+7. Disputes and tickets inbox — **shipped**
 8. Grouping and the link/candidate model
 9. Donation page
 10. Reactions

@@ -154,6 +154,10 @@ export function setTierWeights(weights: Record<string, number>): void {
   seed(rows);
 }
 
+export function clearTickets(): void {
+  seed(`DELETE FROM "Ticket";`);
+}
+
 export function makeStaff(patreonUserId: string): void {
   seed(`
     -- The full set, matching what accepting an invite grants: an invitation says "come and
