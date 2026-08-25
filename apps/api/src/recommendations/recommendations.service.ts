@@ -27,6 +27,7 @@ import { SubmitRecommendationDto } from './dto/submit-recommendation.dto';
 import { PATRON_VISIBLE_STATUSES } from '../moderation/transitions';
 import { normalizeTitle } from './normalize-title';
 import { ReactionsService, type ReactionCount } from '../reactions/reactions.service';
+import { GroupingService } from './grouping.service';
 
 const MAX_PAGE = 50;
 
@@ -65,8 +66,13 @@ export const BOARD_ONLY_DEFAULTS = {
  * response is the same shape as a board entry. The relation had to dodge Recommendation's own
  * `notes` scalar; the API does not have to inherit that.
  */
-export function present<T extends { creatorNotes?: unknown[] }>(row: T) {
-  const { creatorNotes, ...rest } = row;
+export function present<T extends { creatorNotes?: unknown[]; groupHeadId?: string | null }>(
+  row: T,
+) {
+  // `groupHeadId` is internal: the contract exposes `parentId`, which is the same answer whether
+  // the head was chosen by staff or implied by the catalogue. `creatorNotes` is a schema artefact
+  // — the model had to dodge Recommendation's own `notes` scalar.
+  const { creatorNotes, groupHeadId, ...rest } = row;
   return { ...rest, notes: creatorNotes ?? [] };
 }
 
@@ -206,6 +212,9 @@ export const RECOMMENDATION_FIELDS = {
   upvoteCount: true,
   weightedScore: true,
   isCreatorPick: true,
+  // Read for the parent projection below, then dropped from the response — the contract exposes
+  // `parentId`, whether the head was chosen by staff or implied by the catalogue.
+  groupHeadId: true,
   createdAt: true,
   title: {
     // `id` is what GET /catalog/titles/:id/availability keys on. Without it the endpoint is
@@ -255,6 +264,7 @@ export class RecommendationsService {
     private readonly availability: AvailabilityService,
     private readonly abuse: AbuseService,
     private readonly reactions: ReactionsService,
+    private readonly grouping: GroupingService,
   ) {}
 
   /**
@@ -436,6 +446,19 @@ export class RecommendationsService {
     return viewer.userId
       ? this.withUpvoted(entry, viewer.userId)
       : { ...present(entry), hasUpvoted: false, ...BOARD_ONLY_DEFAULTS };
+  }
+
+  /**
+   * A vote lands on the entry it was cast on. When that entry sits inside a group, the head's
+   * totals are derived from the whole group — so it is recomputed in the same transaction, or
+   * the group's number quietly stops matching its members.
+   */
+  private async syncGroupHead(tx: Prisma.TransactionClient, recommendationId: string) {
+    const entry = await tx.recommendation.findUnique({
+      where: { id: recommendationId },
+      select: { groupHeadId: true },
+    });
+    if (entry?.groupHeadId) await this.grouping.recompute(tx, entry.groupHeadId);
   }
 
   /**
@@ -676,7 +699,7 @@ export class RecommendationsService {
    * something the viewer cannot see: the page has already been filtered by visibility.
    */
   private async parentsFor(
-    page: Array<{ id: string; titleId: string | null }>,
+    page: Array<{ id: string; titleId: string | null; groupHeadId?: string | null }>,
     titleIds: string[],
     creatorId: string,
   ): Promise<Map<string, string>> {
@@ -776,6 +799,7 @@ export class RecommendationsService {
           data: { upvoteCount: { decrement: 1 }, weightedScore: { decrement: cast } },
           select: { upvoteCount: true, weightedScore: true },
         });
+        await this.syncGroupHead(tx, recommendationId);
         return {
           upvoted: false,
           upvoteCount: updated.upvoteCount,
@@ -788,6 +812,7 @@ export class RecommendationsService {
         data: { upvoteCount: { increment: 1 }, weightedScore: { increment: weight } },
         select: { upvoteCount: true, weightedScore: true },
       });
+      await this.syncGroupHead(tx, recommendationId);
       return {
         upvoted: true,
         upvoteCount: updated.upvoteCount,
@@ -868,6 +893,7 @@ export class RecommendationsService {
       upvoteCount: number;
       weightedScore: number;
       isCreatorPick: boolean;
+      groupHeadId: string | null;
       createdAt: Date;
       titleId: string | null;
       upvotes?: Array<{ id: string }>;
@@ -905,7 +931,7 @@ export class RecommendationsService {
       : new Map<string, ReactionCount[]>();
 
     return {
-      items: page.map(({ upvotes, titleId, creatorNotes, ...item }) => ({
+      items: page.map(({ upvotes, titleId, creatorNotes, groupHeadId, ...item }) => ({
         ...item,
         // `creatorNotes` is a schema artefact — the model had to dodge Recommendation's own
         // `notes` scalar. The contract says what design §7 says.
@@ -916,7 +942,9 @@ export class RecommendationsService {
         // Nesting is a *per-board* projection, not a stored fact: whether an entry has a parent
         // depends on what else is on this board, which changes with every submission and every
         // status change.
-        parentId: (titleId && parents.get(titleId)) || null,
+        // A head chosen by staff wins over one TMDB implies: the explicit decision is the whole
+        // point, and it is the only one that can reach an entry with no catalogue title.
+        parentId: groupHeadId ?? ((titleId && parents.get(titleId)) || null),
         themes: (titleId && themes.get(titleId)) || [],
         // Never an input to the ordering above — see the Reaction model.
         reactions: reactions.get(item.id) ?? [],

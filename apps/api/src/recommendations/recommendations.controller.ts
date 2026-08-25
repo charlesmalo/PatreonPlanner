@@ -22,6 +22,8 @@ import {
 } from '../access/creator-access.guard';
 import { RequireCapability } from '../access/require-capability.decorator';
 import { RequirePermission } from '../access/require-permission.decorator';
+import { GroupEntryDto } from './dto/group-entry.dto';
+import { GroupingService } from './grouping.service';
 import { ChangeStatusDto } from '../moderation/dto/change-status.dto';
 import { CreateFlagDto } from '../moderation/dto/create-flag.dto';
 import { FlagsService } from '../moderation/flags.service';
@@ -41,6 +43,7 @@ export class RecommendationsController {
     private readonly moderationActions: ModerationActionsService,
     private readonly flags: FlagsService,
     private readonly search: SearchService,
+    private readonly grouping: GroupingService,
   ) {}
 
   @Get()
@@ -150,6 +153,32 @@ export class RecommendationsController {
   @UseGuards(CreatorAccessGuard, SessionGuard)
   unpick(@CurrentCreator() creator: ResolvedCreator, @Param('id', ParseUUIDPipe) id: string) {
     return this.recommendations.setCreatorPick(creator.id, id, false);
+  }
+
+  /**
+   * MOVE_ENTRIES: grouping moves a card *into* another card, which is the same family as moving
+   * one between columns and closer than editing its text.
+   */
+  @Post(':id/group')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RequireCapability('MODERATE')
+  @RequirePermission('MOVE_ENTRIES')
+  @UseGuards(CreatorAccessGuard, SessionGuard)
+  group(
+    @CurrentCreator() creator: ResolvedCreator,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: GroupEntryDto,
+  ) {
+    return this.grouping.group(creator.id, id, dto.intoId);
+  }
+
+  @Delete(':id/group')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RequireCapability('MODERATE')
+  @RequirePermission('MOVE_ENTRIES')
+  @UseGuards(CreatorAccessGuard, SessionGuard)
+  ungroup(@CurrentCreator() creator: ResolvedCreator, @Param('id', ParseUUIDPipe) id: string) {
+    return this.grouping.ungroup(creator.id, id);
   }
 
   @Post(':id/flags')
