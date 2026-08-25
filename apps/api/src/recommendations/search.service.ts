@@ -7,7 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { normalizeTitle } from './normalize-title';
 import {
   BOARD_ONLY_DEFAULTS,
-  RECOMMENDATION_FIELDS,
+  recommendationFields,
   present,
   visibilityWhere,
 } from './recommendations.service';
@@ -85,7 +85,10 @@ export class SearchService {
         AND: [{ id: { in: orderedIds }, creatorId: creator.id }, visibilityWhere(creator, viewer)],
       },
       select: {
-        ...RECOMMENDATION_FIELDS,
+        ...recommendationFields({
+          userId: viewer.userId,
+          isStaff: viewer.staffRole !== null,
+        }),
         ...(viewer.userId
           ? { upvotes: { where: { userId: viewer.userId }, select: { id: true }, take: 1 } }
           : {}),

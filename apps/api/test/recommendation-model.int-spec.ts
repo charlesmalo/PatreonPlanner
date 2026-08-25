@@ -58,7 +58,7 @@ describe('Recommendation models (integration)', () => {
     const rec = await make('Cascades');
     await prisma.upvote.create({ data: { recommendationId: rec.id, userId } });
     await prisma.recommendationLink.create({
-      data: { recommendationId: rec.id, url: 'https://example.com' },
+      data: { recommendationId: rec.id, url: 'https://example.com', canonicalUrl: 'example.com' },
     });
     await prisma.recommendation.delete({ where: { id: rec.id } });
     expect(await prisma.upvote.count({ where: { recommendationId: rec.id } })).toBe(0);
