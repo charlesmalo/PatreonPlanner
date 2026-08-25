@@ -3,11 +3,10 @@ import { ApiError, api } from '../api/client';
 import type { CatalogResult, Recommendation, SubmitResult } from '../api/types';
 import { SimilarEntries } from './SimilarEntries';
 import { WatchOrderEditor, type DraftItem } from './WatchOrderEditor';
+import { useCatalogSearch } from '../api/use-catalog-search';
 
 // Long enough that typing a title is one request, not one per keystroke — the endpoint spends a
 // third-party quota.
-const SEARCH_DEBOUNCE_MS = 300;
-
 interface SubmitFormProps {
   slug: string;
   onCreated: (recommendation: Recommendation) => void;
@@ -30,11 +29,15 @@ const MAX_DESCRIPTION = 2000;
 
 export function SubmitForm({ slug, onCreated, canUpvote = false, onUpvoted }: SubmitFormProps) {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<CatalogResult[]>([]);
   const [picked, setPicked] = useState<CatalogResult | null>(null);
-  const [searchError, setSearchError] = useState<string | null>(null);
+  const {
+    results,
+    error: searchError,
+    searched,
+    setResults,
+    setError: setSearchError,
+  } = useCatalogSearch(slug, query, picked !== null);
   /** Whether a search has come back for what is currently typed — not merely that it is empty. */
-  const [searched, setSearched] = useState(false);
   const [customTitle, setCustomTitle] = useState('');
   const [description, setDescription] = useState('');
   const [url, setUrl] = useState('');
@@ -116,36 +119,6 @@ export function SubmitForm({ slug, onCreated, canUpvote = false, onUpvoted }: Su
       setBusy(false);
     }
   }
-
-  const searchSeq = useRef(0);
-
-  useEffect(() => {
-    if (picked || query.trim().length < 2) {
-      setResults([]);
-      setSearched(false);
-      return;
-    }
-    setSearched(false);
-    const seq = ++searchSeq.current;
-    const timer = setTimeout(async () => {
-      try {
-        const response = await api.get<{ results: CatalogResult[] }>(
-          `/creators/${encodeURIComponent(slug)}/catalog/search?q=${encodeURIComponent(query.trim())}`,
-        );
-        // Ignore a response that a later keystroke has superseded, or results flicker backwards.
-        if (seq !== searchSeq.current) return;
-        setResults(response.results);
-        setSearchError(null);
-        setSearched(true);
-      } catch {
-        if (seq !== searchSeq.current) return;
-        setResults([]);
-        // Design §5: no match means refine or switch to an external link, not a dead end.
-        setSearchError('Could not search the catalogue. You can still add a link below.');
-      }
-    }, SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [query, picked, slug]);
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();

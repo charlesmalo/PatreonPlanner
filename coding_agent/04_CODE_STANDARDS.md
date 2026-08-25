@@ -15,9 +15,21 @@ A file growing past its limit is a signal it is doing too much. It is also
 practical: smaller, focused files are easier for both humans and agents to reason
 about and edit reliably.
 
-**Known breach:** `apps/api/src/recommendations/recommendations.service.ts` is
-well past 300 lines. Splitting it is a refactor needing its own approval; until
-then, prefer adding to a neighbouring service over growing it further.
+**Test files are judged differently.** A spec listing forty cases is long
+because the behaviour has forty cases, not because the file does too much.
+Split one when its cases stop sharing a subject, not when it crosses a number.
+
+**Known breaches**, all in `apps/web/src`, and each a deliberate stop rather
+than an oversight:
+
+| File                        | Lines | Why it stands                                                                                                                                                                                                                                                                                           |
+| --------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `components/SubmitForm.tsx` | 378   | One form with one submit path. The two genuinely separable parts have already left — `WatchOrderEditor` and `useCatalogSearch`. What is left is fourteen pieces of state that are all the same state; splitting it would mean lifting them into a parent, which moves the size rather than removing it. |
+| `routes/ReviewQueue.tsx`    | 345   | One page, one queue. Same reasoning.                                                                                                                                                                                                                                                                    |
+
+`apps/api/src/recommendations/recommendations.service.ts` was the standing
+breach at 1061 lines and is now 298 — see plan 11. Nothing in `apps/api/src`
+is over the limit.
 
 ## 2. Single Responsibility
 
