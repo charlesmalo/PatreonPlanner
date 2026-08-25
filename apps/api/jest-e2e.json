@@ -1,5 +1,9 @@
 {
-  "moduleFileExtensions": ["js", "json", "ts"],
+  "moduleFileExtensions": [
+    "js",
+    "json",
+    "ts"
+  ],
   "rootDir": ".",
   "testEnvironment": "node",
   "testRegex": ".(e2e-spec|int-spec).ts$",
@@ -7,5 +11,21 @@
   "globalTeardown": "<rootDir>/test/global-teardown.ts",
   "//": "One shared Postgres and Redis per run (see test/global-setup.ts); suites clone a migrated template. The timeout is here to catch a hang, not to police latency.",
   "testTimeout": 30000,
-  "transform": { "^.+\\.ts$": "ts-jest" }
+  "transform": {
+    "^.+\\.ts$": "ts-jest"
+  },
+  "collectCoverageFrom": [
+    "src/**/*.ts",
+    "!src/main.ts",
+    "!src/**/*.module.ts",
+    "!src/**/dto/*.ts"
+  ],
+  "coverageThreshold": {
+    "global": {
+      "lines": 90,
+      "branches": 75,
+      "statements": 90,
+      "functions": 90
+    }
+  }
 }

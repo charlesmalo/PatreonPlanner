@@ -40,6 +40,13 @@ pnpm format:check                          # formatting
 cd e2e && pnpm e2e                         # end-to-end, needs the Docker stack up
 ```
 
+A fifth is available but not part of the gate, because it re-runs the whole API
+suite and is slow to sit in the loop:
+
+```
+cd apps/api && pnpm coverage               # thresholds in jest-e2e.json
+```
+
 `pnpm -r test` transpiles without typechecking, so **a green test run does not
 imply a green build.** Both are required; that gap has broken a Docker build in
 this project before.

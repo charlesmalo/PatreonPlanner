@@ -33,18 +33,39 @@ fail against the current code before the fix lands
 
 ## 3. Coverage Gates
 
-| Metric          | Target |
-| --------------- | ------ |
-| Line coverage   | ≥ 90%  |
-| Branch coverage | ≥ 75%  |
+| Metric              | Gate  | Actual at wiring |
+| ------------------- | ----- | ---------------- |
+| Line coverage       | ≥ 90% | 97.3%            |
+| Branch coverage     | ≥ 75% | 87.8%            |
+| Statement coverage  | ≥ 90% | 96.7%            |
+| Function coverage   | ≥ 90% | 98.1%            |
 
-**Not currently wired.** No coverage tool is configured
-(`01_PROJECT_RULES.md`), so these are a target rather than an enforced gate.
-Wiring them is a decision for the engineer, and a gate added now would be
-negotiated against existing violations — which is how gates die.
+**Wired for the API**: `cd apps/api && pnpm coverage`. Jest's own coverage, so
+no dependency was added. Thresholds live in `jest-e2e.json`.
 
-Until then, coverage is judged by the mutation discipline in §7, which asks a
-stronger question than a percentage does.
+The gate is set at the *target*, not at today's number. A threshold pinned to
+current coverage fails on the first honest refactor and teaches everyone to
+raise it by hand; one pinned to the standard says what the standard says, and
+the headroom above it is where ordinary work happens.
+
+This was previously unwired on the argument that a gate added late is
+negotiated against existing violations — which is how gates die. That argument
+expired when the numbers were finally measured: every one already cleared its
+target, so there was nothing to negotiate. Verified to fail for its own reason
+by raising the line threshold to 99.9%, which exits 1 with all 840 tests still
+passing.
+
+`main.ts`, `*.module.ts` and DTOs are excluded: they are wiring and shape
+declarations, and covering them measures that the app boots, which every
+integration test already proves.
+
+**The web side is not wired.** Vitest needs `@vitest/coverage-v8`, a new
+dependency — the engineer's decision (`01_PROJECT_RULES.md` §4), not an
+agent's.
+
+A percentage is still the weaker question. Coverage says a line ran; the
+mutation discipline in §7 asks whether anything would have noticed if it ran
+wrong.
 
 **Never lower a threshold to make a build pass.**
 

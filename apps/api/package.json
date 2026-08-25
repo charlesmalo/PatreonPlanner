@@ -11,7 +11,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "dotenv -e ../../.env -- prisma migrate dev",
     "prisma:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
-    "verify:embeddings": "tsx scripts/verify-embeddings.ts"
+    "verify:embeddings": "tsx scripts/verify-embeddings.ts",
+    "coverage": "jest --config jest-e2e.json --runInBand --coverage"
   },
   "dependencies": {
     "@huggingface/transformers": "4.2.0",
