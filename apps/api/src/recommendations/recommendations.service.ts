@@ -28,7 +28,17 @@ import { PATRON_VISIBLE_STATUSES } from '../moderation/transitions';
 import { normalizeTitle } from './normalize-title';
 import { ReactionsService, type ReactionCount } from '../reactions/reactions.service';
 import { GroupingService } from './grouping.service';
-import { LinksService, visibleLinks, type LinkViewer } from './links.service';
+import { LinksService } from './links.service';
+import {
+  BOARD_ONLY_DEFAULTS,
+  present,
+  recommendationFields,
+  visibleLinks,
+  type LinkViewer,
+} from './recommendation-fields';
+
+// Re-exported for now so this task moves code without moving every importer with it.
+export { BOARD_ONLY_DEFAULTS, present, recommendationFields, visibleLinks, type LinkViewer };
 
 const MAX_PAGE = 50;
 
@@ -53,46 +63,12 @@ export const RATE_LIMIT_STRIKE_THRESHOLD = 5;
  * what matters here is that the shape matches, so a prepended card is not a different kind of
  * object from the ones beside it.
  */
-export const BOARD_ONLY_DEFAULTS = {
-  availability: null,
-  parentId: null,
-  themes: [] as Array<{ id: string; name: string }>,
-  // A freshly submitted entry and a search hit both have none, and a client rendering a card
-  // from either needs the same fields the board's card has.
-  reactions: [] as ReactionCount[],
-};
 
 /**
  * Renames the `creatorNotes` relation to the `notes` the contract uses, so a single-entry
  * response is the same shape as a board entry. The relation had to dodge Recommendation's own
  * `notes` scalar; the API does not have to inherit that.
  */
-type SelectedLink = { id: string; url: string; label: string | null; isPreferred: boolean } & {
-  status: string;
-};
-
-export function present<
-  T extends {
-    creatorNotes?: unknown[];
-    groupHeadId?: string | null;
-    links?: SelectedLink[];
-  },
->(row: T) {
-  // `groupHeadId` is internal: the contract exposes `parentId`, which is the same answer whether
-  // the head was chosen by staff or implied by the catalogue. `creatorNotes` is a schema artefact
-  // — the model had to dodge Recommendation's own `notes` scalar.
-  const { creatorNotes, groupHeadId, links, ...rest } = row;
-  // Published on the card, candidates alongside for the staff who decide. Partitioned in the one
-  // presenter every path goes through: a reader who is not staff never had a candidate selected,
-  // so this splits an already-safe list rather than being the thing that keeps it safe.
-  const strip = ({ status, ...link }: SelectedLink) => link;
-  return {
-    ...rest,
-    links: (links ?? []).filter((link) => link.status === 'PUBLISHED').map(strip),
-    candidateLinks: (links ?? []).filter((link) => link.status === 'CANDIDATE').map(strip),
-    notes: creatorNotes ?? [],
-  };
-}
 
 // Containment only. RELATED means "similar", and nesting on it would bury unrelated entries.
 const NESTING_KINDS: RelationKind[] = ['SEASON_OF', 'SAME_FRANCHISE'];
@@ -256,62 +232,6 @@ function decodeCursor(raw: string | undefined): BoardCursor | null {
     throw new BadRequestException('Invalid cursor');
   }
 }
-
-// Explicit select: the submitter is a User row carrying an email and Patreon id, neither of
-// which belongs on a public board.
-export { visibleLinks, type LinkViewer };
-
-export const recommendationFields = (viewer: LinkViewer) =>
-  ({
-    id: true,
-    type: true,
-    customTitle: true,
-    description: true,
-    status: true,
-    upvoteCount: true,
-    weightedScore: true,
-    isCreatorPick: true,
-    manualRank: true,
-    // Read for the parent projection below, then dropped from the response — the contract exposes
-    // `parentId`, whether the head was chosen by staff or implied by the catalogue.
-    groupHeadId: true,
-    createdAt: true,
-    title: {
-      // `id` is what GET /catalog/titles/:id/availability keys on. Without it the endpoint is
-      // unreachable: no response anywhere exposed the catalogue row's id.
-      select: { id: true, tmdbId: true, mediaType: true, name: true, year: true, posterPath: true },
-    },
-    // A candidate is a claim waiting for a human, and rendering someone else's would carry the
-    // creator's implicit endorsement — which is the whole reason it waits.
-    links: visibleLinks(viewer),
-    // TIMELINE only. A NOTE is editor commentary and must never reach the patron board — the kind
-    // is the whole point of the model, so the filter lives in the projection rather than in a
-    // caller who might forget it.
-    creatorNotes: {
-      where: { kind: 'TIMELINE' },
-      select: NOTE_FIELDS,
-      orderBy: { createdAt: 'asc' },
-    },
-    watchOrderItems: {
-      select: {
-        position: true,
-        customTitle: true,
-        note: true,
-        title: {
-          select: {
-            id: true,
-            tmdbId: true,
-            mediaType: true,
-            name: true,
-            year: true,
-            posterPath: true,
-          },
-        },
-      },
-      orderBy: { position: 'asc' },
-    },
-    submittedBy: { select: { id: true, fullName: true, avatarUrl: true } },
-  }) satisfies Prisma.RecommendationSelect;
 
 @Injectable()
 export class RecommendationsService {
