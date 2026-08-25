@@ -154,6 +154,10 @@ export function setTierWeights(weights: Record<string, number>): void {
   seed(rows);
 }
 
+export function clearReactions(): void {
+  seed(`DELETE FROM "Reaction";`);
+}
+
 export function clearTickets(): void {
   seed(`DELETE FROM "Ticket";`);
 }

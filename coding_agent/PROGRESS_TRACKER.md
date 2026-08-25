@@ -4,9 +4,9 @@
 
 Phase 1 is complete and merged. Phase 2 — the board experience — is designed in
 `docs/superpowers/specs/2026-08-17-phase2-board-experience-design.md` and is
-being built in sequence. Seven of its eleven steps have shipped.
+being built in sequence. Nine of its eleven steps have shipped.
 
-The verification baseline at the time of writing: **778 API + 248 web + 36 e2e
+The verification baseline at the time of writing: **792 API + 255 web + 37 e2e
 tests passing**, typecheck clean across every package.
 
 ## Milestones
@@ -25,7 +25,8 @@ tests passing**, typecheck clean across every package.
 - [x] M11: Granular moderator permissions, view-as mode
 - [x] M12: Disputes and contact tickets
 - [ ] M13: Grouping and the link/candidate model — **blocked**, see below
-- [ ] M14: Reactions, drag-and-drop
+- [x] M14: Reactions
+- [ ] M16: Drag-and-drop
 - [x] M15: Donation page (link-out; needs a payment URL to switch on)
 
 ## Active Task

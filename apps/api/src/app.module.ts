@@ -19,6 +19,7 @@ import { ModerationModule } from './moderation/moderation.module';
 import { MembershipsModule } from './memberships/memberships.module';
 import { NotesModule } from './notes/notes.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { ReactionsModule } from './reactions/reactions.module';
 import { TicketsModule } from './tickets/tickets.module';
 import { PatreonModule } from './patreon/patreon.module';
 import { RecommendationsModule } from './recommendations/recommendations.module';
@@ -41,6 +42,7 @@ import { HealthModule } from './health/health.module';
     StaffModule,
     NotesModule,
     NotificationsModule,
+    ReactionsModule,
     TicketsModule,
     PatreonModule,
     MembershipsModule,

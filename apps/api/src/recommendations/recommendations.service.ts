@@ -26,6 +26,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SubmitRecommendationDto } from './dto/submit-recommendation.dto';
 import { PATRON_VISIBLE_STATUSES } from '../moderation/transitions';
 import { normalizeTitle } from './normalize-title';
+import { ReactionsService, type ReactionCount } from '../reactions/reactions.service';
 
 const MAX_PAGE = 50;
 
@@ -54,6 +55,9 @@ export const BOARD_ONLY_DEFAULTS = {
   availability: null,
   parentId: null,
   themes: [] as Array<{ id: string; name: string }>,
+  // A freshly submitted entry and a search hit both have none, and a client rendering a card
+  // from either needs the same fields the board's card has.
+  reactions: [] as ReactionCount[],
 };
 
 /**
@@ -250,6 +254,7 @@ export class RecommendationsService {
     private readonly catalog: CatalogService,
     private readonly availability: AvailabilityService,
     private readonly abuse: AbuseService,
+    private readonly reactions: ReactionsService,
   ) {}
 
   /**
@@ -416,7 +421,7 @@ export class RecommendationsService {
    * them is itself the leak, since it confirms what is on a board they cannot see.
    */
   async findOne(
-    creator: { id: string; hidePendingFromPublic: boolean },
+    creator: { id: string; hidePendingFromPublic: boolean; allowReactions?: boolean },
     id: string,
     viewer: { userId: string | null; staffRole: StaffRoleValue | null },
   ) {
@@ -804,7 +809,7 @@ export class RecommendationsService {
    * callers should de-duplicate by id.
    */
   async list(
-    creator: { id: string; hidePendingFromPublic: boolean },
+    creator: { id: string; hidePendingFromPublic: boolean; allowReactions?: boolean },
     rawCursor: string | undefined,
     limit: number | undefined,
     viewer: { userId: string | null; staffRole: StaffRoleValue | null },
@@ -890,6 +895,14 @@ export class RecommendationsService {
 
     const parents = await this.parentsFor(page, titleIds, creator.id);
     const themes = await this.themesFor(titleIds, creator.id);
+    // One query for the page, like availability above. Empty when the board has reactions off,
+    // rather than fetched and hidden — a count nobody may see is a query nobody needs.
+    const reactions = creator.allowReactions
+      ? await this.reactions.forRecommendations(
+          page.map((item) => item.id),
+          viewerUserId,
+        )
+      : new Map<string, ReactionCount[]>();
 
     return {
       items: page.map(({ upvotes, titleId, creatorNotes, ...item }) => ({
@@ -905,6 +918,8 @@ export class RecommendationsService {
         // status change.
         parentId: (titleId && parents.get(titleId)) || null,
         themes: (titleId && themes.get(titleId)) || [],
+        // Never an input to the ordering above — see the Reaction model.
+        reactions: reactions.get(item.id) ?? [],
       })),
       nextCursor: hasMore && last ? encodeCursor(last) : null,
     };
