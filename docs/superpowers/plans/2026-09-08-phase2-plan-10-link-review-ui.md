@@ -6,7 +6,7 @@
 
 **Architecture:** Plan 09 shipped the model and the endpoints; nothing renders them. The board already sends `candidateLinks` to exactly the people entitled to see them — staff, and a candidate's own submitter — so the UI decides *what to draw*, never *who may see it*. The API stays the only gate.
 
-**Tech Stack:** React 18 + Vite + Tailwind, React Query, Vitest + RTL. No new dependencies.
+**Tech Stack:** React 18 + Vite + Tailwind, the project's own `api` client, Vitest + RTL. No new dependencies, and no React Query — this codebase does not use it.
 
 ## Global Constraints
 
@@ -39,12 +39,12 @@ A creator's only way to act on a candidate today is a direct `PATCH /creators/:s
 ## File Structure
 
 - `apps/api/src/creators/creators.controller.ts` — capabilities gains `permissions`.
-- `apps/api/test/capability.e2e-spec.ts` (the existing suite) — that it is the viewer's real set, and empty for a non-staff reader.
+- `apps/api/test/creator-access.int-spec.ts` (where the endpoint is already exercised; `capability.e2e-spec.ts` is the pure resolver) — that it is the viewer's real set, and empty for a non-staff reader.
 - `apps/web/src/api/types.ts` — `RecommendationLink.id`/`isPreferred`, `Recommendation.candidateLinks`, `Capabilities.permissions`.
 - `apps/web/src/components/LinkCandidates.tsx` — the whole surface. New file, so the card does not grow again.
 - `apps/web/src/components/LinkCandidates.test.tsx`
 - `apps/web/src/components/RecommendationCard.tsx` — renders `<LinkCandidates />`, nothing more.
-- `apps/web/src/api/hooks.ts` — `useDecideLink`, `useDiscardLink`.
+- No new hooks: this codebase has no React Query, and mutations follow `PickButton.tsx` — local state, optimistic with rollback, `api.patch`/`api.del`.
 
 ---
 
@@ -53,13 +53,13 @@ A creator's only way to act on a candidate today is a direct `PATCH /creators/:s
 **Files:**
 - Modify: `apps/api/src/creators/creators.controller.ts`
 - Modify: `apps/web/src/api/types.ts`
-- Test: `apps/api/test/capability.e2e-spec.ts` (the existing suite)
+- Test: `apps/api/test/creator-access.int-spec.ts` (where the endpoint is already exercised; `capability.e2e-spec.ts` is the pure resolver)
 
 **Interfaces:**
 - Consumes: `Viewer` (`{ userId, staffRole, permissions }`) from `../access/capability`, `can()` from `../access/capability`.
 - Produces: `GET /creators/:slug/capabilities` → the five booleans **plus** `permissions: StaffPermissionValue[]`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 it('tells a moderator which permissions they actually hold', async () => {
@@ -83,12 +83,12 @@ it('gives a patron an empty set, not a missing key', async () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
-Run: `cd apps/api && pnpm test -- capability`
+Run: `cd apps/api && pnpm test -- creator-access`
 Expected: FAIL — `permissions` is `undefined`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```ts
 return {
@@ -105,17 +105,17 @@ return {
 };
 ```
 
-- [ ] **Step 4: Run to verify they pass**
+- [x] **Step 4: Run to verify they pass**
 
-Run: `cd apps/api && pnpm test -- capability`
+Run: `cd apps/api && pnpm test -- creator-access`
 
-- [ ] **Step 5: Mutation-check**
+- [x] **Step 5: Mutation-check**
 
 Replace the OWNER branch with `viewer.permissions`. The owner test must fail. `Viewer.permissions` is already non-optional and empty for a non-staff viewer, so the patron
 test guards the *contract* rather than a `??`. Confirm it by deleting the `permissions` key
 entirely: it must fail.
 
-- [ ] **Step 6: Add the web types**
+- [x] **Step 6: Add the web types**
 
 ```ts
 export interface Capabilities {
@@ -138,7 +138,7 @@ export interface RecommendationLink {
 
 Check `narrowCapabilities` in `view-mode.ts`: view-as-patron must empty `permissions`, for the same reason it clears `moderate`. Add a test that it does.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add -A && git commit -m "feat(api): capabilities say which permissions a viewer holds"
@@ -152,13 +152,13 @@ git add -A && git commit -m "feat(api): capabilities say which permissions a vie
 - Create: `apps/web/src/components/LinkCandidates.tsx`
 - Create: `apps/web/src/components/LinkCandidates.test.tsx`
 - Modify: `apps/web/src/components/RecommendationCard.tsx`
-- Modify: `apps/web/src/api/hooks.ts`, `apps/web/src/api/types.ts`
+- Modify: `apps/web/src/api/types.ts`
 
 **Interfaces:**
 - Consumes: `Recommendation.candidateLinks`, `Capabilities.permissions`, `isSafeHttpUrl`.
-- Produces: `<LinkCandidates slug candidates capabilities />`; `useDecideLink(slug)`, `useDiscardLink(slug)`.
+- Produces: `<LinkCandidates slug candidates capabilities />`. No hooks — see above.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```tsx
 const candidate = { id: 'l1', url: 'https://example.test/a', label: null, isPreferred: false };
@@ -204,17 +204,15 @@ it('renders a javascript: candidate as inert text', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `cd apps/web && pnpm vitest run LinkCandidates`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```tsx
 export function LinkCandidates({ slug, candidates, capabilities }: Props) {
-  const decide = useDecideLink(slug);
-  const discard = useDiscardLink(slug);
   if (candidates.length === 0) return null;
 
   const mayDecide = capabilities.permissions.includes('EDIT_ENTRIES');
@@ -233,10 +231,8 @@ export function LinkCandidates({ slug, candidates, capabilities }: Props) {
             </span>
             {mayDecide ? (
               <>
-                <button onClick={() => decide.mutate({ id: link.id, status: 'PUBLISHED' })}>
-                  Publish
-                </button>
-                <button onClick={() => discard.mutate({ id: link.id })}>Discard</button>
+                <button onClick={() => publish(link)}>Publish</button>
+                <button onClick={() => discard(link)}>Discard</button>
               </>
             ) : null}
           </li>
@@ -247,15 +243,15 @@ export function LinkCandidates({ slug, candidates, capabilities }: Props) {
 }
 ```
 
-- [ ] **Step 4: Run to verify they pass**
+- [x] **Step 4: Run to verify they pass**
 
 Run: `cd apps/web && pnpm vitest run LinkCandidates`
 
-- [ ] **Step 5: Mutation-check**
+- [x] **Step 5: Mutation-check**
 
 Change `mayDecide` to `capabilities.moderate`; the `HANDLE_REPORTS` test must fail. Render the URL inside an `<a href>`; the two "never a link" tests must fail. Delete the `candidates.length === 0` guard; the empty test must fail.
 
-- [ ] **Step 6: Wire it into the card and run everything**
+- [x] **Step 6: Wire it into the card and run everything**
 
 ```tsx
 <LinkCandidates
@@ -269,13 +265,24 @@ The `?? []` matches the defensive pattern already on `themes` and `notes`, and f
 
 Run: `pnpm -r typecheck && cd apps/web && pnpm vitest run && cd ../api && pnpm test`
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add -A && git commit -m "feat(web): staff decide a link candidate where the entry is"
 ```
 
 ---
+
+## What was found while building it
+
+- **`narrowCapabilities` blanked the whole board** when a capabilities payload had no
+  `permissions` key — it runs inside render, so the throw took the page rather than a control.
+  Guarded, with a test for the older shape.
+- **The publish path needed its own scheme check.** A mutation removing `isSafeHttpUrl` from the
+  just-published row survived the first pass: every test rendered a `javascript:` candidate but
+  none *published* one, which is precisely where the URL becomes an `href`.
+- **`isSafeHttpUrl` moved to its own module.** It lived on `RecommendationCard`, which now
+  imports `LinkCandidates` — leaving it there made the two import each other.
 
 ## Known risks
 

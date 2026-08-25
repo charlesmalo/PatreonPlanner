@@ -117,6 +117,7 @@ export function CreatorBoard() {
             theme={theme}
             canUpvote={capabilities.upvote}
             canModerate={capabilities.moderate}
+            permissions={capabilities.permissions}
             onMoved={refresh}
             emptyText={
               status === 'PENDING'

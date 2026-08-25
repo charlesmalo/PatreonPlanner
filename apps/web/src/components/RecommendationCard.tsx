@@ -1,23 +1,12 @@
 import { Link } from 'react-router-dom';
-import type { Recommendation } from '../api/types';
+import type { Recommendation, StaffPermission } from '../api/types';
 
 // Built here rather than stored, so the image size can change without a migration.
 const POSTER_BASE = 'https://image.tmdb.org/t/p/w92';
 
-/**
- * The API restricts link URLs to http(s) at submit time. This repeats the check at the one place
- * attacker input becomes an attribute, so a future API regression is not immediately exploitable
- * — React only warns on a javascript: href, it does not block it.
- */
-export function isSafeHttpUrl(value: string): boolean {
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
-  } catch {
-    return false;
-  }
-}
 import { AvailabilityBadges } from './AvailabilityBadges';
+import { isSafeHttpUrl } from './safe-url';
+import { LinkCandidates } from './LinkCandidates';
 import { FlagButton } from './FlagButton';
 import { NoteList } from './NoteList';
 import { PickButton } from './PickButton';
@@ -32,6 +21,8 @@ interface RecommendationCardProps {
   recommendation: Recommendation;
   canUpvote: boolean;
   canModerate: boolean;
+  /** Which staff controls to draw. The API checks each one again and refuses regardless. */
+  permissions?: StaffPermission[];
   onCount: (id: string, count: number, upvoted?: boolean) => void;
   onStatusChanged: (id: string, status: string) => void;
   /** Entries this one contains — a season under its show, a film under its franchise. */
@@ -49,6 +40,7 @@ export function RecommendationCard({
   headingLevel = 3,
   canUpvote,
   canModerate,
+  permissions = [],
   onCount,
   onStatusChanged,
   children,
@@ -159,6 +151,15 @@ export function RecommendationCard({
               ))}
           </ul>
         ) : null}
+        {/* Defensive `?? []` for the reason `themes` and `notes` carry one: a card renders from
+            both the board projection and a submit response, and a shape mismatch between them
+            should cost this strip, not the page. */}
+        <LinkCandidates
+          slug={slug}
+          candidates={recommendation.candidateLinks ?? []}
+          canModerate={canModerate}
+          permissions={permissions}
+        />
         <WatchOrderList items={recommendation.watchOrderItems} />
         <NoteList notes={recommendation.notes ?? []} />
         <AvailabilityBadges

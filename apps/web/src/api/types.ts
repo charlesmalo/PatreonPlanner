@@ -149,6 +149,12 @@ export interface Recommendation {
   parentId: string | null;
   themes: Array<{ id: string; name: string }>;
   links: RecommendationLink[];
+  /**
+   * Links suggested but not yet published. The API sends these only to staff and to a
+   * candidate's own submitter, so anything here is already the viewer's to see — the client
+   * decides how to draw them, never who gets them.
+   */
+  candidateLinks: RecommendationLink[];
   submittedBy: { id: string; fullName: string | null; avatarUrl: string | null };
 }
 

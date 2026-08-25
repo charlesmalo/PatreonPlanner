@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client';
+import type { StaffPermission } from '../api/types';
 import { useBoard } from '../api/hooks';
 import { readDrag } from './drag';
 import { buildTree, type TreeNode } from './board-tree';
@@ -12,6 +13,8 @@ interface BoardColumnProps {
   theme: string | null;
   canUpvote: boolean;
   canModerate: boolean;
+  /** Which staff controls the cards may draw. The API checks each one again. */
+  permissions: StaffPermission[];
   /** Told when an entry leaves this column, so the destination can refetch. */
   onMoved: (id: string, status: string) => void;
   /** What an empty column says. Suggestions invites a submission; the rest simply say so. */
@@ -54,6 +57,7 @@ export function BoardColumn({
   theme,
   canUpvote,
   canModerate,
+  permissions,
   onMoved,
   emptyText = 'Nothing here yet.',
 }: BoardColumnProps) {
@@ -114,6 +118,7 @@ export function BoardColumn({
       recommendation={node.item}
       canUpvote={canUpvote}
       canModerate={canModerate}
+      permissions={permissions}
       onCount={board.applyUpvote}
       onStatusChanged={(id, next) => {
         board.remove(id);
