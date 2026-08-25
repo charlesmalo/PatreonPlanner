@@ -54,21 +54,6 @@ export { BOARD_ONLY_DEFAULTS, present, recommendationFields, visibleLinks, type 
 export { visibilityWhere, type BoardSort };
 
 /**
- * How many de-duplicated resubmissions in an hour earn a strike. A refunded duplicate is free to
- * the limiter but not to us: it already spent a moderation pass and a catalogue call before the
- * de-dupe check saw it, so replaying one was unlimited and free.
- */
-export const DUPLICATE_STRIKE_THRESHOLD = 5;
-
-/**
- * How many 429s in an hour earn a strike. Design §6.4 says strikes come from *repeated*
- * rate-limit hits, and the submission cap is one an hour: a patron with a second idea ten
- * minutes later is not an abuser, and striking their first 429 timed them out of every board
- * they pay for after three impatient clicks.
- */
-export const RATE_LIMIT_STRIKE_THRESHOLD = 5;
-
-/**
  * What the board projection adds and a single-entry response cannot compute: a parent depends on
  * what else is on the board, and themes arrive with enrichment. Both resolve on the next read;
  * what matters here is that the shape matches, so a prepended card is not a different kind of
@@ -151,6 +136,13 @@ export class RecommendationsService {
     if (count === 0) throw new NotFoundException();
   }
 
+  /**
+   * Maps each page title to the recommendation on this page that contains it.
+   *
+   * Only containment kinds nest — RELATED means "similar", and nesting on it would bury
+   * unrelated entries under each other. Resolved within the page, so a child never nests under
+   * something the viewer cannot see: the page has already been filtered by visibility.
+   */
   private async parentsFor(
     page: Array<{ id: string; titleId: string | null; groupHeadId?: string | null }>,
     titleIds: string[],

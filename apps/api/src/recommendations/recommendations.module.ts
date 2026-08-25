@@ -5,6 +5,8 @@ import { MyVotesService } from './my-votes.service';
 import { GroupingService } from './grouping.service';
 import { LinksController } from './links.controller';
 import { SubmissionsService } from './submissions.service';
+import { SubmissionResolverService } from './submission-resolver.service';
+import { SubmissionStrikesService } from './submission-strikes.service';
 import { LinksService } from './links.service';
 import { RecommendationsService } from './recommendations.service';
 import { SearchService } from './search.service';
@@ -14,6 +16,8 @@ import { SearchService } from './search.service';
   providers: [
     RecommendationsService,
     SubmissionsService,
+    SubmissionResolverService,
+    SubmissionStrikesService,
     SearchService,
     MyVotesService,
     GroupingService,

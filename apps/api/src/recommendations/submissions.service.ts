@@ -9,7 +9,11 @@ import {
 } from '@nestjs/common';
 import { MediaType, Prisma, StrikeReason } from '@prisma/client';
 import { AbuseService } from '../abuse/abuse.service';
-import { CatalogService } from '../catalog/catalog.service';
+import {
+  RATE_LIMIT_STRIKE_THRESHOLD,
+  SubmissionStrikesService,
+} from './submission-strikes.service';
+import { SubmissionResolverService } from './submission-resolver.service';
 import { ConfigService } from '../config/config.module';
 import { RateLimitService } from '../limits/rate-limit.service';
 import { ModerationService } from '../moderation/moderation.service';
@@ -34,18 +38,6 @@ import {
  * what they added already exist" — a different set of collaborators and a different set of
  * failure modes.
  */
-/** How many duplicate submissions in the window before the submitter is treated as abusive. */
-export const DUPLICATE_STRIKE_THRESHOLD = 5;
-
-/** The same, for hitting the rate limit rather than resubmitting an existing title. */
-export const RATE_LIMIT_STRIKE_THRESHOLD = 5;
-
-/** Which canonical media type each binding content class resolves against. */
-const MEDIA_TYPES: Record<'MOVIE' | 'SHOW' | 'FRANCHISE', MediaType> = {
-  MOVIE: 'MOVIE',
-  SHOW: 'TV',
-  FRANCHISE: 'COLLECTION',
-};
 
 @Injectable()
 export class SubmissionsService {
@@ -54,9 +46,10 @@ export class SubmissionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly abuse: AbuseService,
+    private readonly strikes: SubmissionStrikesService,
     private readonly limits: RateLimitService,
     private readonly moderation: ModerationService,
-    private readonly catalog: CatalogService,
+    private readonly resolver: SubmissionResolverService,
     private readonly config: ConfigService,
     private readonly links: LinksService,
   ) {}
@@ -96,7 +89,7 @@ export class SubmissionsService {
       3600,
     );
     if (!allowed || !globallyAllowed) {
-      await this.countTowardStrike(
+      await this.strikes.countTowardStrike(
         `ratelimited:${userId}`,
         RATE_LIMIT_STRIKE_THRESHOLD,
         'RATE_LIMIT',
@@ -124,18 +117,18 @@ export class SubmissionsService {
       // Generic to the caller, specific in the log: design §9 wants no probing of the rules.
       this.logger.warn(`Blocked submission from user ${userId} to creator ${creatorId}`);
       // Design §6.5: a BLOCK is a strike. This is the durable record §6.4 asks for.
-      await this.recordStrike(userId, 'MODERATION_BLOCK');
+      await this.strikes.recordStrike(userId, 'MODERATION_BLOCK');
       throw new BadRequestException('Submission rejected');
     }
 
     // Resolved after moderation, for the same reason de-dupe is: a blocked submission must not
     // be able to probe the catalogue or spend its quota.
-    const title = await this.resolveTitle(dto);
+    const title = await this.resolver.resolveTitle(dto);
     // Resolved here rather than inside create(), for two reasons. A duplicate must not skip item
     // validation — the same body was a 400 with a fresh name and a 200 with a taken one. And the
     // Title upserts these do must sit outside the P2002 catch below, which reads any unique
     // violation as "someone won the de-dupe race".
-    const items = await this.resolveItems(dto);
+    const items = await this.resolver.resolveItems(dto);
 
     // De-dupe after moderation, so a blocked resubmission cannot be used to confirm what
     // already exists on a board the sender cannot read.
@@ -165,8 +158,8 @@ export class SubmissionsService {
     if (existing) {
       // Refund: nothing was created, and at 1/hour charging for it would lock a patron out for
       // an hour for doing exactly what design §5 wants them to do.
-      await this.refund(perCreatorKey, globalKey);
-      await this.countDuplicate(userId, creatorId);
+      await this.strikes.refund(perCreatorKey, globalKey);
+      await this.strikes.countDuplicate(userId, creatorId);
       // The link is the new information in a repeat submission. Throwing it away is what this
       // replaces — it queues as a candidate for staff rather than publishing itself.
       if (dto.links?.length) {
@@ -214,8 +207,8 @@ export class SubmissionsService {
         // No winner means the violation came from somewhere else — a Title upsert, say — and
         // reporting it as a duplicate would refund the limit and lose the submission.
         if (!winner) throw error;
-        await this.refund(perCreatorKey, globalKey);
-        await this.countDuplicate(userId, creatorId);
+        await this.strikes.refund(perCreatorKey, globalKey);
+        await this.strikes.countDuplicate(userId, creatorId);
         if (dto.links?.length) {
           winner.links = await this.links.contribute(
             this.prisma,
@@ -252,112 +245,6 @@ export class SubmissionsService {
    * them is itself the leak, since it confirms what is on a board they cannot see.
    */
 
-  /**
-   * A strike is a side effect of a decision already made. It must never turn a 400 into a 500 —
-   * the caller's answer does not depend on whether we managed to write it down.
-   */
-  private async recordStrike(userId: string, reason: StrikeReason): Promise<void> {
-    try {
-      await this.abuse.strike(userId, reason);
-    } catch (error) {
-      this.logger.warn(`Could not record a strike for user ${userId}: ${String(error)}`);
-    }
-  }
-
-  /**
-   * Counted rather than limited: the first few duplicates are exactly what design §5 wants.
-   *
-   * Keyed per creator, because a patron suggesting one popular title to each of six boards they
-   * follow produces six duplicates in a session — every one of them a 200 and the behaviour §5
-   * asks for. Only replaying at *one* board is the flood this guards against.
-   */
-  private countDuplicate(userId: string, creatorId: string): Promise<void> {
-    return this.countTowardStrike(
-      `duplicate:${userId}:${creatorId}`,
-      DUPLICATE_STRIKE_THRESHOLD,
-      'DUPLICATE_FLOOD',
-      userId,
-    );
-  }
-
-  /**
-   * Strikes exactly once, on the request that crosses the threshold. `>=` struck on every
-   * request past it, so six duplicates — a cheap, sanctioned path — earned two strikes and an
-   * hour's lockout.
-   */
-  private async countTowardStrike(
-    key: string,
-    threshold: number,
-    reason: StrikeReason,
-    userId: string,
-  ): Promise<void> {
-    try {
-      const seen = await this.limits.count(key, 3600);
-      if (seen === threshold) await this.abuse.strike(userId, reason);
-    } catch (error) {
-      this.logger.warn(`Could not count ${reason} for user ${userId}: ${String(error)}`);
-    }
-  }
-
-  private async refund(...keys: string[]): Promise<void> {
-    await Promise.all(keys.map((key) => this.limits.refund(key)));
-  }
-
-  /**
-   * Confirms a mainstream submission against the catalogue and persists the canonical title, so
-   * the stored name is TMDB's rather than whatever the client typed. Returns null for external
-   * links, which have no canonical identity.
-   */
-  private async resolveTitle(dto: SubmitRecommendationDto) {
-    // Items belong to a watch order and nothing else; accepting them elsewhere would store rows
-    // no read model ever surfaces.
-    if (dto.type !== 'WATCH_ORDER' && dto.items !== undefined) {
-      throw new BadRequestException('Only a watch order can carry items');
-    }
-    if (dto.type === 'EXTERNAL_LINK' || dto.type === 'WATCH_ORDER') {
-      // Whitelisting keeps declared properties, so without this a client could attach a binding
-      // that never passed the catalogue check.
-      if (dto.tmdbId !== undefined) {
-        throw new BadRequestException('This type cannot carry a catalogue id');
-      }
-      return null;
-    }
-    // The canonical name wins, so a supplied one is never used — and silently ignoring it lets a
-    // submitter believe they named the entry. Symmetrical with the id check above.
-    if (dto.customTitle !== undefined) {
-      throw new BadRequestException('A catalogue-bound entry takes its title from the catalogue');
-    }
-    // A franchise is a TMDB collection: another canonical identity, so it reuses Title wholesale.
-    const mediaType = MEDIA_TYPES[dto.type];
-    const result = await this.catalog.fetchTitle(dto.tmdbId as number, mediaType);
-    // An id the catalogue does not know is a client mistake; writing it would create an entry
-    // nothing can ever resolve.
-    if (!result) throw new BadRequestException('Unknown title');
-
-    return this.prisma.title.upsert({
-      where: { tmdbId_mediaType: { tmdbId: result.tmdbId, mediaType } },
-      create: {
-        tmdbId: result.tmdbId,
-        mediaType,
-        name: result.name,
-        year: result.year,
-        posterPath: result.posterPath,
-        overview: result.overview,
-      },
-      update: {
-        // Refreshed on each binding: posters and overviews change upstream.
-        name: result.name,
-        year: result.year,
-        posterPath: result.posterPath,
-        // Back into the enrichment queue. Themes are per creator and seeded from whoever holds
-        // the title *at enrichment time*, so a title enriched for creator A and later suggested
-        // on creator B's board would otherwise leave B without theme chips forever.
-        enrichedAt: null,
-      },
-      select: { id: true, name: true },
-    });
-  }
-
   private async create(
     creatorId: string,
     userId: string,
@@ -365,7 +252,7 @@ export class SubmissionsService {
     displayTitle: string,
     normalizedTitle: string,
     titleId: string | null,
-    items: Awaited<ReturnType<SubmissionsService['resolveItems']>>,
+    items: Awaited<ReturnType<SubmissionResolverService['resolveItems']>>,
     isStaff: boolean,
   ) {
     const recommendation = await this.prisma.recommendation.create({
@@ -407,79 +294,4 @@ export class SubmissionsService {
       },
     };
   }
-
-  /**
-   * Numbers the steps 0..n-1 from the order they arrived in. A client-supplied position is not
-   * trusted: a duplicated or sparse one renders an order nobody can read, and the unique index
-   * would reject it anyway.
-   */
-  private async resolveItems(dto: SubmitRecommendationDto) {
-    if (dto.type !== 'WATCH_ORDER' || !dto.items) return [];
-
-    const resolved: Array<{
-      position: number;
-      titleId?: string;
-      customTitle?: string;
-      note: string | null;
-    }> = [];
-
-    // Sequential, not Promise.all: fifty steps meant fifty simultaneous TMDB requests and fifty
-    // concurrent upserts, which trips the upstream rate limit and exhausts the connection pool —
-    // and a 429 surfaced to the patron as "Unknown title", blaming them for our fan-out.
-    for (const [position, item] of dto.items.entries()) {
-      const bound = item.tmdbId !== undefined;
-      const titled = (item.customTitle ?? '').trim().length > 0;
-      // Exactly one identity: neither leaves nothing to render, both is ambiguous about which
-      // name is authoritative. The database check constraint enforces the same rule.
-      if (bound === titled) {
-        throw new BadRequestException('Each step needs either a catalogue id or a title');
-      }
-      if (!bound) {
-        resolved.push({
-          position,
-          customTitle: (item.customTitle as string).trim(),
-          note: item.note?.trim() || null,
-        });
-        continue;
-      }
-      // Required alongside tmdbId: TMDB ids are unique only within a media type, so defaulting
-      // it silently bound film 1399 for a caller who meant series 1399.
-      if (!item.mediaType) {
-        throw new BadRequestException('A catalogue step must say whether it is a film or a show');
-      }
-
-      const mediaType: MediaType = item.mediaType === 'SHOW' ? 'TV' : 'MOVIE';
-      const result = await this.catalog.fetchTitle(item.tmdbId as number, mediaType);
-      if (!result) throw new BadRequestException('Unknown title in the watch order');
-      const title = await this.prisma.title.upsert({
-        where: { tmdbId_mediaType: { tmdbId: result.tmdbId, mediaType } },
-        create: {
-          tmdbId: result.tmdbId,
-          mediaType,
-          name: result.name,
-          year: result.year,
-          posterPath: result.posterPath,
-          overview: result.overview,
-        },
-        update: {
-          name: result.name,
-          year: result.year,
-          posterPath: result.posterPath,
-          // Same reason as above: a step's title may be new to this creator's board.
-          enrichedAt: null,
-        },
-        select: { id: true },
-      });
-      resolved.push({ position, titleId: title.id, note: item.note?.trim() || null });
-    }
-    return resolved;
-  }
-
-  /**
-   * Maps each page title to the recommendation on this page that contains it.
-   *
-   * Only containment kinds nest — RELATED means "similar", and nesting on it would bury
-   * unrelated entries under each other. Resolved within the page, so a child never nests under
-   * something the viewer cannot see: the page has already been filtered by visibility.
-   */
 }
