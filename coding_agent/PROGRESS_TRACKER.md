@@ -4,10 +4,11 @@
 
 Phase 1 is complete and merged. Phase 2 — the board experience — is designed in
 `docs/superpowers/specs/2026-08-17-phase2-board-experience-design.md` and is
-being built in sequence. All eleven sequenced steps have shipped. What remains is the link/candidate
-model (design §4), which was split out of grouping rather than dropped.
+being built in sequence. Every sequenced step has shipped, including the
+link/candidate model (design §4), which was split out of grouping rather than
+dropped.
 
-The verification baseline at the time of writing: **816 API + 261 web + 38 e2e
+The verification baseline at the time of writing: **840 API + 279 web + 38 e2e
 tests passing**, typecheck clean across every package.
 
 ## Milestones
@@ -25,21 +26,22 @@ tests passing**, typecheck clean across every package.
 - [x] M10: Weighted voting, the upward-only ratchet, the my-votes page
 - [x] M11: Granular moderator permissions, view-as mode
 - [x] M12: Disputes and contact tickets
-- [x] M13: Grouping (the link/candidate model is its own plan, not yet started)
+- [x] M13: Grouping
 - [x] M14: Reactions
 - [x] M16: Drag-and-drop, and hand-arranged order
 - [x] M15: Donation page (link-out; needs a payment URL to switch on)
+- [x] M17: Link candidates — a submitted link waits for staff, and staff decide
+  on the card (plans 09 and 10)
 
 ## Active Task
 
-None. The Phase 2 sequence is complete. The link/candidate model (design §4)
-is the remaining designed-but-unbuilt piece.
+Working down `Known Debt` below. The Phase 2 sequence is complete and nothing
+in the design is left unbuilt.
 
 ## Open Questions Blocking Work
 
 | Question                                                       | Blocks | Why it matters                                                                     |
 | -------------------------------------------------------------- | ------ | ---------------------------------------------------------------------------------- |
-| Does a group's weight sum its children, or show only the head? | M13    | Weight is now a real number rather than a headcount, so the answer changes ranking |
 | What does premium contain beyond the reaction palette?         | M14    | It may withhold no functionality and may not override a creator's limits           |
 | Which permissions stay bundled under `MODERATE`?               | —      | The five that exist cover today's endpoints                                        |
 

@@ -1,32 +1,45 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+# Anything generated here inherits the project's own ruleset. Left at the default, OpenSpec
+# artifacts arrived without the rules every other artifact in this repo is held to — which is
+# how a proposal ends up proposing something `coding_agent/` already forbids.
+context: |
+  PatreonPlanner — patrons suggest what a creator should watch, read or play; the creator's
+  board is where those suggestions are ranked, moderated and worked.
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+  The single source of truth for how any agent works here is `coding_agent/`, starting at
+  `coding_agent/00_AGENT_INSTRUCTIONS.md`. Everything below is a summary of it, not a
+  replacement — where they disagree, `coding_agent/` wins.
 
-# Per-operation guidance (optional)
-# Add advisory guidance for how apply and archive work should be conducted.
-# This is separate from artifact rules above.
-# Example:
-#   operations:
-#     apply:
-#       guidance:
-#         - Keep test summaries concise
-#     archive:
-#       guidance:
-#         - Summarize the archive outcome before finishing
+  Stack: pnpm monorepo (`apps/api`, `apps/web`, `e2e`). NestJS 10 + Prisma 5 + Postgres 16
+  (pgvector, pg_trgm) + Redis/BullMQ. React 18 + Vite + Tailwind. Jest + Testcontainers for the
+  API, Vitest + RTL for the web, Playwright against a real Docker stack for e2e.
+
+  Non-negotiables:
+  - Free tier only. No paid API, service or dependency without the engineer reopening it.
+  - Brainstorm, then requirements, then plan, then implement. Never skip a phase.
+  - Never claim done without running the verification commands and quoting their output.
+    `pnpm -r test` does not typecheck — `pnpm -r typecheck` is a separate gate.
+  - Multi-tenancy is absolute: every creator-scoped query filters on `creatorId`, and Prisma
+    `where` clauses compose with `AND: [...]`, never by spreading.
+  - 404, not 403, for content a reader may not know exists.
+  - Architectural decisions, new dependencies and out-of-scope changes need approval.
+
+rules:
+  proposal:
+    - Name the property of the problem that drives each decision, in one sentence.
+    - Include a "Out, with reasons" section — what was considered and deliberately excluded.
+    - State the consequence for an existing user plainly, including regressions.
+  tasks:
+    - Every task ends with an independently testable deliverable.
+    - Each task carries a mutation-check step: name the change that must make a test fail.
+    - No placeholders. "Add appropriate error handling" is a plan failure, not a task.
+
+operations:
+  apply:
+    guidance:
+      - Quote the verification output. A summary of a test run is not a test run.
+      - A test that passes the moment it is written has not been shown to work; make it fail first.
+  archive:
+    guidance:
+      - Record what was found while building, not only what was planned.
