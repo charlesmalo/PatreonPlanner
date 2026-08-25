@@ -13,6 +13,39 @@ const noNotifications = {
 };
 
 describe('accessibility basics', () => {
+  it('keeps the donation link off a creator board, and offers it elsewhere', () => {
+    // A donation ask on a creator's page competes with that creator's own Patreon ask, in front
+    // of an audience that came for them.
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/c/ada-writes']}>
+        <Layout
+          user={null}
+          loadingSession={false}
+          onSignOut={vi.fn()}
+          notifications={noNotifications}
+        >
+          <p>content</p>
+        </Layout>
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole('link', { name: /support the developers/i })).not.toBeInTheDocument();
+    unmount();
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Layout
+          user={null}
+          loadingSession={false}
+          onSignOut={vi.fn()}
+          notifications={noNotifications}
+        >
+          <p>content</p>
+        </Layout>
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('link', { name: /support the developers/i })).toBeInTheDocument();
+  });
+
   it('offers a sign-in link when signed out and a sign-out button when signed in', () => {
     const { rerender } = render(
       <MemoryRouter>

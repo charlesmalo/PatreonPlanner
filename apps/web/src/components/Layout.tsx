@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import type { Notification, SessionUser } from '../api/types';
 import { NotificationBell } from './NotificationBell';
 
@@ -62,6 +63,29 @@ export function Layout({ user, loadingSession, onSignOut, notifications, childre
         </div>
       </header>
       <main className="mx-auto max-w-3xl px-4 py-8">{children}</main>
+      <Footer />
     </div>
+  );
+}
+
+/**
+ * App-level links, deliberately absent from a creator's board.
+ *
+ * A donation ask on a creator's page competes with that creator's own Patreon ask, in front of an
+ * audience that came for them — which creators would reasonably read as monetising their
+ * audience. It belongs to the app, so it appears where the app speaks for itself.
+ */
+function Footer() {
+  const onACreatorBoard = useLocation().pathname.startsWith('/c/');
+  if (onACreatorBoard) return null;
+  return (
+    <footer className="mx-auto max-w-3xl px-4 pb-8 text-sm text-slate-500 dark:text-slate-400">
+      <Link
+        to="/support"
+        className="underline focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+      >
+        Support the developers
+      </Link>
+    </footer>
   );
 }

@@ -9,6 +9,7 @@ import { NotificationsPage } from './routes/NotificationsPage';
 import { AcceptInvite } from './routes/AcceptInvite';
 import { ReviewQueue } from './routes/ReviewQueue';
 import { StaffPage } from './routes/StaffPage';
+import { Support } from './routes/Support';
 import { Tickets } from './routes/Tickets';
 
 export default function App() {
@@ -32,6 +33,7 @@ export default function App() {
           <Route path="/c/:slug/staff" element={<StaffPage />} />
           <Route path="/c/:slug/tickets" element={<Tickets />} />
           <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/support" element={<Support />} />
           <Route path="/invite" element={<AcceptInvite user={user} />} />
           <Route path="*" element={<p>Page not found.</p>} />
         </Routes>
