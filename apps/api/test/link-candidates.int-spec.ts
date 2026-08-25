@@ -292,6 +292,20 @@ describe('Link candidates (integration)', () => {
       // alternatives waiting for them.
       expect(await linksOn(first.body.recommendation.id)).toHaveLength(1);
     });
+
+    it('takes candidates again once the preference is lifted', async () => {
+      // The lock is a decision, not a one-way door. Without this, a creator who prefers a link
+      // and later changes their mind has permanently closed that entry to suggestions, and
+      // nothing in the API would tell them so.
+      const first = await submit(patron, 'Akira', 'https://example.test/one').expect(201);
+      const link = (await linksOn(first.body.recommendation.id))[0];
+      await decide(editor, link.id, { isPreferred: true }).expect(200);
+
+      await decide(editor, link.id, { isPreferred: false }).expect(200);
+      await submit(otherPatron, 'Akira', 'https://example.test/two').expect(200);
+
+      expect(await linksOn(first.body.recommendation.id)).toHaveLength(2);
+    });
   });
 
   describe('deciding', () => {
