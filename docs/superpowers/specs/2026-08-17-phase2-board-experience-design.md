@@ -127,8 +127,18 @@ Rules:
   same trap Plan 19's theme merge hit with title assignments.
 - Ungrouping restores children as independent entries; it does not delete anything.
 
-**OPEN:** whether a group's displayed weight is the sum across children or the head's own. Sum is
-more useful for ranking; head-only is easier to reason about.
+### Weight — **decided: the sum across children**
+
+A group's weight is the sum over its members, **de-duplicated by voter**: someone who upvoted two
+entries that are then grouped counts once, at their highest tier across the group.
+
+Two consequences follow, and both are load-bearing:
+
+1. **The head's stored `weightedScore` becomes that sum.** The board ranks on a column and pages
+   by keyset, so a displayed weight computed separately from the ordering would put groups in a
+   position their number does not explain. One number, used for both.
+2. **Grouping and ungrouping recompute it**, in the same transaction as the relation change —
+   the same rule the tier rebalance follows.
 
 ---
 
@@ -382,7 +392,6 @@ Cheapest and highest-value first; each produces something usable on its own.
 
 ## Open questions
 
-- Group weight: sum across children, or head only? (§3)
 - Premium: what it contains beyond the reaction palette, given it may withhold no functionality
   and may not override a creator's limits (§9)
 - Which permissions belong in the granular set, and which stay bundled under `MODERATE`? (§7)

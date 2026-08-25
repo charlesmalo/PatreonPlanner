@@ -340,6 +340,13 @@ model Recommendation {
   // What the board ranks by. Denormalised like upvoteCount beside it, and for the same reason:
   // it is the sort key, and a keyset cursor has to compare a column.
   weightedScore     Int                  @default(0)
+  // The entry this one is grouped under, chosen by staff. Distinct from the nesting the board
+  // derives from TMDB collections: that is keyed on titleId and cannot express a decision, nor
+  // reach an external link, which has no title at all.
+  //
+  // SetNull, not Cascade: deleting a head releases its children rather than taking them with it.
+  // Grouping preserves — that is what separates it from a merge.
+  groupHeadId       String?              @db.Uuid
   creatorId         String               @db.Uuid
   submittedByUserId String               @db.Uuid
   type              RecommendationType
@@ -364,6 +371,8 @@ model Recommendation {
   watchOrderItems WatchOrderItem[]
   tickets         Ticket[]
   reactions       Reaction[]
+  groupHead       Recommendation?      @relation("EntryGroup", fields: [groupHeadId], references: [id], onDelete: SetNull)
+  groupMembers    Recommendation[]     @relation("EntryGroup")
   upvotes         Upvote[]
   flags           Flag[]
   actions         ModerationAction[]
