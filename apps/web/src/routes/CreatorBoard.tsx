@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useCreator, useThemes, useViewMode } from '../api/hooks';
 import { narrowCapabilities } from '../api/view-mode';
+import { ContactForm } from '../components/ContactForm';
 import { ModeBanner } from '../components/ModeBanner';
 import { ViewModeSwitch } from '../components/ViewModeSwitch';
 import { BoardColumn } from '../components/BoardColumn';
@@ -70,6 +71,14 @@ export function CreatorBoard() {
         ) : null}
         {capabilities.moderate ? (
           <Link
+            to={`/c/${encodeURIComponent(slug)}/tickets`}
+            className="text-sm text-sky-700 underline focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:text-sky-400"
+          >
+            Messages
+          </Link>
+        ) : null}
+        {capabilities.moderate ? (
+          <Link
             to={`/c/${encodeURIComponent(slug)}/review`}
             className="text-sm text-sky-700 underline focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:text-sky-400"
           >
@@ -79,6 +88,9 @@ export function CreatorBoard() {
       </div>
 
       <ModeBanner mode={mode} />
+
+      {/* Below the board, not above it: most readers came to read, and a contact form at the top
+          would push what they came for down the page. */}
 
       <ThemeFilter themes={themes} selected={theme} onSelect={setTheme} />
 
@@ -114,6 +126,12 @@ export function CreatorBoard() {
           />
         ))}
       </div>
+
+      {capabilities.view ? (
+        <div className="mt-8 max-w-prose">
+          <ContactForm slug={slug} />
+        </div>
+      ) : null}
     </section>
   );
 }

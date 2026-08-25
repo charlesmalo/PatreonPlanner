@@ -143,6 +143,8 @@ model User {
   notifications     Notification[]
   moderationResults ModerationResult[]
   favorites         CreatorFavorite[]
+  ticketsRaised     Ticket[]           @relation("TicketAuthor")
+  ticketsResolved   Ticket[]           @relation("TicketResolver")
   flagsRaised       Flag[]             @relation("FlagAuthor")
   flagsResolved     Flag[]             @relation("FlagResolver")
   moderationActs    ModerationAction[] @relation("ModerationActor")
@@ -196,6 +198,7 @@ model Creator {
   notifications     Notification[]
   moderationResults ModerationResult[]
   blockwords        CreatorBlockword[]
+  tickets           Ticket[]
   favoritedBy       CreatorFavorite[]
   staffInvites      StaffInvite[]
 
@@ -248,17 +251,17 @@ model Membership {
 }
 
 model CreatorStaff {
-  id               String    @id @default(uuid()) @db.Uuid
-  creatorId        String    @db.Uuid
-  userId           String    @db.Uuid
+  id               String            @id @default(uuid()) @db.Uuid
+  creatorId        String            @db.Uuid
+  userId           String            @db.Uuid
   role             StaffRole
   // Empty for a new moderator: a permission absent from this set is denied, so a permission
   // added in future is denied to every existing mod until an owner grants it. An OWNER row's
   // contents are ignored — the check short-circuits on the role.
   permissions      StaffPermission[]
-  assignedByUserId String?   @db.Uuid
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  assignedByUserId String?           @db.Uuid
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
   creator    Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
   user       User    @relation("StaffMember", fields: [userId], references: [id], onDelete: Cascade)
@@ -308,6 +311,9 @@ model CreatorPolicy {
   // paying more, even once, is not meant to be taken back. A creator who wants the board to
   // reflect current support rather than historical generosity turns it off.
   allowVoteRatchet      Boolean        @default(true)
+  // Off by default: a public contact form on a public board is the highest-value spam target
+  // in the app. A creator who wants messages from anyone turns it on.
+  allowAnonymousTickets Boolean        @default(false)
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
 
@@ -352,6 +358,7 @@ model Recommendation {
   title           Title?               @relation(fields: [titleId], references: [id])
   links           RecommendationLink[]
   watchOrderItems WatchOrderItem[]
+  tickets         Ticket[]
   upvotes         Upvote[]
   flags           Flag[]
   actions         ModerationAction[]
@@ -612,6 +619,51 @@ model CreatorFavorite {
   @@index([creatorId])
 }
 
+enum TicketStatus {
+  OPEN
+  RESOLVED
+}
+
+// What staff decided. Recorded even when the reply deliberately says nothing —
+// "handled internally" is a legitimate answer to a reader, and not one to the audit trail.
+enum TicketResolution {
+  CONFIRMED
+  DENIED
+  LINKED
+  CLOSED
+}
+
+// A message from a reader to staff. A dispute and general contact differ by what the message
+// points at, not by which table it lives in — two tables would mean two inboxes, two
+// notification types, and two sets of resolution logic to drift apart.
+model Ticket {
+  id               String            @id @default(uuid()) @db.Uuid
+  creatorId        String            @db.Uuid
+  // Null for someone not signed in, which a creator must opt into accepting.
+  raisedByUserId   String?           @db.Uuid
+  // The entry this is about, if any. SetNull rather than Cascade: a ticket outlives the entry
+  // it disputes, and the reader's own words are the substance.
+  subjectId        String?           @db.Uuid
+  body             String
+  status           TicketStatus      @default(OPEN)
+  resolution       TicketResolution?
+  reply            String?
+  resolvedByUserId String?           @db.Uuid
+  resolvedAt       DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  creator    Creator         @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  raisedBy   User?           @relation("TicketAuthor", fields: [raisedByUserId], references: [id], onDelete: SetNull)
+  subject    Recommendation? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  resolvedBy User?           @relation("TicketResolver", fields: [resolvedByUserId], references: [id], onDelete: SetNull)
+
+  // The inbox reads open tickets for one board, oldest first, so nothing rots.
+  @@index([creatorId, status, createdAt])
+  @@index([subjectId])
+  @@index([raisedByUserId])
+}
+
 enum BlockwordAction {
   BLOCK
   FLAG
@@ -670,6 +722,8 @@ model ModerationResult {
 enum NotificationType {
   ENTRY_STATUS_CHANGED
   ENTRY_FLAGGED
+  TICKET_RAISED
+  TICKET_RESOLVED
 }
 
 // Design §3: in-app only — §12 puts email and push out of Phase 1, and every provider worth

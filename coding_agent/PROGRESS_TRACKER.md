@@ -4,9 +4,9 @@
 
 Phase 1 is complete and merged. Phase 2 — the board experience — is designed in
 `docs/superpowers/specs/2026-08-17-phase2-board-experience-design.md` and is
-being built in sequence. Six of its eleven steps have shipped.
+being built in sequence. Seven of its eleven steps have shipped.
 
-The verification baseline at the time of writing: **762 API + 235 web + 35 e2e
+The verification baseline at the time of writing: **778 API + 240 web + 36 e2e
 tests passing**, typecheck clean across every package.
 
 ## Milestones
@@ -23,13 +23,14 @@ tests passing**, typecheck clean across every package.
 - [x] M9: Entry detail pages, kanban board, per-column sorting, creator picks
 - [x] M10: Weighted voting, the upward-only ratchet, the my-votes page
 - [x] M11: Granular moderator permissions, view-as mode
-- [ ] M12: Disputes and contact tickets
+- [x] M12: Disputes and contact tickets
 - [ ] M13: Grouping and the link/candidate model — **blocked**, see below
 - [ ] M14: Donation page, reactions, drag-and-drop
 
 ## Active Task
 
-Phase 2, step 7 — disputes and contact tickets. Not yet started.
+None. Disputes and contact tickets shipped; the next unblocked item is the
+donation page or reactions (M14). Grouping (M13) remains blocked.
 
 ## Open Questions Blocking Work
 
