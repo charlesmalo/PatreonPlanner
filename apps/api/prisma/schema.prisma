@@ -347,6 +347,10 @@ model Recommendation {
   // SetNull, not Cascade: deleting a head releases its children rather than taking them with it.
   // Grouping preserves — that is what separates it from a merge.
   groupHeadId       String?              @db.Uuid
+  // Where staff placed this card by hand, used only by the `manual` sort. Fractional so that
+  // inserting between two cards writes one row rather than renumbering the column. Highest
+  // first, so placing something at the top does not touch anything below it.
+  manualRank        Float?
   creatorId         String               @db.Uuid
   submittedByUserId String               @db.Uuid
   type              RecommendationType

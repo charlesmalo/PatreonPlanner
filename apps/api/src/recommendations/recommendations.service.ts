@@ -100,6 +100,15 @@ function boardOrdering(sort: BoardSort): Prisma.RecommendationOrderByWithRelatio
   const pick = { isCreatorPick: 'desc' } as const;
   if (sort === 'newest') return [pick, { createdAt: 'desc' }, { id: 'desc' }];
   if (sort === 'oldest') return [pick, { createdAt: 'asc' }, { id: 'asc' }];
+  // Highest first, and a card never placed by hand falls to the bottom rather than the top.
+  if (sort === 'manual') {
+    return [
+      pick,
+      { manualRank: { sort: 'desc', nulls: 'last' } },
+      { createdAt: 'desc' },
+      { id: 'desc' },
+    ];
+  }
   return [pick, { weightedScore: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }];
 }
 
@@ -107,6 +116,29 @@ function afterCursor(sort: BoardSort, cursor: BoardCursor): Prisma.Recommendatio
   const ascending = sort === 'oldest';
   const beyond = ascending ? { gt: cursor.createdAt } : { lt: cursor.createdAt };
   const tie = ascending ? { gt: cursor.id } : { lt: cursor.id };
+
+  if (sort === 'manual') {
+    // Null ranks sort last, so once past them everything else is also null and falls back to the
+    // createdAt/id tiebreak — the same shape the other sorts use, with the rank in front.
+    const beyondRank: Prisma.RecommendationWhereInput[] =
+      cursor.manualRank === null
+        ? [
+            { manualRank: null, createdAt: { lt: cursor.createdAt } },
+            { manualRank: null, createdAt: cursor.createdAt, id: { lt: cursor.id } },
+          ]
+        : [
+            { manualRank: { lt: cursor.manualRank } },
+            { manualRank: null },
+            { manualRank: cursor.manualRank, createdAt: { lt: cursor.createdAt } },
+            { manualRank: cursor.manualRank, createdAt: cursor.createdAt, id: { lt: cursor.id } },
+          ];
+    return {
+      OR: [
+        ...(cursor.isCreatorPick ? [{ isCreatorPick: false }] : []),
+        { isCreatorPick: cursor.isCreatorPick, OR: beyondRank },
+      ],
+    };
+  }
 
   const withinPickGroup: Prisma.RecommendationWhereInput[] =
     sort === 'upvotes'
@@ -150,12 +182,14 @@ export function visibilityWhere(
   };
 }
 
-export type BoardSort = 'upvotes' | 'newest' | 'oldest';
+export type BoardSort = 'upvotes' | 'newest' | 'oldest' | 'manual';
 
 interface BoardCursor {
   weightedScore: number;
   createdAt: Date;
   id: string;
+  /** Null for a card never placed by hand, which sorts last. */
+  manualRank: number | null;
   /** Leads every ordering, so it has to lead the cursor comparison too. */
   isCreatorPick: boolean;
 }
@@ -165,10 +199,12 @@ function encodeCursor(row: {
   createdAt: Date;
   id: string;
   isCreatorPick: boolean;
+  manualRank: number | null;
 }): string {
   return Buffer.from(
     JSON.stringify({
       u: row.weightedScore,
+      m: row.manualRank,
       c: row.createdAt.toISOString(),
       i: row.id,
       p: row.isCreatorPick,
@@ -184,6 +220,7 @@ function decodeCursor(raw: string | undefined): BoardCursor | null {
       c: string;
       i: string;
       p?: boolean;
+      m?: number | null;
     };
     const createdAt = new Date(parsed.c);
     if (typeof parsed.u !== 'number' || Number.isNaN(createdAt.getTime()) || !parsed.i) {
@@ -191,6 +228,7 @@ function decodeCursor(raw: string | undefined): BoardCursor | null {
     }
     return {
       weightedScore: parsed.u,
+      manualRank: parsed.m ?? null,
       createdAt,
       id: parsed.i,
       isCreatorPick: parsed.p === true,
@@ -212,6 +250,7 @@ export const RECOMMENDATION_FIELDS = {
   upvoteCount: true,
   weightedScore: true,
   isCreatorPick: true,
+  manualRank: true,
   // Read for the parent projection below, then dropped from the response — the contract exposes
   // `parentId`, whether the head was chosen by staff or implied by the catalogue.
   groupHeadId: true,
@@ -893,6 +932,7 @@ export class RecommendationsService {
       upvoteCount: number;
       weightedScore: number;
       isCreatorPick: boolean;
+      manualRank: number | null;
       groupHeadId: string | null;
       createdAt: Date;
       titleId: string | null;

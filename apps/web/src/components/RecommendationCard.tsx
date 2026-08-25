@@ -21,6 +21,7 @@ import { AvailabilityBadges } from './AvailabilityBadges';
 import { FlagButton } from './FlagButton';
 import { NoteList } from './NoteList';
 import { PickButton } from './PickButton';
+import { DRAG_TYPE } from './drag';
 import { ReactionBar } from './ReactionBar';
 import { StatusControl } from './StatusControl';
 import { WatchOrderList } from './WatchOrderList';
@@ -57,7 +58,22 @@ export function RecommendationCard({
     // flex-wrap, and a floor on the content: a card nested inside another one inside a column is
     // narrow enough that the fixed-width upvote control and poster together left the text zero
     // width to occupy — present in the DOM, and invisible on the page.
-    <li className="flex flex-wrap gap-4 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+    <li
+      // Only for someone who could move it anyway. Dragging is a faster way to do what the
+      // status menu on this card already does, never the only way — the menu is what works with
+      // a keyboard, a screen reader, and on touch.
+      draggable={canModerate}
+      onDragStart={(event) => {
+        event.dataTransfer.setData(
+          DRAG_TYPE,
+          JSON.stringify({ id: recommendation.id, status: recommendation.status }),
+        );
+        event.dataTransfer.effectAllowed = 'move';
+      }}
+      className={`flex flex-wrap gap-4 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 ${
+        canModerate ? 'cursor-grab active:cursor-grabbing' : ''
+      }`}
+    >
       <UpvoteButton
         slug={slug}
         recommendationId={recommendation.id}

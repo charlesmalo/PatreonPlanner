@@ -41,8 +41,8 @@ export class ListRecommendationsQuery {
 
   /** How the column is ordered beneath the creator's own picks, which always lead. */
   @IsOptional()
-  @IsIn(['upvotes', 'newest', 'oldest'])
-  sort?: 'upvotes' | 'newest' | 'oldest';
+  @IsIn(['upvotes', 'newest', 'oldest', 'manual'])
+  sort?: 'upvotes' | 'newest' | 'oldest' | 'manual';
 }
 
 export class SimilarQuery {
