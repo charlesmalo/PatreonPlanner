@@ -387,6 +387,34 @@ test('a patron reacts to an entry without moving it up the board', async ({ page
   await expect(suggestions.getByRole('heading', { level: 3 }).first()).toHaveText('Porco Rosso');
 });
 
+test('a moderator arranges a column by hand and it stays arranged', async ({ page }) => {
+  // Playwright's dragTo drives real pointer events, so this exercises the browser's own drag
+  // machinery rather than synthetic ones — which is the half a unit test cannot reach.
+  seedEntryFrom('patreon-other-e2e', 'Alpha');
+  seedEntryFrom('patreon-other-e2e', 'Beta');
+  await signIn(page, 500, 'patreon-dragger-e2e');
+  makeStaff('patreon-dragger-e2e');
+  await page.goto(`/c/${CREATOR.slug}`);
+
+  const suggestions = page.getByRole('region', { name: /suggestions/i });
+  await suggestions.getByLabel(/sort suggestions/i).selectOption('manual');
+  const before = await suggestions.getByRole('heading', { level: 3 }).allTextContents();
+
+  // Drag the second card onto the first, which places it above.
+  await suggestions
+    .getByRole('listitem')
+    .filter({ hasText: before[1] })
+    .dragTo(suggestions.getByRole('listitem').filter({ hasText: before[0] }));
+
+  await expect(suggestions.getByRole('heading', { level: 3 }).first()).toHaveText(before[1]);
+
+  await page.reload();
+  await suggestions.getByLabel(/sort suggestions/i).selectOption('manual');
+
+  // Stored, not merely optimistic.
+  await expect(suggestions.getByRole('heading', { level: 3 }).first()).toHaveText(before[1]);
+});
+
 test('a reader folds a column away and it stays folded', async ({ page }) => {
   seedEntryFrom('patreon-other-e2e', 'Ponyo');
   await page.goto(`/c/${CREATOR.slug}`);

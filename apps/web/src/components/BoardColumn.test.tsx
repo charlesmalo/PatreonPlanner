@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { BoardColumn } from './BoardColumn';
@@ -125,6 +125,115 @@ describe('BoardColumn', () => {
     setup();
 
     expect(await screen.findByText(/creator pick/i)).toBeInTheDocument();
+  });
+
+  describe('dragging', () => {
+    /** jsdom has no real drag, so the transfer is a stub carrying what a card would set. */
+    const transfer = (payload?: object) => ({
+      getData: () => (payload ? JSON.stringify(payload) : ''),
+      setData: vi.fn(),
+      dropEffect: '',
+      effectAllowed: '',
+    });
+
+    function calls() {
+      const seen: string[] = [];
+      global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = new URL(String(input), 'http://localhost').pathname;
+        const method = init?.method ?? 'GET';
+        if (method === 'GET') {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ items: [entry], nextCursor: null }),
+          } as Response;
+        }
+        seen.push(`${method} ${path}`);
+        return { ok: true, status: 200, json: async () => ({}) } as Response;
+      });
+      return seen;
+    }
+
+    it('changes status when a card is dropped from another column', async () => {
+      const seen = calls();
+      setup({ status: 'ACCEPTED', label: 'Accepted', canModerate: true });
+      await screen.findByText('Spirited Away');
+
+      fireEvent.drop(screen.getByRole('region', { name: 'Accepted' }), {
+        dataTransfer: transfer({ id: 'rec-9', status: 'PENDING' }),
+      });
+
+      await waitFor(() =>
+        expect(seen).toEqual(['POST /api/v1/creators/ada-writes/recommendations/rec-9/status']),
+      );
+    });
+
+    it('does nothing when a card is dropped back on its own column', async () => {
+      const seen = calls();
+      setup({ canModerate: true });
+      await screen.findByText('Spirited Away');
+
+      fireEvent.drop(screen.getByRole('region', { name: 'Suggestions' }), {
+        dataTransfer: transfer({ id: 'rec-9', status: 'PENDING' }),
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(seen).toEqual([]);
+    });
+
+    it('ignores something that is not one of our cards', async () => {
+      // A file, a link, a text selection — the board is a drop target for its own cards only.
+      const seen = calls();
+      setup({ status: 'ACCEPTED', label: 'Accepted', canModerate: true });
+      await screen.findByText('Spirited Away');
+
+      fireEvent.drop(screen.getByRole('region', { name: 'Accepted' }), {
+        dataTransfer: transfer(),
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(seen).toEqual([]);
+    });
+
+    it('does not accept drops from a reader who cannot moderate', async () => {
+      const seen = calls();
+      setup({ status: 'ACCEPTED', label: 'Accepted', canModerate: false });
+      await screen.findByText('Spirited Away');
+
+      fireEvent.drop(screen.getByRole('region', { name: 'Accepted' }), {
+        dataTransfer: transfer({ id: 'rec-9', status: 'PENDING' }),
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(seen).toEqual([]);
+    });
+
+    it('keeps the chosen sort when the column refetches after a move', async () => {
+      // A move refetches by remounting, so a sort held only in component state was silently
+      // thrown away by the very action that needed it — a hand-arranged order that vanishes the
+      // moment you arrange something.
+      const queries = stub();
+      const { unmount } = setup({ canModerate: true });
+      await screen.findByText('Spirited Away');
+      await userEvent.selectOptions(screen.getByLabelText(/sort suggestions/i), 'manual');
+      await waitFor(() => expect(queries.at(-1)).toMatch(/sort=manual/));
+      unmount();
+
+      stub();
+      setup({ canModerate: true });
+
+      expect(await screen.findByLabelText(/sort suggestions/i)).toHaveValue('manual');
+    });
+
+    it('offers a hand-arranged order only as one sort among several', async () => {
+      stub();
+      setup({ canModerate: true });
+      await screen.findByText('Spirited Away');
+
+      expect(screen.getByRole('option', { name: /in the order you arrange/i })).toBeInTheDocument();
+      // Not the default: the board is a demand signal first.
+      expect(screen.getByLabelText(/sort suggestions/i)).toHaveValue('');
+    });
   });
 
   it('loads the next page into the same column', async () => {

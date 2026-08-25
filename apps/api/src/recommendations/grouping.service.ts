@@ -104,4 +104,64 @@ export class GroupingService {
       groupMemberCount: entry._count.groupMembers,
     };
   }
+
+  /**
+   * Places a card between the two it was dropped between.
+   *
+   * The client sends neighbours, not a number: it knows where the card landed, and the server
+   * owns what rank that is. A client computing its own would race every other client on the
+   * board.
+   *
+   * Ranks descend, so the top of a column is the largest number and placing something there
+   * touches no other row.
+   */
+  async rank(
+    creatorId: string,
+    id: string,
+    neighbours: { afterId?: string; beforeId?: string },
+  ): Promise<{ id: string; manualRank: number }> {
+    const [entry, above, below] = await Promise.all([
+      this.find(creatorId, id),
+      neighbours.afterId ? this.rankOf(creatorId, neighbours.afterId) : Promise.resolve(null),
+      neighbours.beforeId ? this.rankOf(creatorId, neighbours.beforeId) : Promise.resolve(null),
+    ]);
+
+    const manualRank = midpoint(above, below);
+    const updated = await this.prisma.recommendation.update({
+      where: { id: entry.id },
+      data: { manualRank },
+      select: { id: true, manualRank: true },
+    });
+    return { id: updated.id, manualRank: updated.manualRank as number };
+  }
+
+  /** Scoped by creator, so a neighbour on another board is a 404 rather than a silent nudge. */
+  private async rankOf(creatorId: string, id: string): Promise<number | null> {
+    const row = await this.prisma.recommendation.findFirst({
+      where: { id, creatorId },
+      select: { manualRank: true },
+    });
+    if (!row) throw new NotFoundException();
+    return row.manualRank;
+  }
+}
+
+/** How far above the top, or below the bottom, a card lands when it has only one neighbour. */
+const STEP = 1000;
+
+/**
+ * A rank strictly between its neighbours.
+ *
+ * Fractional on purpose: an insert writes one row rather than renumbering the column. The cost is
+ * that repeatedly dropping between the same adjacent pair exhausts double precision after roughly
+ * fifty insertions — a board would have to be arranged very deliberately to reach it, and the
+ * repair is renumbering the column.
+ */
+function midpoint(above: number | null, below: number | null): number {
+  // Ranks descend, so `above` is the larger number.
+  if (above !== null && below !== null) return (above + below) / 2;
+  if (above !== null) return above - STEP;
+  if (below !== null) return below + STEP;
+  // An empty column: any value will do, and a round one reads better in a database client.
+  return STEP;
 }

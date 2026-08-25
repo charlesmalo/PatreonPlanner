@@ -11,6 +11,7 @@ import {
   Query,
   Res,
   UseGuards,
+  Patch,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import type { Viewer } from '../access/capability';
@@ -23,6 +24,7 @@ import {
 import { RequireCapability } from '../access/require-capability.decorator';
 import { RequirePermission } from '../access/require-permission.decorator';
 import { GroupEntryDto } from './dto/group-entry.dto';
+import { RankEntryDto } from './dto/rank-entry.dto';
 import { GroupingService } from './grouping.service';
 import { ChangeStatusDto } from '../moderation/dto/change-status.dto';
 import { CreateFlagDto } from '../moderation/dto/create-flag.dto';
@@ -170,6 +172,18 @@ export class RecommendationsController {
     @Body() dto: GroupEntryDto,
   ) {
     return this.grouping.group(creator.id, id, dto.intoId);
+  }
+
+  @Patch(':id/rank')
+  @RequireCapability('MODERATE')
+  @RequirePermission('MOVE_ENTRIES')
+  @UseGuards(CreatorAccessGuard, SessionGuard)
+  rank(
+    @CurrentCreator() creator: ResolvedCreator,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RankEntryDto,
+  ) {
+    return this.grouping.rank(creator.id, id, { afterId: dto.afterId, beforeId: dto.beforeId });
   }
 
   @Delete(':id/group')

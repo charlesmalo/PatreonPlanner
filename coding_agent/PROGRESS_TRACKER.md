@@ -4,9 +4,10 @@
 
 Phase 1 is complete and merged. Phase 2 — the board experience — is designed in
 `docs/superpowers/specs/2026-08-17-phase2-board-experience-design.md` and is
-being built in sequence. Ten of its eleven steps have shipped.
+being built in sequence. All eleven sequenced steps have shipped. What remains is the link/candidate
+model (design §4), which was split out of grouping rather than dropped.
 
-The verification baseline at the time of writing: **806 API + 255 web + 37 e2e
+The verification baseline at the time of writing: **816 API + 261 web + 38 e2e
 tests passing**, typecheck clean across every package.
 
 ## Milestones
@@ -26,13 +27,13 @@ tests passing**, typecheck clean across every package.
 - [x] M12: Disputes and contact tickets
 - [x] M13: Grouping (the link/candidate model is its own plan, not yet started)
 - [x] M14: Reactions
-- [ ] M16: Drag-and-drop
+- [x] M16: Drag-and-drop, and hand-arranged order
 - [x] M15: Donation page (link-out; needs a payment URL to switch on)
 
 ## Active Task
 
-None. Grouping shipped, which was the last blocked item. What remains is
-drag-and-drop and the link/candidate model (design §4), neither blocked.
+None. The Phase 2 sequence is complete. The link/candidate model (design §4)
+is the remaining designed-but-unbuilt piece.
 
 ## Open Questions Blocking Work
 

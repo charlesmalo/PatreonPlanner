@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
+import { api } from '../api/client';
 import { useBoard } from '../api/hooks';
+import { readDrag } from './drag';
 import { buildTree, type TreeNode } from './board-tree';
 import { RecommendationCard } from './RecommendationCard';
 
@@ -20,6 +22,16 @@ interface BoardColumnProps {
 const collapseKey = (slug: string, status: string) => `pp.board.${slug}.collapsed.${status}`;
 
 /**
+ * The chosen sort is persisted for the same reason collapse is — it is the reader's own view of
+ * the board, not its configuration.
+ *
+ * It also has to survive a remount: a move refetches by remounting the columns, and holding the
+ * sort in component state alone meant every move silently threw the reader back to the default.
+ * That was invisible until a hand-arranged order needed to survive the move that made it.
+ */
+const sortKey = (slug: string, status: string) => `pp.board.${slug}.sort.${status}`;
+
+/**
  * One kanban column, with its own cursor.
  *
  * Its own, rather than a slice of one board-wide list: a single keyset page ordered by upvotes can
@@ -30,6 +42,9 @@ const SORTS: Array<[string, string]> = [
   ['', 'Most upvoted'],
   ['newest', 'Newest'],
   ['oldest', 'Oldest'],
+  // Last, and never the default: the board is a demand signal first, and a hand-made order is
+  // an override of that rather than a replacement for it.
+  ['manual', 'In the order you arrange'],
 ];
 
 export function BoardColumn({
@@ -42,7 +57,13 @@ export function BoardColumn({
   onMoved,
   emptyText = 'Nothing here yet.',
 }: BoardColumnProps) {
-  const [sort, setSort] = useState('');
+  const [sort, setSort] = useState(() => window.localStorage.getItem(sortKey(slug, status)) ?? '');
+  const [dragOver, setDragOver] = useState(false);
+
+  const chooseSort = (next: string) => {
+    setSort(next);
+    window.localStorage.setItem(sortKey(slug, status), next);
+  };
   const board = useBoard(slug, true, theme, status, sort);
   const [collapsed, setCollapsed] = useState(false);
 
@@ -57,6 +78,34 @@ export function BoardColumn({
       return next;
     });
   }, [slug, status]);
+
+  /** A card dropped from another column: the same status change the menu makes. */
+  async function moveHere(id: string) {
+    try {
+      await api.post(`/creators/${encodeURIComponent(slug)}/recommendations/${id}/status`, {
+        status,
+      });
+    } finally {
+      // Refetched either way: a refused move corrects itself rather than lying.
+      onMoved(id, status);
+    }
+  }
+
+  /** A card dropped onto another card, in manual sort: a position between its neighbours. */
+  async function placeBefore(id: string, beforeId: string) {
+    const order = board.items.map((item) => item.id);
+    const target = order.indexOf(beforeId);
+    const afterId = target > 0 ? order[target - 1] : undefined;
+    if (id === beforeId || id === afterId) return;
+    try {
+      await api.patch(`/creators/${encodeURIComponent(slug)}/recommendations/${id}/rank`, {
+        ...(afterId ? { afterId } : {}),
+        beforeId,
+      });
+    } finally {
+      onMoved(id, status);
+    }
+  }
 
   const renderNode = (node: TreeNode): JSX.Element => (
     <RecommendationCard
@@ -78,9 +127,35 @@ export function BoardColumn({
   return (
     <section
       aria-label={label}
-      className={`flex flex-col rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/40 ${
-        collapsed ? 'w-14' : 'w-full sm:w-96 sm:shrink-0'
-      }`}
+      onDragOver={(event) => {
+        if (!canModerate) return;
+        // Preventing the default is what marks this a valid drop target; without it the browser
+        // refuses the drop and nothing happens.
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+        setDragOver(true);
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(event) => {
+        if (!canModerate) return;
+        event.preventDefault();
+        setDragOver(false);
+        const dragged = readDrag(event.dataTransfer);
+        if (!dragged) return;
+        if (dragged.status !== status) {
+          // Between columns: a status change, through the same endpoint the menu uses. No second
+          // write path, and no second set of rules to keep in step.
+          void moveHere(dragged.id);
+        }
+        // Within a column, position is only meaningful in manual sort — in any other, the order
+        // is computed, and preserving a hand-placed position would be a promise the next render
+        // breaks. The card list below handles that case, where it knows the neighbours.
+      }}
+      className={`flex flex-col rounded-lg border bg-slate-50 dark:bg-slate-900/40 ${
+        dragOver
+          ? 'border-sky-500 bg-sky-50 dark:bg-sky-950/30'
+          : 'border-slate-200 dark:border-slate-800'
+      } ${collapsed ? 'w-14' : 'w-full sm:w-96 sm:shrink-0'}`}
     >
       <header className="flex items-center justify-between gap-2 px-3 py-2">
         <h2 className={`text-sm font-medium ${collapsed ? 'sr-only' : ''}`}>{label}</h2>
@@ -109,7 +184,7 @@ export function BoardColumn({
           <select
             id={`sort-${status}`}
             value={sort}
-            onChange={(event) => setSort(event.target.value)}
+            onChange={(event) => chooseSort(event.target.value)}
             className="w-full rounded border border-slate-300 bg-white px-1 py-0.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-slate-700 dark:bg-slate-950"
           >
             {SORTS.map(([value, text]) => (
@@ -125,7 +200,29 @@ export function BoardColumn({
           ) : board.items.length === 0 ? (
             <p className="text-sm text-slate-500 dark:text-slate-400">{emptyText}</p>
           ) : (
-            <ul className="space-y-3">{buildTree(board.items).map((node) => renderNode(node))}</ul>
+            <ul className="space-y-3">
+              {buildTree(board.items).map((node) => (
+                <div
+                  key={node.item.id}
+                  onDragOver={(event) => {
+                    // Only in manual sort: anywhere else the order is computed, so a hand-placed
+                    // position would not survive the next render.
+                    if (canModerate && sort === 'manual') event.preventDefault();
+                  }}
+                  onDrop={(event) => {
+                    if (!canModerate || sort !== 'manual') return;
+                    const dragged = readDrag(event.dataTransfer);
+                    if (!dragged || dragged.status !== status) return;
+                    // Handled here rather than by the column, which cannot know the neighbours.
+                    event.stopPropagation();
+                    event.preventDefault();
+                    void placeBefore(dragged.id, node.item.id);
+                  }}
+                >
+                  {renderNode(node)}
+                </div>
+              ))}
+            </ul>
           )}
 
           {board.hasMore ? (
