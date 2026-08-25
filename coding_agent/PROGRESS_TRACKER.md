@@ -31,7 +31,7 @@ tests passing**, typecheck clean across every package.
 - [x] M16: Drag-and-drop, and hand-arranged order
 - [x] M15: Donation page (link-out; needs a payment URL to switch on)
 - [x] M17: Link candidates — a submitted link waits for staff, and staff decide
-  on the card (plans 09 and 10)
+      on the card (plans 09 and 10)
 
 ## Active Task
 
@@ -40,22 +40,25 @@ in the design is left unbuilt.
 
 ## Open Questions Blocking Work
 
-| Question                                                       | Blocks | Why it matters                                                                     |
-| -------------------------------------------------------------- | ------ | ---------------------------------------------------------------------------------- |
-| What does premium contain beyond the reaction palette?         | M14    | It may withhold no functionality and may not override a creator's limits           |
-| Which permissions stay bundled under `MODERATE`?               | —      | The five that exist cover today's endpoints                                        |
+| Question                                               | Blocks | Why it matters                                                           |
+| ------------------------------------------------------ | ------ | ------------------------------------------------------------------------ |
+| What does premium contain beyond the reaction palette? | M14    | It may withhold no functionality and may not override a creator's limits |
+| Which permissions stay bundled under `MODERATE`?       | —      | The five that exist cover today's endpoints                              |
 
 ## Known Debt
 
-- **Coverage is not wired.** `07_TESTING_STANDARDS.md` §3 states the target and
-  why it is not yet a gate.
+- **Web coverage is not wired.** The API gate is live (`cd apps/api && pnpm
+coverage`); vitest needs `@vitest/coverage-v8`, a new dependency and so the
+  engineer's call.
 - **`recommendations.service.ts` is well past the 300-line limit**
   (`04_CODE_STANDARDS.md` §1). Splitting it needs its own approval.
-- **The `ThemeSource` migration is not rolling-deploy safe** — backfill and
-  `DROP COLUMN` in one step. Harmless with nothing deployed; must be split into
-  expand/contract before this ever runs more than one instance.
-- **`openspec/config.yaml` is the untouched default**, so generated artifacts do
-  not inherit these rules.
+- **Two migrations are not rolling-deploy safe** — `ThemeSource` (backfill then
+  `DROP COLUMN`) and `link_candidates` (backfill then `SET NOT NULL`), each in
+  one step. Harmless with nothing deployed, and deliberately _not_ fixed in
+  place: Prisma checksums an applied migration, so editing one fails every
+  database that already ran it. Both are listed as exemptions in
+  `apps/api/test/migration-safety.e2e-spec.ts`, which now fails any _new_
+  migration that does the same.
 
 ## Session Log
 

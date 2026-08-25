@@ -33,17 +33,17 @@ fail against the current code before the fix lands
 
 ## 3. Coverage Gates
 
-| Metric              | Gate  | Actual at wiring |
-| ------------------- | ----- | ---------------- |
-| Line coverage       | ≥ 90% | 97.3%            |
-| Branch coverage     | ≥ 75% | 87.8%            |
-| Statement coverage  | ≥ 90% | 96.7%            |
-| Function coverage   | ≥ 90% | 98.1%            |
+| Metric             | Gate  | Actual at wiring |
+| ------------------ | ----- | ---------------- |
+| Line coverage      | ≥ 90% | 97.3%            |
+| Branch coverage    | ≥ 75% | 87.8%            |
+| Statement coverage | ≥ 90% | 96.7%            |
+| Function coverage  | ≥ 90% | 98.1%            |
 
 **Wired for the API**: `cd apps/api && pnpm coverage`. Jest's own coverage, so
 no dependency was added. Thresholds live in `jest-e2e.json`.
 
-The gate is set at the *target*, not at today's number. A threshold pinned to
+The gate is set at the _target_, not at today's number. A threshold pinned to
 current coverage fails on the first honest refactor and teaches everyone to
 raise it by hand; one pinned to the standard says what the standard says, and
 the headroom above it is where ordinary work happens.

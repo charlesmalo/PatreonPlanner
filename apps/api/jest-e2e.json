@@ -1,9 +1,5 @@
 {
-  "moduleFileExtensions": [
-    "js",
-    "json",
-    "ts"
-  ],
+  "moduleFileExtensions": ["js", "json", "ts"],
   "rootDir": ".",
   "testEnvironment": "node",
   "testRegex": ".(e2e-spec|int-spec).ts$",
@@ -14,12 +10,7 @@
   "transform": {
     "^.+\\.ts$": "ts-jest"
   },
-  "collectCoverageFrom": [
-    "src/**/*.ts",
-    "!src/main.ts",
-    "!src/**/*.module.ts",
-    "!src/**/dto/*.ts"
-  ],
+  "collectCoverageFrom": ["src/**/*.ts", "!src/main.ts", "!src/**/*.module.ts", "!src/**/dto/*.ts"],
   "coverageThreshold": {
     "global": {
       "lines": 90,
