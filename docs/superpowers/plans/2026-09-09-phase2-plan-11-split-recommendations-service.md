@@ -54,10 +54,10 @@ The limit exists because a file you cannot hold in context at once is a file you
 - Create: `apps/api/src/recommendations/recommendation-fields.ts`
 - Modify: `apps/api/src/recommendations/recommendations.service.ts`, `search.service.ts`
 
-- [ ] **Step 1: Move `BOARD_ONLY_DEFAULTS`, `SelectedLink`, `present`, `recommendationFields`, and the `visibleLinks`/`LinkViewer` re-export** into the new file, verbatim, with their comments.
-- [ ] **Step 2: Re-export from `recommendations.service.ts`** so no importer changes in this task. One move at a time, one reason to fail.
-- [ ] **Step 3: Verify.** `pnpm -r typecheck` and `cd apps/api && pnpm test`. Expected: 840 passed, unchanged.
-- [ ] **Step 4: Commit.**
+- [x] **Step 1: Move `BOARD_ONLY_DEFAULTS`, `SelectedLink`, `present`, `recommendationFields`, and the `visibleLinks`/`LinkViewer` re-export** into the new file, verbatim, with their comments.
+- [x] **Step 2: Re-export from `recommendations.service.ts`** so no importer changes in this task. One move at a time, one reason to fail.
+- [x] **Step 3: Verify.** `pnpm -r typecheck` and `cd apps/api && pnpm test`. Expected: 840 passed, unchanged.
+- [x] **Step 4: Commit.**
 
 ### Task 2: The board query module
 
@@ -65,10 +65,10 @@ The limit exists because a file you cannot hold in context at once is a file you
 - Create: `apps/api/src/recommendations/board-query.ts`
 - Modify: `apps/api/src/recommendations/recommendations.service.ts`
 
-- [ ] **Step 1: Move `MAX_PAGE`, `HIDDEN_STATUSES`, `BoardSort`, `BoardCursor`, `boardOrdering`, `afterCursor`, `encodeCursor`, `decodeCursor`, `visibilityWhere`** verbatim.
-- [ ] **Step 2: Re-export the names other modules already import** (`visibilityWhere`, `BoardSort`) from the service.
-- [ ] **Step 3: Verify.** Same two commands, same numbers.
-- [ ] **Step 4: Commit.**
+- [x] **Step 1: Move `MAX_PAGE`, `HIDDEN_STATUSES`, `BoardSort`, `BoardCursor`, `boardOrdering`, `afterCursor`, `encodeCursor`, `decodeCursor`, `visibilityWhere`** verbatim.
+- [x] **Step 2: Re-export the names other modules already import** (`visibilityWhere`, `BoardSort`) from the service.
+- [x] **Step 3: Verify.** Same two commands, same numbers.
+- [x] **Step 4: Commit.**
 
 ### Task 3: The submissions service
 
@@ -76,16 +76,43 @@ The limit exists because a file you cannot hold in context at once is a file you
 - Create: `apps/api/src/recommendations/submissions.service.ts`
 - Modify: `recommendations.service.ts`, `recommendations.module.ts`, `recommendations.controller.ts`
 
-- [ ] **Step 1: Move `submit`, `create`, `resolveTitle`, `resolveItems`, `recordStrike`, `countDuplicate`, `countTowardStrike`, `refund`** and the two strike thresholds onto a new `@Injectable() SubmissionsService`.
-- [ ] **Step 2: Register it** in `recommendations.module.ts` and inject it where `submit` is called.
-- [ ] **Step 3: Verify.** Both commands, plus `pnpm coverage` — a provider that failed to register shows up as a whole suite erroring, not as one test.
-- [ ] **Step 4: Commit.**
+- [x] **Step 1: Move `submit`, `create`, `resolveTitle`, `resolveItems`, `recordStrike`, `countDuplicate`, `countTowardStrike`, `refund`** and the two strike thresholds onto a new `@Injectable() SubmissionsService`.
+- [x] **Step 2: Register it** in `recommendations.module.ts` and inject it where `submit` is called.
+- [x] **Step 3: Verify.** Both commands, plus `pnpm coverage` — a provider that failed to register shows up as a whole suite erroring, not as one test.
+- [x] **Step 4: Commit.**
 
 ### Task 4: Confirm the limit is met
 
-- [ ] **Step 1:** `wc -l apps/api/src/recommendations/*.ts`. Every file under 300, or the remainder recorded in `PROGRESS_TRACKER.md` with what is still in it and why.
-- [ ] **Step 2:** Full verification set, and `pnpm coverage` compared against the numbers in `07_TESTING_STANDARDS.md` §3. A pure move should not shift them.
-- [ ] **Step 3: Commit.**
+- [x] **Step 1:** `wc -l apps/api/src/recommendations/*.ts`. Every file under 300, or the remainder recorded in `PROGRESS_TRACKER.md` with what is still in it and why.
+- [x] **Step 2:** Full verification set, and `pnpm coverage` compared against the numbers in `07_TESTING_STANDARDS.md` §3. A pure move should not shift them.
+- [x] **Step 3: Commit.**
+
+## What it actually took
+
+Seven modules, not four. Two seams only became visible once the file was small
+enough to read: catalogue resolution is the only part that talks to TMDB, and
+the strike counters are all side effects of decisions made elsewhere. Both were
+extracted again from `submissions.service.ts` to get it under the limit.
+
+`withUpvoted` became a free function in the projection module. Both halves need
+it, and the alternative was one service importing the other.
+
+Six of the ten constructor dependencies on the remaining service were dead once
+the methods that used them had left — which is the clearest evidence the seams
+were real, and what finally took the file from 310 to 298.
+
+| File | Lines |
+| --- | --- |
+| `recommendations.service.ts` | 1061 → 298 |
+| `submissions.service.ts` | new, 297 |
+| `board-query.ts` | new, 169 |
+| `submission-resolver.service.ts` | new, 151 |
+| `upvotes.service.ts` | new, 128 |
+| `recommendation-fields.ts` | new, 126 |
+| `submission-strikes.service.ts` | new, 74 |
+
+877 tests before and after. Coverage 97.41% lines against 97.3% — a pure move
+should not shift it, and it did not.
 
 ## Known risks
 

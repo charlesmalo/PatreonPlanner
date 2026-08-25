@@ -36,6 +36,7 @@ import { RateLimited } from '../limits/rate-limit.guard';
 import { SearchService } from './search.service';
 import { SubmitRecommendationDto } from './dto/submit-recommendation.dto';
 import { SubmissionsService } from './submissions.service';
+import { UpvotesService } from './upvotes.service';
 import { RecommendationsService } from './recommendations.service';
 
 // :slug so CreatorAccessGuard resolves the tenant the same way it does everywhere else.
@@ -44,6 +45,7 @@ export class RecommendationsController {
   constructor(
     private readonly recommendations: RecommendationsService,
     private readonly submissions: SubmissionsService,
+    private readonly upvotes: UpvotesService,
     private readonly moderationActions: ModerationActionsService,
     private readonly flags: FlagsService,
     private readonly search: SearchService,
@@ -229,6 +231,6 @@ export class RecommendationsController {
     @CurrentUser() user: CurrentUserPayload,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.recommendations.toggleUpvote(creator.id, id, user.id);
+    return this.upvotes.toggleUpvote(creator.id, id, user.id);
   }
 }

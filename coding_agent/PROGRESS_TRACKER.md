@@ -50,8 +50,11 @@ in the design is left unbuilt.
 - **Web coverage is not wired.** The API gate is live (`cd apps/api && pnpm
 coverage`); vitest needs `@vitest/coverage-v8`, a new dependency and so the
   engineer's call.
-- **`recommendations.service.ts` is well past the 300-line limit**
-  (`04_CODE_STANDARDS.md` §1). Splitting it needs its own approval.
+- ~~`recommendations.service.ts` past the 300-line limit~~ — split into seven
+  modules (plan 11). Nothing in `apps/api/src` is over 300 lines. Three files in
+  `apps/web/src` still are: `hooks.ts` (482), `SubmitForm.tsx` (405),
+  `ReviewQueue.tsx` (345). They own React state rather than a database, so they
+  are a different risk profile and their own task.
 - **Two migrations are not rolling-deploy safe** — `ThemeSource` (backfill then
   `DROP COLUMN`) and `link_candidates` (backfill then `SET NOT NULL`), each in
   one step. Harmless with nothing deployed, and deliberately _not_ fixed in

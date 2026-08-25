@@ -7,6 +7,7 @@ import { LinksController } from './links.controller';
 import { SubmissionsService } from './submissions.service';
 import { SubmissionResolverService } from './submission-resolver.service';
 import { SubmissionStrikesService } from './submission-strikes.service';
+import { UpvotesService } from './upvotes.service';
 import { LinksService } from './links.service';
 import { RecommendationsService } from './recommendations.service';
 import { SearchService } from './search.service';
@@ -18,6 +19,7 @@ import { SearchService } from './search.service';
     SubmissionsService,
     SubmissionResolverService,
     SubmissionStrikesService,
+    UpvotesService,
     SearchService,
     MyVotesService,
     GroupingService,

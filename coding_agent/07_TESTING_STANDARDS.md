@@ -52,7 +52,7 @@ This was previously unwired on the argument that a gate added late is
 negotiated against existing violations — which is how gates die. That argument
 expired when the numbers were finally measured: every one already cleared its
 target, so there was nothing to negotiate. Verified to fail for its own reason
-by raising the line threshold to 99.9%, which exits 1 with all 840 tests still
+by raising the line threshold to 99.9%, which exits 1 with all tests still
 passing.
 
 `main.ts`, `*.module.ts` and DTOs are excluded: they are wiring and shape

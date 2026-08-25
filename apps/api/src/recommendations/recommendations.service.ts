@@ -15,20 +15,14 @@ import {
   StrikeReason,
 } from '@prisma/client';
 import type { StaffRoleValue } from '../access/capability';
-import { AbuseService } from '../abuse/abuse.service';
 import { NOTE_FIELDS } from '../notes/notes.service';
 import { AvailabilityService, StoredAvailability } from '../availability/availability.service';
-import { CatalogService } from '../catalog/catalog.service';
 import { ConfigService } from '../config/config.module';
-import { RateLimitService } from '../limits/rate-limit.service';
-import { ModerationService } from '../moderation/moderation.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SubmitRecommendationDto } from './dto/submit-recommendation.dto';
 import { PATRON_VISIBLE_STATUSES } from '../moderation/transitions';
 import { normalizeTitle } from './normalize-title';
 import { ReactionsService, type ReactionCount } from '../reactions/reactions.service';
-import { GroupingService } from './grouping.service';
-import { LinksService } from './links.service';
 import {
   BOARD_ONLY_DEFAULTS,
   present,
@@ -82,15 +76,9 @@ export class RecommendationsService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly limits: RateLimitService,
-    private readonly moderation: ModerationService,
     private readonly config: ConfigService,
-    private readonly catalog: CatalogService,
     private readonly availability: AvailabilityService,
-    private readonly abuse: AbuseService,
     private readonly reactions: ReactionsService,
-    private readonly grouping: GroupingService,
-    private readonly links: LinksService,
   ) {}
 
   async findOne(
@@ -111,23 +99,6 @@ export class RecommendationsService {
       : { ...present(entry), hasUpvoted: false, ...BOARD_ONLY_DEFAULTS };
   }
 
-  /**
-   * A vote lands on the entry it was cast on. When that entry sits inside a group, the head's
-   * totals are derived from the whole group — so it is recomputed in the same transaction, or
-   * the group's number quietly stops matching its members.
-   */
-  private async syncGroupHead(tx: Prisma.TransactionClient, recommendationId: string) {
-    const entry = await tx.recommendation.findUnique({
-      where: { id: recommendationId },
-      select: { groupHeadId: true },
-    });
-    if (entry?.groupHeadId) await this.grouping.recompute(tx, entry.groupHeadId);
-  }
-
-  /**
-   * The creator's own shortlist. Scoped by creator as well as id — an id alone says nothing about
-   * which board an entry is on.
-   */
   async setCreatorPick(creatorId: string, id: string, isCreatorPick: boolean): Promise<void> {
     const { count } = await this.prisma.recommendation.updateMany({
       where: { id, creatorId },
@@ -199,85 +170,6 @@ export class RecommendationsService {
     return byTitle;
   }
 
-  async toggleUpvote(creatorId: string, recommendationId: string, userId: string) {
-    // Scoped by creatorId as well as id: the guard only proved access to *this* creator, so
-    // without it a patron of A could upvote an entry on B's board by guessing an id.
-    const rec = await this.prisma.recommendation.findFirst({
-      where: { id: recommendationId, creatorId, status: { notIn: HIDDEN_STATUSES } },
-      select: { id: true },
-    });
-    if (!rec) throw new NotFoundException();
-
-    // The tier the voter holds *now*. Stored on the vote as a reference, so a creator rebalancing
-    // later changes what this vote is worth — which is the point of recording the tier rather
-    // than the number.
-    const membership = await this.prisma.membership.findUnique({
-      where: { userId_creatorId: { userId, creatorId } },
-      select: { currentTierId: true, currentTier: { select: { voteWeight: true } } },
-    });
-    const tierId = membership?.currentTierId ?? null;
-    // No tier is worth one: a board that lets someone vote is letting them vote, and free is
-    // decided by the UPVOTE capability rather than by making the vote count for nothing.
-    const weight = membership?.currentTier?.voteWeight ?? 1;
-
-    // The row and both counters move together, so the numbers on the board cannot drift from the
-    // rows behind them.
-    return this.prisma.$transaction(async (tx) => {
-      const existing = await tx.upvote.findUnique({
-        where: { recommendationId_userId: { recommendationId, userId } },
-        select: { id: true, tierId: true },
-      });
-      if (existing) {
-        // Priced at what the vote was cast at, not at what the voter is worth today — otherwise
-        // withdrawing after an upgrade would take away more than it ever added.
-        const cast = existing.tierId
-          ? ((
-              await tx.tier.findUnique({
-                where: { id: existing.tierId },
-                select: { voteWeight: true },
-              })
-            )?.voteWeight ?? 1)
-          : 1;
-        await tx.upvote.delete({ where: { id: existing.id } });
-        const updated = await tx.recommendation.update({
-          where: { id: recommendationId },
-          data: { upvoteCount: { decrement: 1 }, weightedScore: { decrement: cast } },
-          select: { upvoteCount: true, weightedScore: true },
-        });
-        await this.syncGroupHead(tx, recommendationId);
-        return {
-          upvoted: false,
-          upvoteCount: updated.upvoteCount,
-          weightedScore: updated.weightedScore,
-        };
-      }
-      await tx.upvote.create({ data: { recommendationId, userId, tierId } });
-      const updated = await tx.recommendation.update({
-        where: { id: recommendationId },
-        data: { upvoteCount: { increment: 1 }, weightedScore: { increment: weight } },
-        select: { upvoteCount: true, weightedScore: true },
-      });
-      await this.syncGroupHead(tx, recommendationId);
-      return {
-        upvoted: true,
-        upvoteCount: updated.upvoteCount,
-        weightedScore: updated.weightedScore,
-      };
-    });
-  }
-
-  /**
-   * Explicit keyset pagination on (upvoteCount, createdAt, id).
-   *
-   * Prisma's `cursor` + `skip: 1` was wrong twice over: the skip is an unconditional OFFSET 1,
-   * so when the cursor row is excluded by the status filter it eats a real row instead — pages
-   * silently lost entries. And it resolves the cursor row by global id, so another creator's id
-   * positioned the page. Carrying the boundary values in the cursor removes both.
-   *
-   * Duplicates remain possible if an entry is upvoted between pages, because the leading sort
-   * key is mutable. That is inherent to ordering by a live counter, not something keyset fixes;
-   * callers should de-duplicate by id.
-   */
   async list(
     creator: { id: string; hidePendingFromPublic: boolean; allowReactions?: boolean },
     rawCursor: string | undefined,
