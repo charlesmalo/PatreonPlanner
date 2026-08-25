@@ -22,6 +22,7 @@ const NO_CAPABILITIES: Capabilities = {
   view: false,
   upvote: false,
   submit: false,
+  permissions: [],
   moderate: false,
   administer: false,
 };

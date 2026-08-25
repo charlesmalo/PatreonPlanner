@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Patch, Post, Put, UseGuards } from '@nestjs/common';
 import { Capability, Policy, Viewer, can } from '../access/capability';
+import { ALL_STAFF_PERMISSIONS, type StaffPermissionValue } from '../access/permissions';
 import {
   CreatorAccessGuard,
   CurrentCreator,
@@ -43,7 +44,7 @@ export class CreatorsController {
   async capabilities(
     @CurrentCreator() creator: ResolvedCreator,
     @CurrentViewer() viewer: Viewer,
-  ): Promise<Record<Lowercase<Capability>, boolean>> {
+  ): Promise<Record<Lowercase<Capability>, boolean> & { permissions: StaffPermissionValue[] }> {
     const policy: Policy = await this.creators.policyForResolver(creator.id);
     return {
       view: can('VIEW', viewer, policy),
@@ -51,6 +52,16 @@ export class CreatorsController {
       submit: can('SUBMIT', viewer, policy),
       moderate: can('MODERATE', viewer, policy),
       administer: can('ADMINISTER', viewer, policy),
+      // The five booleans above are too coarse to render staff controls: MODERATE is true for
+      // any staff member, while the endpoints behind those controls each demand a specific
+      // permission. Without this the SPA offers a HANDLE_REPORTS moderator buttons the API
+      // then refuses.
+      //
+      // An OWNER is expanded rather than returned raw. Their powers come from the role
+      // short-circuiting `hasPermission`, so their stored column is empty by design, and
+      // sending it would hide every control from the one person entitled to all of them —
+      // the same short-circuit, expressed once more here because the SPA cannot call it.
+      permissions: viewer.staffRole === 'OWNER' ? [...ALL_STAFF_PERMISSIONS] : viewer.permissions,
     };
   }
 

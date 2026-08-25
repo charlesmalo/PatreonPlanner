@@ -7,6 +7,7 @@ const staff: Capabilities = {
   submit: true,
   moderate: true,
   administer: true,
+  permissions: ['EDIT_ENTRIES', 'MOVE_ENTRIES'],
 };
 
 describe('narrowCapabilities', () => {
@@ -21,6 +22,10 @@ describe('narrowCapabilities', () => {
       submit: true,
       moderate: false,
       administer: false,
+      // Emptied with them. A staff permission left standing here would keep rendering the
+      // controls the preview exists to hide — and "view as patron" would show a patron view
+      // with publish buttons on it.
+      permissions: [],
     });
   });
 
@@ -33,10 +38,27 @@ describe('narrowCapabilities', () => {
       submit: false,
       moderate: false,
       administer: false,
+      permissions: [],
     };
 
     expect(narrowCapabilities(patron, 'patron')).toEqual(patron);
     expect(narrowCapabilities(patron, 'moderator')).toEqual(patron);
+  });
+
+  it('survives a capabilities payload with no permissions key', () => {
+    // A cached response or an API mid-deploy can send the older shape. This line runs inside
+    // render, so throwing here blanks the entire board — the failure is a white page, not a
+    // missing button.
+    const older = { view: true, upvote: true, submit: true, moderate: true, administer: false };
+
+    expect(narrowCapabilities(older as Capabilities, 'patron')).toEqual({
+      view: true,
+      upvote: true,
+      submit: true,
+      moderate: false,
+      administer: false,
+      permissions: [],
+    });
   });
 
   it('leaves a reader who cannot moderate unchanged in either mode', () => {
@@ -46,6 +68,7 @@ describe('narrowCapabilities', () => {
       submit: true,
       moderate: false,
       administer: false,
+      permissions: [],
     };
 
     expect(narrowCapabilities(viewer, 'patron')).toEqual(viewer);

@@ -11,11 +11,20 @@ export interface Capabilities {
   submit: boolean;
   moderate: boolean;
   administer: boolean;
+  /**
+   * What this staff member may do beyond being staff. A rendering hint only — every endpoint
+   * behind these controls checks the same permission server-side and refuses regardless.
+   * Empty for anyone who is not staff here; expanded to the full set for an owner, whose
+   * stored column is empty because their powers come from the role.
+   */
+  permissions: StaffPermission[];
 }
 
 export interface RecommendationLink {
+  id: string;
   url: string;
   label: string | null;
+  isPreferred: boolean;
 }
 
 export interface TitleSummary {
