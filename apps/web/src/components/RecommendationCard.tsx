@@ -21,6 +21,7 @@ import { AvailabilityBadges } from './AvailabilityBadges';
 import { FlagButton } from './FlagButton';
 import { NoteList } from './NoteList';
 import { PickButton } from './PickButton';
+import { ReactionBar } from './ReactionBar';
 import { StatusControl } from './StatusControl';
 import { WatchOrderList } from './WatchOrderList';
 import { UpvoteButton } from './UpvoteButton';
@@ -171,6 +172,13 @@ export function RecommendationCard({
             {children}
           </ul>
         ) : null}
+        <ReactionBar
+          slug={slug}
+          recommendationId={recommendation.id}
+          title={recommendation.customTitle}
+          reactions={recommendation.reactions ?? []}
+          canReact={canUpvote}
+        />
         <div className="mt-2 flex flex-wrap items-start gap-3">
           {/* Offered to every reader: the API answers an anonymous report with a 401, and
               FlagButton turns that into "sign in to report" — more useful than no control. */}

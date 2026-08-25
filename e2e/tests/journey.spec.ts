@@ -7,6 +7,7 @@ import {
   clearIntelligence,
   clearReaderState,
   clearStaff,
+  clearReactions,
   clearTickets,
   setTierWeights,
   makeOwner,
@@ -35,6 +36,7 @@ test.beforeEach(() => {
   clearStaff();
   clearReaderState();
   clearTickets();
+  clearReactions();
   // Every test starts from the same state regardless of what ran before, including CI retries.
   resetRateLimits();
 });
@@ -362,6 +364,27 @@ test('a patron disputes an entry and a moderator answers', async ({ page }) => {
   await signIn(page, 500, 'patreon-disputer-e2e');
   await page.goto(`/c/${CREATOR.slug}`);
   await expect(page.getByRole('button', { name: /1 unread notification/i })).toBeVisible();
+});
+
+test('a patron reacts to an entry without moving it up the board', async ({ page }) => {
+  seedEntryFrom('patreon-other-e2e', 'Nausicaa', 'PENDING');
+  seedEntryFrom('patreon-other-e2e', 'Porco Rosso', 'PENDING');
+  await signIn(page, 500, 'patreon-reactor-e2e');
+  await page.goto(`/c/${CREATOR.slug}`);
+
+  // Upvote the *other* entry, so ranking and enthusiasm point in opposite directions.
+  await page.getByRole('button', { name: /upvote Porco Rosso/i }).click();
+  const nausicaa = page.getByRole('listitem').filter({ hasText: 'Nausicaa' });
+  await nausicaa.getByRole('button', { name: /🔥 0 on Nausicaa/ }).click();
+  await expect(nausicaa.getByRole('button', { name: /🔥 1 on Nausicaa/ })).toBeVisible();
+
+  await page.reload();
+
+  // Stored, not merely optimistic.
+  const suggestions = page.getByRole('region', { name: /suggestions/i });
+  await expect(suggestions.getByRole('button', { name: /🔥 1 on Nausicaa/ })).toBeVisible();
+  // And it has not moved: the upvoted entry still leads. Enthusiasm is not demand.
+  await expect(suggestions.getByRole('heading', { level: 3 }).first()).toHaveText('Porco Rosso');
 });
 
 test('a reader folds a column away and it stays folded', async ({ page }) => {

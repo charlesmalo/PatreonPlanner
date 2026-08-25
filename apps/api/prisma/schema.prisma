@@ -148,6 +148,7 @@ model User {
   flagsRaised       Flag[]             @relation("FlagAuthor")
   flagsResolved     Flag[]             @relation("FlagResolver")
   moderationActs    ModerationAction[] @relation("ModerationActor")
+  Reaction          Reaction[]
 }
 
 model AbuseRecord {
@@ -314,6 +315,9 @@ model CreatorPolicy {
   // Off by default: a public contact form on a public board is the highest-value spam target
   // in the app. A creator who wants messages from anyone turns it on.
   allowAnonymousTickets Boolean        @default(false)
+  // On by default: a quality-of-life feature is opt-out. A board that wants no emoji on it is
+  // the creator's call.
+  allowReactions        Boolean        @default(true)
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
 
@@ -359,6 +363,7 @@ model Recommendation {
   links           RecommendationLink[]
   watchOrderItems WatchOrderItem[]
   tickets         Ticket[]
+  reactions       Reaction[]
   upvotes         Upvote[]
   flags           Flag[]
   actions         ModerationAction[]
@@ -451,6 +456,7 @@ model CreatorNote {
 
   recommendation Recommendation @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
   // Restrict, like ModerationAction: deleting a moderator's account must not erase what they
+  reactions      Reaction[]
   // wrote on someone else's board.
   author         User           @relation("NoteAuthor", fields: [authorUserId], references: [id], onDelete: Restrict)
 
@@ -617,6 +623,33 @@ model CreatorFavorite {
 
   @@id([userId, creatorId])
   @@index([creatorId])
+}
+
+// Enthusiasm, kept apart from demand. Never an input to any ordering — the moment a reaction
+// could move an entry it would be a second voting system, with none of the tier weighting that
+// makes the first one meaningful, and one anybody could flood.
+//
+// Two nullable subjects rather than a polymorphic (type, id) pair: a polymorphic pair carries no
+// foreign key, so deleting an entry would leave orphaned reactions and nothing would notice. A
+// check constraint keeps exactly one set. Comments get a third column when they arrive.
+model Reaction {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String   @db.Uuid
+  recommendationId String?  @db.Uuid
+  noteId           String?  @db.Uuid
+  emote            String
+  createdAt        DateTime @default(now())
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recommendation Recommendation? @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
+  note           CreatorNote?    @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  // One of each emote per person per subject; sending it again takes it back.
+  @@unique([recommendationId, userId, emote])
+  @@unique([noteId, userId, emote])
+  @@index([recommendationId])
+  @@index([noteId])
+  @@index([userId])
 }
 
 enum TicketStatus {

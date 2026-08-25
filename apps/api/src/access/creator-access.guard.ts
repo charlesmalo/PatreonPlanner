@@ -25,6 +25,7 @@ export interface ResolvedCreator {
   hidePendingFromPublic: boolean;
   allowVoteRatchet: boolean;
   allowAnonymousTickets: boolean;
+  allowReactions: boolean;
 }
 
 type CreatorRequest = Request & { creator?: ResolvedCreator; viewer?: Viewer };
@@ -97,6 +98,7 @@ export class CreatorAccessGuard implements CanActivate {
       // Fails closed like the rest of this resolver: a board with no policy row does not take
       // messages from strangers.
       allowAnonymousTickets: creator.policy?.allowAnonymousTickets ?? false,
+      allowReactions: creator.policy?.allowReactions ?? false,
     };
     request.viewer = viewer;
     return true;
@@ -117,6 +119,7 @@ export class CreatorAccessGuard implements CanActivate {
             hidePendingFromPublic: true,
             allowVoteRatchet: true,
             allowAnonymousTickets: true,
+            allowReactions: true,
             submitMinTier: { select: { amountCents: true } },
             upvoteMinTier: { select: { amountCents: true } },
           },

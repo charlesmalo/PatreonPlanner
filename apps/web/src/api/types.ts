@@ -105,7 +105,16 @@ export interface ThemeSummary {
   entryCount: number;
 }
 
+export interface ReactionCount {
+  emote: string;
+  count: number;
+  /** Whether the reader themselves reacted with it. */
+  reacted: boolean;
+}
+
 export interface Recommendation {
+  /** Enthusiasm, kept apart from demand — never an input to the board's ordering. */
+  reactions?: ReactionCount[];
   /** Floated to the top of its column by the server, whatever the sort. */
   isCreatorPick?: boolean;
   /** What the board ranks by: the sum of what each voter's tier is worth. */
