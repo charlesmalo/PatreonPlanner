@@ -1,0 +1,21 @@
+---
+description: Centralized agent ruleset pointer
+globs:
+alwaysApply: true
+---
+
+
+This project is governed centrally by `coding_agent/`, not by this file.
+
+Read `AGENTS.md` at the repository root first for the required reading order
+(`coding_agent/00_AGENT_INSTRUCTIONS.md` onward) and the list of other agents
+working in this project. Do not restate or fork those rules here.
+
+The three non-negotiables: never assume — ask with options and a recommendation;
+never claim done without running the verification commands; never push without
+approval, noting the standing grant recorded in
+`coding_agent/02_COLLABORATION_PROTOCOL.md` §1 and its limits.
+
+> If `coding_agent/` lives somewhere other than the repository root in this
+> project, adjust the prefix in the paths above to match. Everything inside that
+> folder is written relative to the folder itself and needs no changes.
