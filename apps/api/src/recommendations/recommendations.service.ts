@@ -55,6 +55,9 @@ export const BOARD_ONLY_DEFAULTS = {
   availability: null,
   parentId: null,
   themes: [] as Array<{ id: string; name: string }>,
+  // A freshly submitted entry and a search hit both have none, and a client rendering a card
+  // from either needs the same fields the board's card has.
+  reactions: [] as ReactionCount[],
 };
 
 /**
