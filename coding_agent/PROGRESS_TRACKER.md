@@ -4,10 +4,11 @@
 
 Phase 1 is complete and merged. Phase 2 — the board experience — is designed in
 `docs/superpowers/specs/2026-08-17-phase2-board-experience-design.md` and is
-being built in sequence. All eleven sequenced steps have shipped. What remains is the link/candidate
-model (design §4), which was split out of grouping rather than dropped.
+being built in sequence. Every sequenced step has shipped, including the
+link/candidate model (design §4), which was split out of grouping rather than
+dropped.
 
-The verification baseline at the time of writing: **816 API + 261 web + 38 e2e
+The verification baseline at the time of writing: **877 API + 282 web + 39 e2e
 tests passing**, typecheck clean across every package.
 
 ## Milestones
@@ -25,38 +26,46 @@ tests passing**, typecheck clean across every package.
 - [x] M10: Weighted voting, the upward-only ratchet, the my-votes page
 - [x] M11: Granular moderator permissions, view-as mode
 - [x] M12: Disputes and contact tickets
-- [x] M13: Grouping (the link/candidate model is its own plan, not yet started)
+- [x] M13: Grouping
 - [x] M14: Reactions
 - [x] M16: Drag-and-drop, and hand-arranged order
 - [x] M15: Donation page (link-out; needs a payment URL to switch on)
+- [x] M17: Link candidates — a submitted link waits for staff, and staff decide
+      on the card (plans 09 and 10)
 
 ## Active Task
 
-None. The Phase 2 sequence is complete. The link/candidate model (design §4)
-is the remaining designed-but-unbuilt piece.
+None. The Phase 2 sequence is complete, nothing in the design is left unbuilt,
+and every recorded debt item has been cleared or has its reason recorded in
+place. Open questions below are the engineer's to answer.
 
 ## Open Questions Blocking Work
 
-| Question                                                       | Blocks | Why it matters                                                                     |
-| -------------------------------------------------------------- | ------ | ---------------------------------------------------------------------------------- |
-| Does a group's weight sum its children, or show only the head? | M13    | Weight is now a real number rather than a headcount, so the answer changes ranking |
-| What does premium contain beyond the reaction palette?         | M14    | It may withhold no functionality and may not override a creator's limits           |
-| Which permissions stay bundled under `MODERATE`?               | —      | The five that exist cover today's endpoints                                        |
+| Question                                               | Blocks | Why it matters                                                           |
+| ------------------------------------------------------ | ------ | ------------------------------------------------------------------------ |
+| What does premium contain beyond the reaction palette? | M14    | It may withhold no functionality and may not override a creator's limits |
+| Which permissions stay bundled under `MODERATE`?       | —      | The five that exist cover today's endpoints                              |
 
 ## Known Debt
 
-- **Coverage is not wired.** `07_TESTING_STANDARDS.md` §3 states the target and
-  why it is not yet a gate.
-- **`recommendations.service.ts` is well past the 300-line limit**
-  (`04_CODE_STANDARDS.md` §1). Splitting it needs its own approval.
-- **The `ThemeSource` migration is not rolling-deploy safe** — backfill and
-  `DROP COLUMN` in one step. Harmless with nothing deployed; must be split into
-  expand/contract before this ever runs more than one instance.
-- **`openspec/config.yaml` is the untouched default**, so generated artifacts do
-  not inherit these rules.
+- **Web coverage is not wired.** The API gate is live (`cd apps/api && pnpm
+coverage`); vitest needs `@vitest/coverage-v8`, a new dependency and so the
+  engineer's call.
+- ~~`recommendations.service.ts` past the 300-line limit~~ — split into seven
+  modules (plan 11); `hooks.ts` split into three. Two files remain over:
+  `SubmitForm.tsx` (378) and `ReviewQueue.tsx` (345), each a deliberate stop
+  with its reasoning recorded in `04_CODE_STANDARDS.md` §1.
+- **Two migrations are not rolling-deploy safe** — `ThemeSource` (backfill then
+  `DROP COLUMN`) and `link_candidates` (backfill then `SET NOT NULL`), each in
+  one step. Harmless with nothing deployed, and deliberately _not_ fixed in
+  place: Prisma checksums an applied migration, so editing one fails every
+  database that already ran it. Both are listed as exemptions in
+  `apps/api/test/migration-safety.e2e-spec.ts`, which now fails any _new_
+  migration that does the same.
 
 ## Session Log
 
-| Date       | Event                                                       |
-| ---------- | ----------------------------------------------------------- |
-| 2026-08-24 | `coding_agent/` ruleset added to an already-running project |
+| Date       | Event                                                                        |
+| ---------- | ---------------------------------------------------------------------------- |
+| 2026-08-24 | `coding_agent/` ruleset added to an already-running project                  |
+| 2026-08-25 | Link candidates shipped (plans 09, 10); every recorded API debt item cleared |

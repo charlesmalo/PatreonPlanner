@@ -11,11 +11,20 @@ export interface Capabilities {
   submit: boolean;
   moderate: boolean;
   administer: boolean;
+  /**
+   * What this staff member may do beyond being staff. A rendering hint only — every endpoint
+   * behind these controls checks the same permission server-side and refuses regardless.
+   * Empty for anyone who is not staff here; expanded to the full set for an owner, whose
+   * stored column is empty because their powers come from the role.
+   */
+  permissions: StaffPermission[];
 }
 
 export interface RecommendationLink {
+  id: string;
   url: string;
   label: string | null;
+  isPreferred: boolean;
 }
 
 export interface TitleSummary {
@@ -140,6 +149,12 @@ export interface Recommendation {
   parentId: string | null;
   themes: Array<{ id: string; name: string }>;
   links: RecommendationLink[];
+  /**
+   * Links suggested but not yet published. The API sends these only to staff and to a
+   * candidate's own submitter, so anything here is already the viewer's to see — the client
+   * decides how to draw them, never who gets them.
+   */
+  candidateLinks: RecommendationLink[];
   submittedBy: { id: string; fullName: string | null; avatarUrl: string | null };
 }
 

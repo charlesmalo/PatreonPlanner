@@ -14,6 +14,7 @@ export const allCapabilities: Capabilities = {
   submit: true,
   moderate: false,
   administer: false,
+  permissions: [],
 };
 
 export const viewOnly: Capabilities = {
@@ -22,6 +23,7 @@ export const viewOnly: Capabilities = {
   submit: false,
   moderate: false,
   administer: false,
+  permissions: [],
 };
 
 export function recommendation(overrides: Partial<Recommendation> = {}): Recommendation {
@@ -36,6 +38,7 @@ export function recommendation(overrides: Partial<Recommendation> = {}): Recomme
     title: null,
     createdAt: new Date().toISOString(),
     availability: null,
+    candidateLinks: [],
     watchOrderItems: [],
     notes: [],
     parentId: null,

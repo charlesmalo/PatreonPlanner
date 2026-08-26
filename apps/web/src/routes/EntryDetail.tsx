@@ -54,6 +54,7 @@ export function EntryDetail() {
           headingLevel={1}
           canUpvote={capabilities.upvote}
           canModerate={capabilities.moderate}
+          permissions={capabilities.permissions}
           onCount={applyUpvote}
           onStatusChanged={applyStatus}
         />

@@ -40,6 +40,13 @@ pnpm format:check                          # formatting
 cd e2e && pnpm e2e                         # end-to-end, needs the Docker stack up
 ```
 
+A fifth is available but not part of the gate, because it re-runs the whole API
+suite and is slow to sit in the loop:
+
+```
+cd apps/api && pnpm coverage               # thresholds in jest-e2e.json
+```
+
 `pnpm -r test` transpiles without typechecking, so **a green test run does not
 imply a green build.** Both are required; that gap has broken a Docker build in
 this project before.
@@ -66,6 +73,15 @@ If any of these fails, the work is not done. See `07_TESTING_STANDARDS.md`.
      shaped like production's, not only against the empty database the test
      containers give it.** Integration tests migrate a fresh schema, where a
      de-duplication step has nothing to de-duplicate and passes vacuously.
+   - **Destructive changes are expand/contract.** A rolling deploy runs old and
+     new code against one database for the length of the rollout, so a dropped
+     column is still in the old instance's `SELECT` list and a column made
+     `NOT NULL` has no default in its `INSERT`. Add and backfill in one
+     release, stop reading the old shape in the next, drop it in a third.
+     `apps/api/test/migration-safety.e2e-spec.ts` enforces this; migrations
+     written before it exists are listed there with the reason each is exempt.
+     **Never edit an applied migration to fix one** — Prisma checksums it, and
+     the edit fails every database that already ran it.
    - **De-duplication needs a total order.** `DELETE ... WHERE a.createdAt >
 b.createdAt` keeps _both_ rows when two share a timestamp — and rows written
      by one statement always do. The unique index that follows then fails, and it

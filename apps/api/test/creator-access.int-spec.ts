@@ -197,12 +197,59 @@ describe('CreatorAccessGuard (integration)', () => {
       submit: true,
       moderate: false,
       administer: false,
+      // Empty rather than absent: a client doing `permissions.includes(...)` on undefined
+      // throws, and the card that crashes is the patron's, not the moderator's.
+      permissions: [],
     });
 
     await ctx.prisma.creatorPolicy.update({
       where: { creatorId },
       data: { submitMinTierId: null },
     });
+  });
+
+  it('tells a moderator which permissions they actually hold', async () => {
+    // The SPA cannot call `hasPermission`, so without this it cannot tell an EDIT_ENTRIES
+    // moderator from a HANDLE_REPORTS one — and renders controls the API then refuses.
+    await setVisibility('PUBLIC');
+    const cookie = await loginAs('guard-perms');
+    const user = await ctx.prisma.user.findUniqueOrThrow({
+      where: { patreonUserId: 'guard-perms' },
+    });
+    await ctx.prisma.creatorStaff.create({
+      data: { creatorId, userId: user.id, role: 'MOD', permissions: ['MOVE_ENTRIES'] },
+    });
+
+    const res = await request(ctx.app.getHttpServer())
+      .get('/api/v1/creators/guarded/capabilities')
+      .set('Cookie', cookie)
+      .expect(200);
+
+    expect(res.body.permissions).toEqual(['MOVE_ENTRIES']);
+    await ctx.prisma.creatorStaff.deleteMany({ where: { creatorId, userId: user.id } });
+  });
+
+  it('gives an owner the full set rather than the empty row they are stored with', async () => {
+    // An owner's powers come from the role short-circuiting the check, so their stored
+    // permissions column is empty by design. Returning it raw would hide every control from
+    // the one person entitled to all of them.
+    await setVisibility('PUBLIC');
+    const cookie = await loginAs('guard-owner');
+    const owner = await ctx.prisma.user.findUniqueOrThrow({
+      where: { patreonUserId: 'guard-owner' },
+    });
+    const staff = await ctx.prisma.creatorStaff.create({
+      data: { creatorId, userId: owner.id, role: 'OWNER', permissions: [] },
+    });
+
+    const res = await request(ctx.app.getHttpServer())
+      .get('/api/v1/creators/guarded/capabilities')
+      .set('Cookie', cookie)
+      .expect(200);
+
+    expect(res.body.permissions).toEqual(expect.arrayContaining(['EDIT_ENTRIES']));
+    expect(res.body.administer).toBe(true);
+    await ctx.prisma.creatorStaff.delete({ where: { id: staff.id } });
   });
 
   it('reports no capabilities beyond view for an anonymous caller', async () => {
@@ -216,6 +263,7 @@ describe('CreatorAccessGuard (integration)', () => {
       submit: false,
       moderate: false,
       administer: false,
+      permissions: [],
     });
   });
 

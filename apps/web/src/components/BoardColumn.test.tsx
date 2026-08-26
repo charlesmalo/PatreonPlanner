@@ -37,6 +37,7 @@ describe('BoardColumn', () => {
           theme={null}
           canUpvote={false}
           canModerate={false}
+          permissions={[]}
           onMoved={vi.fn()}
           {...props}
         />

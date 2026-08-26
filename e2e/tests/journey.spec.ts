@@ -672,6 +672,38 @@ test('a catalogue title shows where to watch it', async ({ page }) => {
   await expect(page.getByText(/availability data by justwatch/i)).toBeVisible();
 });
 
+test('a patron link waits for a moderator, who publishes it from the card', async ({ page }) => {
+  // The whole shape of the feature in one pass, through the real proxy: submitting attaches a
+  // link that does *not* render as the creator's own, and the control that releases it lives on
+  // the card. The API-level tests prove each half; only this proves they are wired to each other.
+  await signIn(page, 500);
+  await page.goto(`/c/${CREATOR.slug}`);
+
+  await page.getByLabel(/add something the catalogue does not have/i).fill('Perfect Blue');
+  await page.getByLabel(/^link/i).fill('https://example.test/perfect-blue');
+  await page.getByRole('button', { name: 'Suggest', exact: true }).click();
+
+  // Theirs, so they can see it is pending rather than think it was dropped — but not as a link.
+  await expect(page.getByText(/your link is waiting for review/i)).toBeVisible();
+  await expect(page.getByRole('link', { name: 'https://example.test/perfect-blue' })).toHaveCount(
+    0,
+  );
+
+  // A moderator sees the same URL as something to decide on.
+  await forgetAllSessions();
+  await signIn(page, 500, 'patreon-mod-e2e');
+  makeStaff('patreon-mod-e2e');
+  await page.goto(`/c/${CREATOR.slug}`);
+
+  await expect(page.getByText(/suggested links, waiting for review/i)).toBeVisible();
+  await page.getByRole('button', { name: 'Publish https://example.test/perfect-blue' }).click();
+
+  // And now it is a real link, opened without handing the page a reference back.
+  const published = page.getByRole('link', { name: 'https://example.test/perfect-blue' });
+  await expect(published).toBeVisible();
+  await expect(published).toHaveAttribute('rel', /noopener/);
+});
+
 test('a patron can suggest a whole franchise', async ({ page }) => {
   await signIn(page, 500);
   await page.goto(`/c/${CREATOR.slug}`);

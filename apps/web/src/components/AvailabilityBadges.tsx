@@ -1,5 +1,5 @@
 import type { Availability, AvailabilityOffer } from '../api/types';
-import { isSafeHttpUrl } from './RecommendationCard';
+import { isSafeHttpUrl } from './safe-url';
 
 // Built here rather than stored, so the image size can change without a migration.
 const LOGO_BASE = 'https://image.tmdb.org/t/p/w45';

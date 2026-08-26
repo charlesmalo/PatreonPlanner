@@ -87,7 +87,11 @@ describe('CreatorBoard', () => {
       'GET /api/v1/creators/ada-writes/capabilities': viewOnly,
       'GET /api/v1/creators/ada-writes/recommendations': (url: URL) => ({
         items: byColumn(url, [
-          recommendation({ links: [{ url: 'https://example.com/x', label: 'Trailer' }] }),
+          recommendation({
+            links: [
+              { id: 'link-1', url: 'https://example.com/x', label: 'Trailer', isPreferred: false },
+            ],
+          }),
         ]),
         nextCursor: null,
       }),

@@ -3,7 +3,7 @@ import { AbuseService } from '../src/abuse/abuse.service';
 import {
   DUPLICATE_STRIKE_THRESHOLD,
   RATE_LIMIT_STRIKE_THRESHOLD,
-} from '../src/recommendations/recommendations.service';
+} from '../src/recommendations/submission-strikes.service';
 import { AuthTestContext, pickCookie, startAuthApp } from './support/auth-app';
 import { ALL_STAFF_PERMISSIONS } from '../src/access/permissions';
 

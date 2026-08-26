@@ -16,6 +16,14 @@ export function narrowCapabilities(capabilities: Capabilities, mode: ViewMode): 
     // `&& false` rather than `false`, so the intent reads as "at most what they had".
     moderate: capabilities.moderate && false,
     administer: capabilities.administer && false,
+    // Emptied with them. A staff permission left standing would keep rendering the controls
+    // this preview exists to hide, and "view as patron" would show a patron view with publish
+    // buttons on it. `filter(() => false)` for the same reason as `&& false` above: narrowing
+    // can only ever remove.
+    // `?? []` for the reason `themes` and `notes` carry one: a capabilities payload that
+    // predates this field — a cached response, an API mid-deploy — must cost a control, not
+    // the whole board. Without it this line throws inside render and the page goes blank.
+    permissions: (capabilities.permissions ?? []).filter(() => false),
   };
 }
 
