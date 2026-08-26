@@ -8,7 +8,7 @@ being built in sequence. Every sequenced step has shipped, including the
 link/candidate model (design §4), which was split out of grouping rather than
 dropped.
 
-The verification baseline at the time of writing: **877 API + 279 web + 39 e2e
+The verification baseline at the time of writing: **877 API + 282 web + 39 e2e
 tests passing**, typecheck clean across every package.
 
 ## Milestones
@@ -35,8 +35,9 @@ tests passing**, typecheck clean across every package.
 
 ## Active Task
 
-Working down `Known Debt` below. The Phase 2 sequence is complete and nothing
-in the design is left unbuilt.
+None. The Phase 2 sequence is complete, nothing in the design is left unbuilt,
+and every recorded debt item has been cleared or has its reason recorded in
+place. Open questions below are the engineer's to answer.
 
 ## Open Questions Blocking Work
 
@@ -51,10 +52,9 @@ in the design is left unbuilt.
 coverage`); vitest needs `@vitest/coverage-v8`, a new dependency and so the
   engineer's call.
 - ~~`recommendations.service.ts` past the 300-line limit~~ — split into seven
-  modules (plan 11). Nothing in `apps/api/src` is over 300 lines. Three files in
-  `apps/web/src` still are: `hooks.ts` (482), `SubmitForm.tsx` (405),
-  `ReviewQueue.tsx` (345). They own React state rather than a database, so they
-  are a different risk profile and their own task.
+  modules (plan 11); `hooks.ts` split into three. Two files remain over:
+  `SubmitForm.tsx` (378) and `ReviewQueue.tsx` (345), each a deliberate stop
+  with its reasoning recorded in `04_CODE_STANDARDS.md` §1.
 - **Two migrations are not rolling-deploy safe** — `ThemeSource` (backfill then
   `DROP COLUMN`) and `link_candidates` (backfill then `SET NOT NULL`), each in
   one step. Harmless with nothing deployed, and deliberately _not_ fixed in
