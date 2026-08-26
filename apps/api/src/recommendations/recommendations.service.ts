@@ -28,6 +28,7 @@ import { PATRON_VISIBLE_STATUSES } from '../moderation/transitions';
 import { normalizeTitle } from './normalize-title';
 import { ReactionsService, type ReactionCount } from '../reactions/reactions.service';
 import { GroupingService } from './grouping.service';
+import { LinksService, visibleLinks, type LinkViewer } from './links.service';
 
 const MAX_PAGE = 50;
 
@@ -66,14 +67,31 @@ export const BOARD_ONLY_DEFAULTS = {
  * response is the same shape as a board entry. The relation had to dodge Recommendation's own
  * `notes` scalar; the API does not have to inherit that.
  */
-export function present<T extends { creatorNotes?: unknown[]; groupHeadId?: string | null }>(
-  row: T,
-) {
+type SelectedLink = { id: string; url: string; label: string | null; isPreferred: boolean } & {
+  status: string;
+};
+
+export function present<
+  T extends {
+    creatorNotes?: unknown[];
+    groupHeadId?: string | null;
+    links?: SelectedLink[];
+  },
+>(row: T) {
   // `groupHeadId` is internal: the contract exposes `parentId`, which is the same answer whether
   // the head was chosen by staff or implied by the catalogue. `creatorNotes` is a schema artefact
   // — the model had to dodge Recommendation's own `notes` scalar.
-  const { creatorNotes, groupHeadId, ...rest } = row;
-  return { ...rest, notes: creatorNotes ?? [] };
+  const { creatorNotes, groupHeadId, links, ...rest } = row;
+  // Published on the card, candidates alongside for the staff who decide. Partitioned in the one
+  // presenter every path goes through: a reader who is not staff never had a candidate selected,
+  // so this splits an already-safe list rather than being the thing that keeps it safe.
+  const strip = ({ status, ...link }: SelectedLink) => link;
+  return {
+    ...rest,
+    links: (links ?? []).filter((link) => link.status === 'PUBLISHED').map(strip),
+    candidateLinks: (links ?? []).filter((link) => link.status === 'CANDIDATE').map(strip),
+    notes: creatorNotes ?? [],
+  };
 }
 
 // Containment only. RELATED means "similar", and nesting on it would bury unrelated entries.
@@ -241,54 +259,59 @@ function decodeCursor(raw: string | undefined): BoardCursor | null {
 
 // Explicit select: the submitter is a User row carrying an email and Patreon id, neither of
 // which belongs on a public board.
-export const RECOMMENDATION_FIELDS = {
-  id: true,
-  type: true,
-  customTitle: true,
-  description: true,
-  status: true,
-  upvoteCount: true,
-  weightedScore: true,
-  isCreatorPick: true,
-  manualRank: true,
-  // Read for the parent projection below, then dropped from the response — the contract exposes
-  // `parentId`, whether the head was chosen by staff or implied by the catalogue.
-  groupHeadId: true,
-  createdAt: true,
-  title: {
-    // `id` is what GET /catalog/titles/:id/availability keys on. Without it the endpoint is
-    // unreachable: no response anywhere exposed the catalogue row's id.
-    select: { id: true, tmdbId: true, mediaType: true, name: true, year: true, posterPath: true },
-  },
-  links: { select: { url: true, label: true } },
-  // TIMELINE only. A NOTE is editor commentary and must never reach the patron board — the kind
-  // is the whole point of the model, so the filter lives in the projection rather than in a
-  // caller who might forget it.
-  creatorNotes: {
-    where: { kind: 'TIMELINE' },
-    select: NOTE_FIELDS,
-    orderBy: { createdAt: 'asc' },
-  },
-  watchOrderItems: {
-    select: {
-      position: true,
-      customTitle: true,
-      note: true,
-      title: {
-        select: {
-          id: true,
-          tmdbId: true,
-          mediaType: true,
-          name: true,
-          year: true,
-          posterPath: true,
+export { visibleLinks, type LinkViewer };
+
+export const recommendationFields = (viewer: LinkViewer) =>
+  ({
+    id: true,
+    type: true,
+    customTitle: true,
+    description: true,
+    status: true,
+    upvoteCount: true,
+    weightedScore: true,
+    isCreatorPick: true,
+    manualRank: true,
+    // Read for the parent projection below, then dropped from the response — the contract exposes
+    // `parentId`, whether the head was chosen by staff or implied by the catalogue.
+    groupHeadId: true,
+    createdAt: true,
+    title: {
+      // `id` is what GET /catalog/titles/:id/availability keys on. Without it the endpoint is
+      // unreachable: no response anywhere exposed the catalogue row's id.
+      select: { id: true, tmdbId: true, mediaType: true, name: true, year: true, posterPath: true },
+    },
+    // A candidate is a claim waiting for a human, and rendering someone else's would carry the
+    // creator's implicit endorsement — which is the whole reason it waits.
+    links: visibleLinks(viewer),
+    // TIMELINE only. A NOTE is editor commentary and must never reach the patron board — the kind
+    // is the whole point of the model, so the filter lives in the projection rather than in a
+    // caller who might forget it.
+    creatorNotes: {
+      where: { kind: 'TIMELINE' },
+      select: NOTE_FIELDS,
+      orderBy: { createdAt: 'asc' },
+    },
+    watchOrderItems: {
+      select: {
+        position: true,
+        customTitle: true,
+        note: true,
+        title: {
+          select: {
+            id: true,
+            tmdbId: true,
+            mediaType: true,
+            name: true,
+            year: true,
+            posterPath: true,
+          },
         },
       },
+      orderBy: { position: 'asc' },
     },
-    orderBy: { position: 'asc' },
-  },
-  submittedBy: { select: { id: true, fullName: true, avatarUrl: true } },
-} satisfies Prisma.RecommendationSelect;
+    submittedBy: { select: { id: true, fullName: true, avatarUrl: true } },
+  }) satisfies Prisma.RecommendationSelect;
 
 @Injectable()
 export class RecommendationsService {
@@ -304,6 +327,7 @@ export class RecommendationsService {
     private readonly abuse: AbuseService,
     private readonly reactions: ReactionsService,
     private readonly grouping: GroupingService,
+    private readonly links: LinksService,
   ) {}
 
   /**
@@ -311,7 +335,7 @@ export class RecommendationsService {
    * prepending the result renders a card in a different shape from every other card — which is
    * precisely what the end-to-end suite caught.
    */
-  async submit(creatorId: string, userId: string, dto: SubmitRecommendationDto) {
+  async submit(creatorId: string, userId: string, dto: SubmitRecommendationDto, isStaff = false) {
     // Before the limiter, so a timed-out request does the least possible work — and so a blocked
     // caller does not also burn the hourly quota they will want when the timeout lifts.
     const timeoutUntil = await this.abuse.timeoutFor(userId);
@@ -403,7 +427,7 @@ export class RecommendationsService {
             type: dto.type,
             status: { notIn: HIDDEN_STATUSES },
           },
-      select: RECOMMENDATION_FIELDS,
+      select: recommendationFields({ userId, isStaff }),
     });
     // Design §5: a resubmit returns the existing entry and invites an upvote rather than
     // erroring — a creator's board is a demand signal, and a 409 would lose it.
@@ -412,6 +436,17 @@ export class RecommendationsService {
       // an hour for doing exactly what design §5 wants them to do.
       await this.refund(perCreatorKey, globalKey);
       await this.countDuplicate(userId, creatorId);
+      // The link is the new information in a repeat submission. Throwing it away is what this
+      // replaces — it queues as a candidate for staff rather than publishing itself.
+      if (dto.links?.length) {
+        existing.links = await this.links.contribute(
+          this.prisma,
+          existing.id,
+          userId,
+          isStaff,
+          dto.links,
+        );
+      }
       return { duplicate: true as const, recommendation: await this.withUpvoted(existing, userId) };
     }
 
@@ -424,6 +459,7 @@ export class RecommendationsService {
         normalizedTitle,
         title?.id ?? null,
         items,
+        isStaff,
       );
       // A FLAG is reviewed before the entry exists — it has to be, or a BLOCK would create one —
       // so the record was written with no subject. Linked now there is something to link to,
@@ -439,13 +475,22 @@ export class RecommendationsService {
           where: title
             ? { creatorId, titleId: title.id, type: dto.type }
             : { creatorId, titleId: null, normalizedTitle, type: dto.type },
-          select: RECOMMENDATION_FIELDS,
+          select: recommendationFields({ userId, isStaff }),
         });
         // No winner means the violation came from somewhere else — a Title upsert, say — and
         // reporting it as a duplicate would refund the limit and lose the submission.
         if (!winner) throw error;
         await this.refund(perCreatorKey, globalKey);
         await this.countDuplicate(userId, creatorId);
+        if (dto.links?.length) {
+          winner.links = await this.links.contribute(
+            this.prisma,
+            winner.id,
+            userId,
+            isStaff,
+            dto.links,
+          );
+        }
         return { duplicate: true as const, recommendation: await this.withUpvoted(winner, userId) };
       }
       throw error;
@@ -478,7 +523,7 @@ export class RecommendationsService {
       where: {
         AND: [{ id, creatorId: creator.id }, visibilityWhere(creator, viewer)],
       },
-      select: RECOMMENDATION_FIELDS,
+      select: recommendationFields({ userId: viewer.userId, isStaff: viewer.staffRole !== null }),
     });
     if (!entry) throw new NotFoundException();
 
@@ -637,6 +682,7 @@ export class RecommendationsService {
     normalizedTitle: string,
     titleId: string | null,
     items: Awaited<ReturnType<RecommendationsService['resolveItems']>>,
+    isStaff: boolean,
   ) {
     const recommendation = await this.prisma.recommendation.create({
       data: {
@@ -647,19 +693,34 @@ export class RecommendationsService {
         normalizedTitle,
         titleId,
         description: dto.description ?? null,
-        links: dto.links
-          ? { create: dto.links.map((l) => ({ url: l.url, label: l.label })) }
-          : undefined,
+        // Links go in through LinksService below rather than nested here: whether one is
+        // published or waits for a human depends on who submitted it, and that decision belongs
+        // in one place.
         // Nested create, so the entry and its steps land in one statement — a watch order with
         // no steps is not a thing that should ever be readable.
         watchOrderItems: items.length > 0 ? { create: items } : undefined,
       },
-      select: RECOMMENDATION_FIELDS,
+      select: recommendationFields({ userId, isStaff }),
     });
+    // Re-read rather than echoing what was sent: `contribute` de-duplicates and decides whether
+    // each link is published or a candidate, so the response has to describe what was actually
+    // stored. The row above was selected before any of that ran, so its links are empty.
+    const links = await this.links.contribute(
+      this.prisma,
+      recommendation.id,
+      userId,
+      isStaff,
+      dto.links ?? [],
+    );
+
     // Nothing can have upvoted a recommendation that did not exist a moment ago.
     return {
       duplicate: false as const,
-      recommendation: { ...present(recommendation), hasUpvoted: false, ...BOARD_ONLY_DEFAULTS },
+      recommendation: {
+        ...present({ ...recommendation, links }),
+        hasUpvoted: false,
+        ...BOARD_ONLY_DEFAULTS,
+      },
     };
   }
 
@@ -895,6 +956,7 @@ export class RecommendationsService {
       if (!theme) throw new NotFoundException();
     }
 
+    const isStaff = viewer.staffRole !== null;
     const items = (await this.prisma.recommendation.findMany({
       where: {
         creatorId: creator.id,
@@ -915,7 +977,7 @@ export class RecommendationsService {
       orderBy: boardOrdering(sort),
       take: take + 1,
       select: {
-        ...RECOMMENDATION_FIELDS,
+        ...recommendationFields({ userId: viewer.userId, isStaff }),
         upvoteCount: true,
         weightedScore: true,
         createdAt: true,
@@ -936,6 +998,13 @@ export class RecommendationsService {
       groupHeadId: string | null;
       createdAt: Date;
       titleId: string | null;
+      links?: Array<{
+        id: string;
+        url: string;
+        label: string | null;
+        status: string;
+        isPreferred: boolean;
+      }>;
       upvotes?: Array<{ id: string }>;
       creatorNotes?: unknown[];
     }>;
@@ -971,11 +1040,8 @@ export class RecommendationsService {
       : new Map<string, ReactionCount[]>();
 
     return {
-      items: page.map(({ upvotes, titleId, creatorNotes, groupHeadId, ...item }) => ({
-        ...item,
-        // `creatorNotes` is a schema artefact — the model had to dodge Recommendation's own
-        // `notes` scalar. The contract says what design §7 says.
-        notes: creatorNotes ?? [],
+      items: page.map(({ upvotes, titleId, groupHeadId, ...item }) => ({
+        ...present(item),
         hasUpvoted: (upvotes ?? []).length > 0,
         // Null for an external link, which has no canonical identity to look up.
         availability: (titleId && availability.get(titleId)) || null,

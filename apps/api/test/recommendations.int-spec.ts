@@ -190,7 +190,7 @@ describe('Recommendations (integration)', () => {
       }
     });
 
-    it('accepts an eligible patron and persists as PENDING with links', async () => {
+    it('accepts an eligible patron and holds their link as a candidate', async () => {
       const auth = await loginAs('rec-good');
       await makePatron('rec-good', 1000);
       const res = await submit(auth, {
@@ -205,8 +205,12 @@ describe('Recommendations (integration)', () => {
       expect(res.body.recommendation.hasUpvoted).toBe(false);
       expect(res.body.recommendation.status).toBe('PENDING');
       expect(res.body.recommendation.upvoteCount).toBe(0);
-      expect(res.body.recommendation.links).toEqual([
-        { url: 'https://example.com/film', label: 'Trailer' },
+      // A patron's link is a claim, not an endorsement: it waits for staff rather than appearing
+      // on the entry the moment it is submitted. The submitter still gets it back — as a
+      // candidate — so nothing they typed silently vanishes.
+      expect(res.body.recommendation.links).toEqual([]);
+      expect(res.body.recommendation.candidateLinks).toEqual([
+        expect.objectContaining({ url: 'https://example.com/film', label: 'Trailer' }),
       ]);
     });
 

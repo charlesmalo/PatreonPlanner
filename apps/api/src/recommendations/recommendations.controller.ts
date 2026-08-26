@@ -107,11 +107,18 @@ export class RecommendationsController {
   @UseGuards(CreatorAccessGuard, SessionGuard)
   async submit(
     @CurrentCreator() creator: ResolvedCreator,
+    @CurrentViewer() viewer: Viewer,
     @CurrentUser() user: CurrentUserPayload,
     @Body() dto: SubmitRecommendationDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const result = await this.recommendations.submit(creator.id, user.id, dto);
+    // Staff publish their own links immediately; everyone else queues a candidate.
+    const result = await this.recommendations.submit(
+      creator.id,
+      user.id,
+      dto,
+      viewer.staffRole !== null,
+    );
     // 201 only when something was actually created; a de-duplicated resubmit answers 200, since
     // "Created" would be untrue and clients key retry behaviour off it.
     res.status(result.duplicate ? HttpStatus.OK : HttpStatus.CREATED);

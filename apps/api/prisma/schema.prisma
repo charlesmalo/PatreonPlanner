@@ -130,25 +130,26 @@ model User {
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
-  ownedCreators     Creator[]          @relation("CreatorOwner")
-  memberships       Membership[]
-  staffRoles        CreatorStaff[]     @relation("StaffMember")
-  staffAssigned     CreatorStaff[]     @relation("StaffAssigner")
-  recommendations   Recommendation[]
-  upvotes           Upvote[]
-  abuseRecord       AbuseRecord?
-  notesWritten      CreatorNote[]      @relation("NoteAuthor")
-  invitesSent       StaffInvite[]      @relation("InviteAuthor")
-  invitesAccepted   StaffInvite[]      @relation("InviteAcceptor")
-  notifications     Notification[]
-  moderationResults ModerationResult[]
-  favorites         CreatorFavorite[]
-  ticketsRaised     Ticket[]           @relation("TicketAuthor")
-  ticketsResolved   Ticket[]           @relation("TicketResolver")
-  flagsRaised       Flag[]             @relation("FlagAuthor")
-  flagsResolved     Flag[]             @relation("FlagResolver")
-  moderationActs    ModerationAction[] @relation("ModerationActor")
-  Reaction          Reaction[]
+  ownedCreators      Creator[]            @relation("CreatorOwner")
+  memberships        Membership[]
+  staffRoles         CreatorStaff[]       @relation("StaffMember")
+  staffAssigned      CreatorStaff[]       @relation("StaffAssigner")
+  recommendations    Recommendation[]
+  upvotes            Upvote[]
+  abuseRecord        AbuseRecord?
+  notesWritten       CreatorNote[]        @relation("NoteAuthor")
+  invitesSent        StaffInvite[]        @relation("InviteAuthor")
+  invitesAccepted    StaffInvite[]        @relation("InviteAcceptor")
+  notifications      Notification[]
+  moderationResults  ModerationResult[]
+  favorites          CreatorFavorite[]
+  ticketsRaised      Ticket[]             @relation("TicketAuthor")
+  ticketsResolved    Ticket[]             @relation("TicketResolver")
+  flagsRaised        Flag[]               @relation("FlagAuthor")
+  flagsResolved      Flag[]               @relation("FlagResolver")
+  moderationActs     ModerationAction[]   @relation("ModerationActor")
+  Reaction           Reaction[]
+  RecommendationLink RecommendationLink[]
 }
 
 model AbuseRecord {
@@ -399,16 +400,36 @@ model Recommendation {
   @@index([submittedByUserId])
 }
 
+enum LinkStatus {
+  CANDIDATE
+  PUBLISHED
+}
+
 model RecommendationLink {
-  id               String   @id @default(uuid()) @db.Uuid
-  recommendationId String   @db.Uuid
-  url              String
-  label            String?
-  createdAt        DateTime @default(now())
+  id                String     @id @default(uuid()) @db.Uuid
+  recommendationId  String     @db.Uuid
+  url               String
+  label             String?
+  // Design §4: a URL from a non-staff submitter waits for a human. Otherwise submitting a
+  // duplicate is a way to attach a link to any card on any public board, where it renders with
+  // the creator's implicit endorsement — and a URL is actionable in a way a title is not.
+  status            LinkStatus @default(CANDIDATE)
+  // The identity of the page, with the parts that only say *where it was found* removed. Two
+  // people submitting the same page from different countries submit one candidate.
+  canonicalUrl      String
+  submittedByUserId String?    @db.Uuid
+  // Where the creator has decided to watch it. Locking one stops new candidates queueing behind
+  // a decision already made.
+  isPreferred       Boolean    @default(false)
+  createdAt         DateTime   @default(now())
 
   recommendation Recommendation @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
+  submittedBy    User?          @relation(fields: [submittedByUserId], references: [id], onDelete: SetNull)
 
+  // One row per page per entry, whatever form it arrived in.
+  @@unique([recommendationId, canonicalUrl])
   @@index([recommendationId])
+  @@index([submittedByUserId])
 }
 
 model WatchOrderItem {
