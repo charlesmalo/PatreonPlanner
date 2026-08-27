@@ -59,7 +59,15 @@ export class SubmissionsService {
    * prepending the result renders a card in a different shape from every other card — which is
    * precisely what the end-to-end suite caught.
    */
-  async submit(creatorId: string, userId: string, dto: SubmitRecommendationDto, isStaff = false) {
+  async submit(
+    creatorId: string,
+    userId: string,
+    dto: SubmitRecommendationDto,
+    isStaff = false,
+    // How it arrived, for the parts of the row that are about provenance rather than content. A
+    // carried-over entry is labelled so a moderator can judge a class of them at once.
+    origin: { viaCarryOver?: boolean } = {},
+  ) {
     // Before the limiter, so a timed-out request does the least possible work — and so a blocked
     // caller does not also burn the hourly quota they will want when the timeout lifts.
     const timeoutUntil = await this.abuse.timeoutFor(userId);
@@ -187,6 +195,7 @@ export class SubmissionsService {
         title?.id ?? null,
         items,
         isStaff,
+        origin,
       );
       // A FLAG is reviewed before the entry exists — it has to be, or a BLOCK would create one —
       // so the record was written with no subject. Linked now there is something to link to,
@@ -254,6 +263,7 @@ export class SubmissionsService {
     titleId: string | null,
     items: Awaited<ReturnType<SubmissionResolverService['resolveItems']>>,
     isStaff: boolean,
+    origin: { viaCarryOver?: boolean } = {},
   ) {
     const recommendation = await this.prisma.recommendation.create({
       data: {
@@ -264,6 +274,7 @@ export class SubmissionsService {
         normalizedTitle,
         titleId,
         description: dto.description ?? null,
+        viaCarryOver: origin.viaCarryOver ?? false,
         // Links go in through LinksService below rather than nested here: whether one is
         // published or waits for a human depends on who submitted it, and that decision belongs
         // in one place.
