@@ -566,6 +566,36 @@ test('a reader finds a board by name and walks to it without typing a URL', asyn
   await expect(page.getByRole('heading', { name: CREATOR.displayName })).toBeVisible();
 });
 
+test('a follower is told when a board starts something', async ({ page }) => {
+  // The reason to open the app at all: finding out that a creator you follow has actually started
+  // something. Proves the whole path end to end — favouriting is the follow, the move fans out to
+  // followers rather than only to the submitter, and the bell is where it lands.
+  seedEntryFrom('patreon-other-e2e', 'Nausicaa', 'ACCEPTED');
+
+  // A reader who follows the board, and is not the submitter.
+  await signIn(page, 500, 'patreon-follower-e2e');
+  await page.goto('/');
+  await page.getByLabel(/find a creator/i).fill(CREATOR.displayName.slice(0, 6));
+  await page
+    .getByRole('button', { name: new RegExp(`Favourite ${CREATOR.displayName}`, 'i') })
+    .click();
+  await expect(page.getByText(/^Favourite$/)).toBeVisible();
+  await signOut(page);
+
+  // A moderator starts it.
+  await signIn(page, 500, 'patreon-movemod-e2e');
+  makeStaff('patreon-movemod-e2e');
+  await page.goto(`/c/${CREATOR.slug}`);
+  await page.getByRole('button', { name: /Move “Nausicaa” to another column/i }).click();
+  await page.getByRole('menuitem', { name: 'Now Playing' }).click();
+  await signOut(page);
+
+  // And the follower hears about it.
+  await signIn(page, 500, 'patreon-follower-e2e');
+  await page.goto(`/c/${CREATOR.slug}`);
+  await expect(page.getByRole('button', { name: /1 unread notification/i })).toBeVisible();
+});
+
 test('a favourited board is offered first next time', async ({ page }) => {
   await signIn(page, 500, 'patreon-finder-e2e');
   await page.goto('/');
