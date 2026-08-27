@@ -41,15 +41,30 @@ It costs nothing to serve, cannot be abused, and withholds no functionality: rea
 
 ### Task 1: The palette splits
 
-- [ ] **Failing tests:** a free reader may cast a free emote; a free reader casting a premium one is refused with 402; a premium reader may cast either; an already-cast premium reaction still renders and still counts for a reader who is not premium.
-- [ ] Split `palette.ts`; gate the write in `reactions.service.ts`; keep every read ungated.
-- [ ] **Mutation-check:** dropping the gate; gating reads as well as writes; putting a premium emote in the free set.
-- [ ] Commit.
+- [x] **Failing tests:** a free reader may cast a free emote; a free reader casting a premium one is refused with 402; a premium reader may cast either; an already-cast premium reaction still renders and still counts for a reader who is not premium.
+- [x] Split `palette.ts`; gate the write in `reactions.service.ts`; keep every read ungated.
+- [x] **Mutation-check:** dropping the gate; gating reads as well as writes; putting a premium emote in the free set.
+- [x] Commit.
 
 ### Task 2: The reader can see what they would get
 
-- [ ] **Failing tests:** `/auth/me` reports `isPremium`; a free reader sees the premium emotes disabled with a reason; a premium reader can click them; a locked emote that already has a count still shows its count.
-- [ ] Commit.
+- [x] **Failing tests:** `/auth/me` reports `isPremium`; a free reader sees the premium emotes disabled with a reason; a premium reader can click them; a locked emote that already has a count still shows its count.
+- [x] Commit.
+
+## What it found
+
+**A pre-existing test iterated the whole palette expecting success**, which broke the moment the
+palette grew a gated half. It is a test about *ordering* — that a reaction never moves an entry —
+so it now uses the free set and stays independent of what premium contains.
+
+**The `/api/v1/me` shape test caught the new field**, which is the invariant doing its job. It
+gained two cases while being updated: that premium is reported as a boolean and that the date
+behind it never reaches the client — a date on the wire invites a client to compare it against its
+own clock, and a device with a wrong clock would grant itself premium.
+
+**`useSession` could not be called from the reaction bar.** It fetches, and the bar renders once
+per entry, so a hook there turns one question into one request per card. The flag is threaded from
+the board instead, the way `permissions` already is.
 
 ## Known risks
 

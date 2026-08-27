@@ -3,6 +3,11 @@ export interface SessionUser {
   patreonUserId: string;
   fullName: string | null;
   avatarUrl: string | null;
+  /**
+   * A rendering hint. Premium is a property of the user rather than of a (user, board) pair, and
+   * never an authorization input — every endpoint behind a premium control checks again.
+   */
+  isPremium: boolean;
 }
 
 export interface Capabilities {

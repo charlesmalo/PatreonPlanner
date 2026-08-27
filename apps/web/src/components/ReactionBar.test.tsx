@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ReactionBar } from './ReactionBar';
+import { FREE_REACTIONS, PREMIUM_REACTIONS, ReactionBar } from './ReactionBar';
 
 describe('ReactionBar', () => {
   const originalFetch = global.fetch;
@@ -87,5 +87,46 @@ describe('ReactionBar', () => {
     );
 
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('offers a free reader only the half they can cast', () => {
+    setup({ canReact: true, isPremium: false });
+
+    expect(screen.getAllByRole('button')).toHaveLength(FREE_REACTIONS.length);
+  });
+
+  it('offers a premium reader the whole palette', () => {
+    setup({ canReact: true, isPremium: true });
+
+    expect(screen.getAllByRole('button')).toHaveLength(
+      FREE_REACTIONS.length + PREMIUM_REACTIONS.length,
+    );
+  });
+
+  it('still shows a premium reaction somebody else cast, with its count', () => {
+    // Reading is never gated. Hiding it would make the count vanish for everyone who does not
+    // pay, which is a lie about the data rather than a locked feature.
+    setup({
+      canReact: true,
+      isPremium: false,
+      reactions: [{ emote: PREMIUM_REACTIONS[0], count: 3, reacted: false }],
+    });
+
+    const locked = screen.getByRole('button', { name: new RegExp(`${PREMIUM_REACTIONS[0]} 3`) });
+    expect(locked).toBeInTheDocument();
+    // Visible and counted, but not castable by them.
+    expect(locked).toBeDisabled();
+  });
+
+  it('names a locked emote as locked, so it is not read as broken', () => {
+    setup({
+      canReact: true,
+      isPremium: false,
+      reactions: [{ emote: PREMIUM_REACTIONS[1], count: 1, reacted: false }],
+    });
+
+    expect(
+      screen.getByRole('button', { name: new RegExp('premium palette', 'i') }),
+    ).toBeInTheDocument();
   });
 });

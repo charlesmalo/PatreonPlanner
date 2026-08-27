@@ -67,7 +67,13 @@ describe('accessibility basics', () => {
     rerender(
       <MemoryRouter>
         <Layout
-          user={{ id: 'u', patreonUserId: 'p', fullName: 'Ada', avatarUrl: null }}
+          user={{
+            id: 'u',
+            patreonUserId: 'p',
+            fullName: 'Ada',
+            avatarUrl: null,
+            isPremium: false,
+          }}
           loadingSession={false}
           onSignOut={vi.fn()}
           notifications={noNotifications}

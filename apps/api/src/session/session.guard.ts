@@ -15,6 +15,12 @@ export interface CurrentUserPayload {
   patreonUserId: string;
   fullName: string | null;
   avatarUrl: string | null;
+  /**
+   * A rendering hint, and a `User` property rather than a `(user, creator)` one — Amendment A.1
+   * keeps premium out of `can(capability, viewer, policy)` entirely, so it is deliberately absent
+   * from `Viewer`. Every endpoint behind a premium control checks again and refuses regardless.
+   */
+  isPremium: boolean;
 }
 
 type AuthenticatedRequest = Request & { currentUser?: CurrentUserPayload };
@@ -38,13 +44,25 @@ export class SessionGuard implements CanActivate {
       where: { id: userId },
       // Explicit select rather than the whole row: the encrypted token columns must never
       // reach a handler, where returning `user` directly would serialize them into a response.
-      select: { id: true, patreonUserId: true, fullName: true, avatarUrl: true },
+      select: {
+        id: true,
+        patreonUserId: true,
+        fullName: true,
+        avatarUrl: true,
+        premiumUntil: true,
+      },
     });
     // A session can outlive its user. Deleting the row is then enough to lock the holder out,
     // without having to hunt down their sessions.
     if (!user) throw new UnauthorizedException();
 
-    request.currentUser = user;
+    const { premiumUntil, ...rest } = user;
+    // Derived here rather than sent raw: a date on the wire invites a client to compare it
+    // against its own clock, and a device with a wrong clock would grant itself premium.
+    request.currentUser = {
+      ...rest,
+      isPremium: premiumUntil !== null && premiumUntil > new Date(),
+    };
     return true;
   }
 }

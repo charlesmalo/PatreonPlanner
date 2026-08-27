@@ -2,8 +2,15 @@ import { useState } from 'react';
 import { api } from '../api/client';
 import type { ReactionCount } from '../api/types';
 
-/** Kept in step with the API's palette; a client cannot invent one the server will accept. */
-export const REACTIONS = ['👍', '🔥', '😂', '😭', '🤯', '👀'] as const;
+/**
+ * Kept in step with the API's palette; a client cannot invent one the server will accept.
+ *
+ * Split the same way for the same reason: offering an emote the server then refuses is a worse
+ * failure than never offering it, and only an end-to-end test would catch the two drifting.
+ */
+export const FREE_REACTIONS = ['👍', '🔥', '😂', '😭', '🤯', '👀'] as const;
+export const PREMIUM_REACTIONS = ['🍿', '🧠', '🥹', '⭐', '🎯', '🫶'] as const;
+export const REACTIONS = [...FREE_REACTIONS, ...PREMIUM_REACTIONS] as const;
 
 interface ReactionBarProps {
   slug: string;
@@ -12,6 +19,8 @@ interface ReactionBarProps {
   reactions: ReactionCount[];
   /** Reacting is participation, so it follows the same gate as upvoting. */
   canReact: boolean;
+  /** Which half of the palette this reader may cast from. A hint — the API checks again. */
+  isPremium?: boolean;
 }
 
 /**
@@ -26,6 +35,7 @@ export function ReactionBar({
   title,
   reactions,
   canReact,
+  isPremium = false,
 }: ReactionBarProps) {
   const [counts, setCounts] = useState(reactions);
   const [busy, setBusy] = useState(false);
@@ -55,9 +65,22 @@ export function ReactionBar({
     }
   }
 
-  // Only what someone has actually used, plus the full palette for a reader who may add one.
-  // A row of six grey emotes on every card would be noise on a board nobody has reacted to.
-  const shown = canReact ? REACTIONS : REACTIONS.filter((emote) => countFor(emote));
+  const locked = (emote: string) =>
+    (PREMIUM_REACTIONS as readonly string[]).includes(emote) && !isPremium;
+
+  // Only what someone has actually used, plus the palette a reader who may add one can reach.
+  // A row of twelve grey emotes on every card would be noise on a board nobody has reacted to.
+  //
+  // A locked emote that somebody else already used still appears, with its count: reading is
+  // never gated, or a count would vanish the day a reactor stopped paying.
+  const shown = REACTIONS.filter((emote) => {
+    // Anything somebody has actually used is always shown, with its count. Reading is never
+    // gated, or a count would vanish the day the person who cast it stopped paying.
+    if (countFor(emote)) return true;
+    // Beyond that, only what this reader could add. Twelve grey emotes on every card of a board
+    // nobody has reacted to is noise, and six of them would be noise they cannot even use.
+    return canReact && !locked(emote);
+  });
   if (shown.length === 0) return null;
 
   return (
@@ -68,10 +91,15 @@ export function ReactionBar({
           <button
             key={emote}
             type="button"
-            disabled={!canReact || busy}
+            disabled={!canReact || busy || locked(emote)}
             onClick={() => toggle(emote)}
             aria-pressed={row?.reacted ?? false}
-            aria-label={`${emote} ${row?.count ?? 0} on ${title}`}
+            aria-label={
+              locked(emote)
+                ? `${emote} ${row?.count ?? 0} on ${title} — premium palette`
+                : `${emote} ${row?.count ?? 0} on ${title}`
+            }
+            title={locked(emote) ? 'Part of the premium palette' : undefined}
             className={`rounded border px-1.5 py-0.5 text-xs disabled:opacity-60 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 ${
               row?.reacted
                 ? 'border-sky-500 bg-sky-50 dark:bg-sky-950/40'

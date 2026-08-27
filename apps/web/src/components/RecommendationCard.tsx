@@ -23,6 +23,8 @@ interface RecommendationCardProps {
   canModerate: boolean;
   /** Which staff controls to draw. The API checks each one again and refuses regardless. */
   permissions?: StaffPermission[];
+  /** Which half of the reaction palette this reader may cast from. */
+  isPremium?: boolean;
   onCount: (id: string, count: number, upvoted?: boolean) => void;
   onStatusChanged: (id: string, status: string) => void;
   /** Entries this one contains — a season under its show, a film under its franchise. */
@@ -41,6 +43,7 @@ export function RecommendationCard({
   canUpvote,
   canModerate,
   permissions = [],
+  isPremium = false,
   onCount,
   onStatusChanged,
   children,
@@ -190,6 +193,7 @@ export function RecommendationCard({
           </ul>
         ) : null}
         <ReactionBar
+          isPremium={isPremium}
           slug={slug}
           recommendationId={recommendation.id}
           title={recommendation.customTitle}
