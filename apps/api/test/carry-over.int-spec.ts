@@ -1,6 +1,7 @@
+import request from 'supertest';
 import { CARRY_OVER_BATCH, CarryOverService } from '../src/carry-over/carry-over.service';
 import { RateLimitService } from '../src/limits/rate-limit.service';
-import { AuthTestContext, startAuthApp } from './support/auth-app';
+import { AuthTestContext, pickCookie, startAuthApp } from './support/auth-app';
 
 describe('Carrying a list across boards (integration)', () => {
   let ctx: AuthTestContext;
@@ -334,6 +335,79 @@ describe('Carrying a list across boards (integration)', () => {
       await carryOver.runOnce();
 
       expect(await ctx.prisma.carryOverDelivery.count({ where: { outcome: 'SUBMITTED' } })).toBe(1);
+    });
+  });
+
+  describe('the endpoint', () => {
+    let auth: { session: string; csrf: string; csrfToken: string };
+
+    beforeAll(async () => {
+      ctx.patreon.identity = { ...ctx.patreon.identity, patreonUserId: 'co-api', memberships: [] };
+      const start = await request(ctx.app.getHttpServer()).get('/auth/patreon/login').expect(302);
+      const state = new URL(start.headers.location).searchParams.get('state') as string;
+      const res = await request(ctx.app.getHttpServer())
+        .get(`/auth/patreon/callback?code=auth-code&state=${state}`)
+        .set('Cookie', pickCookie(start, 'pp_oauth_state'))
+        .expect(302);
+      const csrf = pickCookie(res, 'pp_csrf').split(';')[0];
+      auth = {
+        session: pickCookie(res, 'pp_session'),
+        csrf,
+        csrfToken: csrf.split('=').slice(1).join('='),
+      };
+    });
+
+    const post = (body: object) =>
+      request(ctx.app.getHttpServer())
+        .post('/api/v1/carry-over')
+        .set('Cookie', [auth.session, auth.csrf])
+        .set('x-csrf-token', auth.csrfToken)
+        .send(body);
+
+    const setPremium = (until: Date | null) =>
+      ctx.prisma.user.update({ where: { patreonUserId: 'co-api' }, data: { premiumUntil: until } });
+
+    it('refuses a reader without premium, rather than queueing nothing quietly', async () => {
+      await setPremium(null);
+
+      await post({ sourceIds: [sourceId], creatorSlugs: ['co-target'] }).expect(402);
+    });
+
+    it('queues for a premium reader', async () => {
+      await setPremium(new Date(Date.now() + 86_400_000));
+      const mine = await ctx.prisma.recommendation.create({
+        data: {
+          creatorId: sourceCreatorId,
+          submittedByUserId: (
+            await ctx.prisma.user.findUniqueOrThrow({ where: { patreonUserId: 'co-api' } })
+          ).id,
+          type: 'EXTERNAL_LINK',
+          customTitle: 'Millennium Actress',
+          normalizedTitle: 'millennium actress',
+        },
+      });
+
+      const res = await post({ sourceIds: [mine.id], creatorSlugs: ['co-target'] }).expect(201);
+
+      expect(res.body.queued).toBe(1);
+    });
+
+    it('says nothing about a board that does not exist', async () => {
+      // A 404 naming the unknown slug would turn this into a way to enumerate boards. The
+      // per-delivery checks refuse anything the reader is not entitled to anyway.
+      await setPremium(new Date(Date.now() + 86_400_000));
+
+      const res = await post({ sourceIds: [sourceId], creatorSlugs: ['no-such-board'] });
+
+      expect(res.status).toBe(201);
+      expect(res.body.queued).toBe(0);
+    });
+
+    it('rejects a request larger than the cap', async () => {
+      await setPremium(new Date(Date.now() + 86_400_000));
+      const slugs = Array.from({ length: 51 }, (_, i) => `board-${i}`);
+
+      await post({ sourceIds: [sourceId], creatorSlugs: slugs }).expect(400);
     });
   });
 

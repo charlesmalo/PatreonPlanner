@@ -147,6 +147,53 @@ export class CarryOverService {
     }
   }
 
+  /** Amendment A.2 puts carry-over behind premium. Compared at read time, so it lapses on its own. */
+  async mayCarryOver(userId: string): Promise<boolean> {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { premiumUntil: true },
+    });
+    return user.premiumUntil !== null && user.premiumUntil > new Date();
+  }
+
+  /**
+   * Queues by slug, which is what a client has.
+   *
+   * Silently skips a slug that does not resolve rather than erroring: a 404 naming which board
+   * was unknown turns this into a way to enumerate boards, and the per-delivery checks refuse
+   * anything the reader is not entitled to anyway.
+   */
+  async enqueueBySlug(userId: string, sourceIds: string[], slugs: string[]): Promise<number> {
+    const creators = await this.prisma.creator.findMany({
+      where: { slug: { in: slugs } },
+      select: { id: true },
+    });
+    return this.enqueue(
+      userId,
+      sourceIds,
+      creators.map((c) => c.id),
+    );
+  }
+
+  /** What became of everything this reader carried, newest first. */
+  listFor(userId: string) {
+    return this.prisma.carryOverDelivery.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      select: {
+        id: true,
+        outcome: true,
+        resultRecommendationId: true,
+        detail: true,
+        createdAt: true,
+        processedAt: true,
+        creator: { select: { slug: true, displayName: true } },
+        source: { select: { id: true, customTitle: true } },
+      },
+    });
+  }
+
   /**
    * Delivers a bounded batch of what is waiting, oldest first.
    *
