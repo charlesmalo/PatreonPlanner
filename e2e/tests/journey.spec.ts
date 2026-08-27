@@ -13,6 +13,10 @@ import {
   makeOwner,
   makeStaff,
   seedCreator,
+  seedSecondBoard,
+  makePremium,
+  supports,
+  OTHER_CREATOR,
   seedRelation,
   seedTheme,
   timeOutPatron,
@@ -398,7 +402,13 @@ test('a moderator arranges a column by hand and it stays arranged', async ({ pag
 
   const suggestions = page.getByRole('region', { name: /suggestions/i });
   await suggestions.getByLabel(/sort suggestions/i).selectOption('manual');
-  const before = await suggestions.getByRole('heading', { level: 3 }).allTextContents();
+  // Wait for the re-sorted list before reading it. `allTextContents` does not retry, so switching
+  // sort and reading immediately races the refetch: about one run in three it returned [], every
+  // `before[n]` was undefined, and `filter({ hasText: undefined })` quietly matched both cards —
+  // surfacing as a strict-mode violation on the drag rather than as anything about sorting.
+  const cards = suggestions.getByRole('heading', { level: 3 });
+  await expect(cards).toHaveCount(2);
+  const before = await cards.allTextContents();
 
   // Drag the second card onto the first, which places it above.
   await suggestions
@@ -566,6 +576,36 @@ test('a reader finds a board by name and walks to it without typing a URL', asyn
   await expect(page.getByRole('heading', { name: CREATOR.displayName })).toBeVisible();
 });
 
+test('a follower is told when a board starts something', async ({ page }) => {
+  // The reason to open the app at all: finding out that a creator you follow has actually started
+  // something. Proves the whole path end to end — favouriting is the follow, the move fans out to
+  // followers rather than only to the submitter, and the bell is where it lands.
+  seedEntryFrom('patreon-other-e2e', 'Nausicaa', 'ACCEPTED');
+
+  // A reader who follows the board, and is not the submitter.
+  await signIn(page, 500, 'patreon-follower-e2e');
+  await page.goto('/');
+  await page.getByLabel(/find a creator/i).fill(CREATOR.displayName.slice(0, 6));
+  await page
+    .getByRole('button', { name: new RegExp(`Favourite ${CREATOR.displayName}`, 'i') })
+    .click();
+  await expect(page.getByText(/^Favourite$/)).toBeVisible();
+  await signOut(page);
+
+  // A moderator starts it.
+  await signIn(page, 500, 'patreon-movemod-e2e');
+  makeStaff('patreon-movemod-e2e');
+  await page.goto(`/c/${CREATOR.slug}`);
+  await page.getByRole('button', { name: /Move “Nausicaa” to another column/i }).click();
+  await page.getByRole('menuitem', { name: 'Now Playing' }).click();
+  await signOut(page);
+
+  // And the follower hears about it.
+  await signIn(page, 500, 'patreon-follower-e2e');
+  await page.goto(`/c/${CREATOR.slug}`);
+  await expect(page.getByRole('button', { name: /1 unread notification/i })).toBeVisible();
+});
+
 test('a favourited board is offered first next time', async ({ page }) => {
   await signIn(page, 500, 'patreon-finder-e2e');
   await page.goto('/');
@@ -702,6 +742,32 @@ test('a patron link waits for a moderator, who publishes it from the card', asyn
   const published = page.getByRole('link', { name: 'https://example.test/perfect-blue' });
   await expect(published).toBeVisible();
   await expect(published).toHaveAttribute('rel', /noopener/);
+});
+
+test('a patron carries a suggestion to another board they support', async ({ page }) => {
+  // The page-to-queue path end to end. What happens to each delivery afterwards is covered by
+  // twenty integration tests; what only this can prove is that the page, the endpoint and the
+  // dashboard agree with each other through the real proxy.
+  seedSecondBoard();
+  await signIn(page, 500, 'patreon-carrier-e2e');
+  makePremium('patreon-carrier-e2e');
+  supports('patreon-carrier-e2e', CREATOR.id);
+  supports('patreon-carrier-e2e', OTHER_CREATOR.id);
+
+  // Something of their own to carry.
+  await page.goto(`/c/${CREATOR.slug}`);
+  await page.getByLabel(/add something the catalogue does not have/i).fill('Millennium Actress');
+  await page.getByRole('button', { name: 'Suggest', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Millennium Actress' })).toBeVisible();
+
+  await page.goto('/carry-over');
+  await page.getByRole('checkbox', { name: /Millennium Actress/ }).check();
+  await page.getByRole('checkbox', { name: OTHER_CREATOR.displayName }).check();
+  await page.getByRole('button', { name: /send these/i }).click();
+
+  // Queued, and said to be queued rather than done — they drain at each board's own rate.
+  await expect(page.getByText(/on the way/i)).toBeVisible();
+  await expect(page.getByText(/Waiting its turn/i)).toBeVisible();
 });
 
 test('a patron can suggest a whole franchise', async ({ page }) => {

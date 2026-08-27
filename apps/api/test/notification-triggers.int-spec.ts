@@ -1,5 +1,6 @@
 import { FlagsService } from '../src/moderation/flags.service';
 import { ModerationActionsService } from '../src/moderation/moderation-actions.service';
+import { BoardFollowersService } from '../src/notifications/board-followers.service';
 import { NotificationsService } from '../src/notifications/notifications.service';
 import { StaffService } from '../src/staff/staff.service';
 import { AuthTestContext, startAuthApp } from './support/auth-app';
@@ -114,6 +115,9 @@ describe('Notification triggers (integration)', () => {
       let seenInside = -1;
       const rollingBack = {
         recommendation: ctx.prisma.recommendation,
+        // The board fan-out reads these inside the same transaction.
+        creatorFavorite: ctx.prisma.creatorFavorite,
+        creatorPolicy: ctx.prisma.creatorPolicy,
         $transaction: (fn: (tx: typeof ctx.prisma) => Promise<unknown>) =>
           ctx.prisma.$transaction(async (tx) => {
             await fn(tx as typeof ctx.prisma);
@@ -125,7 +129,11 @@ describe('Notification triggers (integration)', () => {
             throw new Error('failed after the work was done');
           }),
       };
-      const service = new ModerationActionsService(rollingBack as never, notifications);
+      const service = new ModerationActionsService(
+        rollingBack as never,
+        notifications,
+        ctx.app.get(BoardFollowersService),
+      );
 
       await expect(service.changeStatus(creatorId, recId, moderator, 'ACCEPTED')).rejects.toThrow(
         'failed after the work',

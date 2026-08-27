@@ -22,6 +22,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { ReactionsModule } from './reactions/reactions.module';
 import { TicketsModule } from './tickets/tickets.module';
 import { PatreonModule } from './patreon/patreon.module';
+import { CarryOverModule } from './carry-over/carry-over.module';
 import { RecommendationsModule } from './recommendations/recommendations.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
@@ -57,6 +58,7 @@ import { HealthModule } from './health/health.module';
     IntelligenceModule,
     CreatorsModule,
     RecommendationsModule,
+    CarryOverModule,
     WebhooksModule,
     HealthModule,
   ],

@@ -25,5 +25,8 @@ import { SearchService } from './search.service';
     GroupingService,
     LinksService,
   ],
+  // Carry-over delivers through the same submission path patrons already use, rather than a
+  // second one that would have to re-derive moderation, limits and de-duplication.
+  exports: [SubmissionsService],
 })
 export class RecommendationsModule {}

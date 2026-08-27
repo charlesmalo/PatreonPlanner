@@ -590,10 +590,32 @@ size: one move on a popular board becomes thousands of rows. The coalescing alre
 flags — *does not repeat while the last one is unread* — is the right instinct to extend, and the
 volume question must be settled in the plan rather than discovered in production.
 
+### Measured, so the outbox question has an answer — **decided**
+
+Filter rules are evaluated **at fan-out**, and no outbox is needed. Measured against Postgres 16
+with 500 followers on one board (`fanout-scale.int-spec.ts`):
+
+| | Cost |
+| --- | --- |
+| Two status moves, fan-out included | **63 ms** |
+| Folding a move into 500 waiting notifications | **21 ms** |
+| Database calls per event | **3** on the first, **1** on a fold — constant either way |
+
+The fan-out is two statements plus a lookup, not one per recipient, so cost tracks the *number of
+moves* rather than the size of the audience. At these numbers an outbox would add a queue, a
+worker and a delivery-failure story to save 63 ms, and it would cost the property that makes the
+current design safe: the notification is written in the same transaction as the move, so it cannot
+describe something that rolled back.
+
+**When to revisit:** the suite holds a 10-second budget for a move at this scale — roughly 150x
+the observed cost. If that ever fails, the outbox is the answer and the numbers will say so.
+
+A per-recipient loop is *invisible* to every other test: correctness at 500 followers passes with
+one, only 8x slower. The call-count assertion is the only thing that forbids it, and it exists for
+that reason alone.
+
 ### OPEN
 
-- **Where filter rules are evaluated**: at fan-out (fewer rows, more work per move) or at read
-  (cheaper writes, stores noise the reader never sees). Depends on follower counts nobody has yet.
 - **Whether tagging is per-reader or shares a creator's themes.** Themes already exist per board;
   reusing them is cheaper but couples a reader's private interests to a creator's taxonomy.
 

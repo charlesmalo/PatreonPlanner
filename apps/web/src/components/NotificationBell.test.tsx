@@ -7,6 +7,7 @@ import type { Notification } from '../api/types';
 const statusChange = (overrides: Partial<Notification> = {}): Notification => ({
   id: 'n1',
   type: 'ENTRY_STATUS_CHANGED',
+  groupCount: 1,
   readAt: null,
   createdAt: '2026-08-24T10:00:00.000Z',
   payload: {
@@ -22,6 +23,7 @@ const statusChange = (overrides: Partial<Notification> = {}): Notification => ({
 const flagged = (): Notification => ({
   id: 'n2',
   type: 'ENTRY_FLAGGED',
+  groupCount: 1,
   readAt: null,
   createdAt: '2026-08-24T11:00:00.000Z',
   payload: {
@@ -42,6 +44,21 @@ function renderBell(props: Partial<Parameters<typeof NotificationBell>[0]> = {})
   );
   return { onOpen };
 }
+
+const followedBoard = (groupCount: number): Notification => ({
+  id: 'n3',
+  type: 'ENTRY_MOVED',
+  groupCount,
+  readAt: null,
+  createdAt: '2026-08-24T10:00:00.000Z',
+  payload: {
+    recommendationId: 'rec-3',
+    title: 'Nausicaa',
+    creatorSlug: 'ada-writes',
+    creatorName: 'Ada Writes',
+    status: 'ACTIVE',
+  },
+});
 
 describe('NotificationBell', () => {
   it('announces how many are unread', () => {
@@ -149,5 +166,29 @@ describe('NotificationBell', () => {
 
     // One of the two carries the unread marker, not both and not neither.
     expect(screen.getAllByTestId('unread-marker')).toHaveLength(1);
+  });
+
+  it('renders a single move exactly as it renders any other one', async () => {
+    renderBell({ unreadCount: 1, items: [followedBoard(1)] });
+    await userEvent.click(screen.getByRole('button', { name: /unread/i }));
+
+    expect(screen.getByText(/Nausicaa/)).toBeInTheDocument();
+    expect(screen.queryByText(/other change/i)).not.toBeInTheDocument();
+  });
+
+  it('says how many moves a folded notification stands for', async () => {
+    // The payload describes the newest move. Saying only that would quietly drop the other five,
+    // which is the difference between a summary and a lie.
+    renderBell({ unreadCount: 1, items: [followedBoard(6)] });
+    await userEvent.click(screen.getByRole('button', { name: /unread/i }));
+
+    expect(screen.getByText(/5 other changes/i)).toBeInTheDocument();
+  });
+
+  it('names one folded notification correctly in the singular', async () => {
+    renderBell({ unreadCount: 1, items: [followedBoard(2)] });
+    await userEvent.click(screen.getByRole('button', { name: /unread/i }));
+
+    expect(screen.getByText(/1 other change(?!s)/i)).toBeInTheDocument();
   });
 });

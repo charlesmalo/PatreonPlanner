@@ -127,11 +127,17 @@ model User {
   // When the staleness job last *attempted* this user, success or not. Ordering on it stops a
   // permanently failing user from occupying the batch forever and starving everyone else.
   membershipsRefreshedAt DateTime?
+  // Amendment A.2: premium buys granularity, never notification itself. Added unset and gated
+  // closed on purpose — the column costs nothing now, and adding it later would mean taking
+  // granularity away from people who already had it.
+  premiumUntil           DateTime?
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
   ownedCreators      Creator[]            @relation("CreatorOwner")
   memberships        Membership[]
+  notificationPreferences BoardNotificationPreference[]
+  carryOverDeliveries     CarryOverDelivery[]
   staffRoles         CreatorStaff[]       @relation("StaffMember")
   staffAssigned      CreatorStaff[]       @relation("StaffAssigner")
   recommendations    Recommendation[]
@@ -202,6 +208,8 @@ model Creator {
   blockwords        CreatorBlockword[]
   tickets           Ticket[]
   favoritedBy       CreatorFavorite[]
+  notificationPrefs BoardNotificationPreference[]
+  carryOverDeliveries CarryOverDelivery[]
   staffInvites      StaffInvite[]
 
   // Postgres does not index foreign keys automatically, and the cascade from Creator scans them.
@@ -316,6 +324,10 @@ model CreatorPolicy {
   // Off by default: a public contact form on a public board is the highest-value spam target
   // in the app. A creator who wants messages from anyone turns it on.
   allowAnonymousTickets Boolean        @default(false)
+  // On by default: opt-in would strand the feature at zero reach, and a carried-over entry is
+  // labelled and lands in the review queue like anything else. A creator who does not want other
+  // people's lists arriving on their board turns it off here.
+  acceptsCarryOver      Boolean        @default(true)
   // On by default: a quality-of-life feature is opt-out. A board that wants no emoji on it is
   // the creator's call.
   allowReactions        Boolean        @default(true)
@@ -338,6 +350,11 @@ model Recommendation {
   // The creator's own shortlist, floated to the top of its column whatever the sort. A filter
   // would make a reader ask for it; this makes the answer visible without being asked.
   isCreatorPick     Boolean              @default(false)
+  // Arrived by somebody carrying their list across boards rather than by a person choosing this
+  // board. Labelled so moderators can judge a class of them at once, and so a creator who turns
+  // carry-over off can tell what it was doing.
+  viaCarryOver      Boolean              @default(false)
+  carriedTo         CarryOverDelivery[]  @relation("CarriedFrom")
   // What the board ranks by. Denormalised like upvoteCount beside it, and for the same reason:
   // it is the sort key, and a keyset cursor has to compare a column.
   weightedScore     Int                  @default(0)
@@ -659,6 +676,69 @@ model CreatorFavorite {
   @@index([creatorId])
 }
 
+// How much of a followed board's news a reader wants.
+//
+// An absent row means the default; an empty `statuses` array means silence. They are different
+// answers and must stay distinguishable: collapse them and "I want nothing from this board" reads
+// identically to "I have not chosen", so any later change to the default silently un-silences
+// everyone who had asked for quiet.
+model BoardNotificationPreference {
+  userId    String                 @db.Uuid
+  creatorId String                 @db.Uuid
+  statuses  RecommendationStatus[]
+  updatedAt DateTime               @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  creator Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@id([userId, creatorId])
+  @@index([creatorId])
+}
+
+// How a carried-over suggestion ended up.
+//
+// `PENDING` is also what a delivery goes back to when the board's own rate limit is reached: the
+// creator's limit is theirs, so the queue waits at it rather than pushing past it, and burning
+// the delivery on a 429 would make the feature quietly lossy.
+enum CarryOverOutcome {
+  PENDING
+  SUBMITTED
+  ALREADY_PRESENT
+  REFUSED_BEFORE
+  NOT_ELIGIBLE
+  NOT_ACCEPTED
+  FAILED
+}
+
+// One title, on its way to one board, on behalf of one reader.
+//
+// Unique on the three together so re-broadcasting a list is idempotent rather than additive — and
+// so this row is the single place the outcome is reported back from.
+model CarryOverDelivery {
+  id                     String           @id @default(uuid()) @db.Uuid
+  userId                 String           @db.Uuid
+  creatorId              String           @db.Uuid
+  sourceRecommendationId String           @db.Uuid
+  outcome                CarryOverOutcome @default(PENDING)
+  // What it landed on, whether newly created or already there — the one-click upvote needs it.
+  resultRecommendationId String?          @db.Uuid
+  detail                 String?
+  createdAt              DateTime         @default(now())
+  processedAt            DateTime?
+
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  creator Creator        @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  // Cascades: what is being carried is the source entry, so if the reader deletes it there is
+  // nothing left to deliver. A plain id with no foreign key would leave deliveries pointing at
+  // rows that no longer exist, and nothing would notice — the same reasoning the Reaction model
+  // carries for not using a polymorphic pair.
+  source  Recommendation @relation("CarriedFrom", fields: [sourceRecommendationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, creatorId, sourceRecommendationId])
+  // The drain reads the oldest waiting deliveries first.
+  @@index([outcome, createdAt])
+}
+
 // Enthusiasm, kept apart from demand. Never an input to any ordering — the moment a reaction
 // could move an entry it would be a second voting system, with none of the tier weighting that
 // makes the first one meaningful, and one anybody could flood.
@@ -789,6 +869,9 @@ model ModerationResult {
 enum NotificationType {
   ENTRY_STATUS_CHANGED
   ENTRY_FLAGGED
+  // Something moved on a board you follow. Deliberately distinct from ENTRY_STATUS_CHANGED, which
+  // answers "your entry moved": the submitter must not receive both for one move.
+  ENTRY_MOVED
   TICKET_RAISED
   TICKET_RESOLVED
 }
@@ -808,6 +891,9 @@ model Notification {
   // harassment wants working before one about a duplicate, and ordering on a column is something
   // an index can serve. Zero for anything that is news rather than a problem.
   severity  Int              @default(0)
+  // How many events this row now stands for. A creator tidying eight entries into Now Playing is
+  // one act, not eight pieces of news — see `emitCoalesced`. One means exactly what it says.
+  groupCount Int             @default(1)
   readAt    DateTime?
   createdAt DateTime         @default(now())
 
@@ -816,6 +902,9 @@ model Notification {
 
   @@index([userId, createdAt(sort: Desc), id(sort: Desc)])
   @@index([userId, severity(sort: Desc), createdAt(sort: Desc), id(sort: Desc)])
+  // Serves the coalescing lookup: everyone on this board with one of these still unread. Without
+  // it that read is a sequential scan on every move of every entry.
+  @@index([creatorId, type, readAt])
 }
 
 model ThemeSource {

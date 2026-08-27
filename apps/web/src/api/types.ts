@@ -220,9 +220,14 @@ export interface NotificationPayload {
 
 export interface Notification {
   id: string;
-  type: 'ENTRY_STATUS_CHANGED' | 'ENTRY_FLAGGED';
+  type: 'ENTRY_STATUS_CHANGED' | 'ENTRY_FLAGGED' | 'ENTRY_MOVED';
   /** A snapshot taken when the event happened, not a live view of the entry. */
   payload: NotificationPayload;
+  /**
+   * How many events this one row stands for. One means exactly what it says; more means a board
+   * moved several things while this went unread, and the payload describes the newest of them.
+   */
+  groupCount: number;
   readAt: string | null;
   createdAt: string;
 }

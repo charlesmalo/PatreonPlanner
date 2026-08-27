@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import type { Notification } from '../api/types';
 
-type Filter = '' | 'ENTRY_STATUS_CHANGED' | 'ENTRY_FLAGGED';
+type Filter = '' | 'ENTRY_STATUS_CHANGED' | 'ENTRY_FLAGGED' | 'ENTRY_MOVED';
 type Sort = '' | 'oldest' | 'severity';
 
 /**
@@ -61,6 +61,7 @@ export function NotificationsPage() {
             <option value="">Everything</option>
             <option value="ENTRY_FLAGGED">Reports</option>
             <option value="ENTRY_STATUS_CHANGED">Status changes</option>
+            <option value="ENTRY_MOVED">Boards you follow</option>
           </select>
         </div>
 
@@ -119,7 +120,11 @@ export function NotificationsPage() {
                 </Link>{' '}
                 {item.type === 'ENTRY_FLAGGED'
                   ? `was reported on ${item.payload.creatorName}`
-                  : `was ${(item.payload.status ?? 'updated').toLowerCase()} on ${item.payload.creatorName}`}
+                  : `was ${(item.payload.status ?? 'updated').toLowerCase()} on ${item.payload.creatorName}${
+                      (item.groupCount ?? 1) > 1
+                        ? ` and ${item.groupCount - 1} other change${item.groupCount === 2 ? '' : 's'}`
+                        : ''
+                    }`}
                 {/* The reason is what decides the ranking, so it belongs on the row that ranking
                     moves around. */}
                 {item.payload.reason ? (

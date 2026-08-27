@@ -12,5 +12,6 @@ import { CreatorsService } from './creators.service';
   // the parameterised routes.
   controllers: [DiscoveryController, CreatorsController, BlocklistController, TiersController],
   providers: [CreatorsService, DiscoveryService, TiersService],
+  exports: [CreatorsService],
 })
 export class CreatorsModule {}

@@ -8,7 +8,7 @@ being built in sequence. Every sequenced step has shipped, including the
 link/candidate model (design §4), which was split out of grouping rather than
 dropped.
 
-The verification baseline at the time of writing: **877 API + 282 web + 39 e2e
+The verification baseline at the time of writing: **930 API + 296 web + 41 e2e
 tests passing**, typecheck clean across every package.
 
 ## Milestones
@@ -46,11 +46,11 @@ place. Open questions below are the engineer's to answer.
 
 ## Open Questions Blocking Work
 
-| Question                                          | Blocks | Why it matters                                                         |
-| ------------------------------------------------- | ------ | ---------------------------------------------------------------------- |
-| Does email get a paid provider?                   | A.4    | The first collision with the free-tier-only constraint; blocks digests |
-| Where do notification filter rules get evaluated? | A.4    | Fan-out vs read time; depends on follower counts nobody has yet        |
-| Which permissions stay bundled under `MODERATE`?  | —      | The five that exist cover today's endpoints                            |
+| Question                                         | Blocks | Why it matters                                                            |
+| ------------------------------------------------ | ------ | ------------------------------------------------------------------------- |
+| Does email get a paid provider?                  | A.4    | The first collision with the free-tier-only constraint; blocks digests    |
+| Does interest tagging reuse a creator's themes?  | A.4    | Reusing them couples a reader's private interests to a creator's taxonomy |
+| Which permissions stay bundled under `MODERATE`? | —      | The five that exist cover today's endpoints                               |
 
 ## Known Debt
 
@@ -75,3 +75,5 @@ coverage`); vitest needs `@vitest/coverage-v8`, a new dependency and so the
 | ---------- | ---------------------------------------------------------------------------- |
 | 2026-08-24 | `coding_agent/` ruleset added to an already-running project                  |
 | 2026-08-25 | Link candidates shipped (plans 09, 10); every recorded API debt item cleared |
+| 2026-08-27 | Amendment A agreed; following-what-moves shipped (plans 12, 13)              |
+| 2026-08-27 | Carry-over shipped (plan 14); Amendment A.5 steps 1-3 complete               |
