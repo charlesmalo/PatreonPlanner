@@ -119,6 +119,30 @@ Two real examples from this project:
 Before writing a test, name the production change that would make it fail. If
 that change is "delete the whole feature", the test is too weak.
 
+## 6a. Never Read Async UI With a Call That Does Not Retry
+
+In Playwright and RTL, `expect(...)` retries and a plain read does not. A read taken while a
+refetch is in flight returns the empty state, and the test then does something meaningless with
+it — quietly, and only sometimes.
+
+```ts
+// Wrong: races the refetch the sort change triggered.
+await column.getByLabel(/sort/i).selectOption('manual');
+const before = await column.getByRole('heading').allTextContents();
+
+// Right: wait for the list, then read it.
+const cards = column.getByRole('heading');
+await expect(cards).toHaveCount(2);
+const before = await cards.allTextContents();
+```
+
+This has cost this project twice. Both times the symptom pointed somewhere else entirely — once a
+column count that read `0`, once a `filter({ hasText: undefined })` that matched everything and
+surfaced as a strict-mode violation on an unrelated drag. **Neither looked like a timing bug**,
+and a flake that only fails one run in three is one CI `retries: 1` will hide completely.
+
+If a test is intermittent, suspect a non-retrying read before suspecting the browser.
+
 ## 7. Mutation Discipline
 
 For any rule with teeth — authorization, visibility, ordering, tenancy — revert

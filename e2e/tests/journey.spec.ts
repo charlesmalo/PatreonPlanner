@@ -398,7 +398,13 @@ test('a moderator arranges a column by hand and it stays arranged', async ({ pag
 
   const suggestions = page.getByRole('region', { name: /suggestions/i });
   await suggestions.getByLabel(/sort suggestions/i).selectOption('manual');
-  const before = await suggestions.getByRole('heading', { level: 3 }).allTextContents();
+  // Wait for the re-sorted list before reading it. `allTextContents` does not retry, so switching
+  // sort and reading immediately races the refetch: about one run in three it returned [], every
+  // `before[n]` was undefined, and `filter({ hasText: undefined })` quietly matched both cards —
+  // surfacing as a strict-mode violation on the drag rather than as anything about sorting.
+  const cards = suggestions.getByRole('heading', { level: 3 });
+  await expect(cards).toHaveCount(2);
+  const before = await cards.allTextContents();
 
   // Drag the second card onto the first, which places it above.
   await suggestions
