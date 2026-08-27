@@ -62,6 +62,9 @@ export interface ListOptions {
 /** Anything that can run a write — the caller's transaction, or the client itself. */
 type Writer = Pick<Prisma.TransactionClient, 'notification'>;
 
+/** Coalescing needs raw SQL as well as the model, to keep the whole fan-out to two statements. */
+type RawWriter = Writer & Pick<Prisma.TransactionClient, '$executeRaw'>;
+
 @Injectable()
 export class NotificationsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -72,6 +75,57 @@ export class NotificationsService {
    * rolled back is a lie, and a transition nobody was told about is a silent one. Emitting outside
    * the event's transaction produces one or the other depending on which side fails.
    */
+  /**
+   * Emits one notification per recipient, folding it into whatever they already have waiting for
+   * this board.
+   *
+   * A creator working through their queue moves eight entries in one sitting. Without this, every
+   * follower gets eight bell items for one act of tidying, and the most recent — the one they
+   * actually care about — is buried under seven older ones.
+   *
+   * `flags.service.ts` coalesces by *dropping* repeat recipients, and is right to: reports are
+   * read in the review queue, so its bell only has to say something is waiting. That does not
+   * transfer here, where the notification is the thing itself. Suppression would leave a reader
+   * who checks weekly seeing the first move of the week and never the newest.
+   *
+   * Two statements regardless of how many people follow the board. A per-recipient read would
+   * satisfy every test and fall over at the only scale that matters.
+   */
+  async emitCoalesced(tx: RawWriter, rows: EmitRow[]): Promise<void> {
+    if (rows.length === 0) return;
+    // One board, one payload, one type per call — the fan-out for a single event.
+    const { creatorId, type, payload } = rows[0];
+    const userIds = rows.map((row) => row.userId);
+
+    const folded = await tx.$executeRaw`
+      UPDATE "Notification"
+         SET payload = ${payload}::jsonb,
+             "groupCount" = "groupCount" + 1,
+             -- The bell sorts on createdAt, and a rewritten row is genuinely fresh news. Left
+             -- alone it sinks below older, less interesting items. The cost is that createdAt
+             -- now means "last folded into" rather than "created".
+             "createdAt" = now()
+       WHERE "creatorId" = ${creatorId}::uuid
+         AND "type" = ${type}::"NotificationType"
+         AND "readAt" IS NULL
+         AND "userId" = ANY(${userIds}::uuid[])`;
+
+    if (folded === userIds.length) return;
+
+    // Whoever the UPDATE did not touch. Scoped by the same predicate so the two cannot disagree.
+    const alreadyWaiting = await tx.notification.findMany({
+      where: { creatorId, type, readAt: null, userId: { in: userIds } },
+      select: { userId: true },
+      distinct: ['userId'],
+    });
+    const waiting = new Set(alreadyWaiting.map((row) => row.userId));
+
+    await this.emit(
+      tx,
+      rows.filter((row) => !waiting.has(row.userId)),
+    );
+  }
+
   async emit(tx: Writer, rows: EmitRow[]): Promise<void> {
     if (rows.length === 0) return;
     await tx.notification.createMany({

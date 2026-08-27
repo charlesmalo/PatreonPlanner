@@ -836,6 +836,9 @@ model Notification {
   // harassment wants working before one about a duplicate, and ordering on a column is something
   // an index can serve. Zero for anything that is news rather than a problem.
   severity  Int              @default(0)
+  // How many events this row now stands for. A creator tidying eight entries into Now Playing is
+  // one act, not eight pieces of news — see `emitCoalesced`. One means exactly what it says.
+  groupCount Int             @default(1)
   readAt    DateTime?
   createdAt DateTime         @default(now())
 
@@ -844,6 +847,9 @@ model Notification {
 
   @@index([userId, createdAt(sort: Desc), id(sort: Desc)])
   @@index([userId, severity(sort: Desc), createdAt(sort: Desc), id(sort: Desc)])
+  // Serves the coalescing lookup: everyone on this board with one of these still unread. Without
+  // it that read is a sequential scan on every move of every entry.
+  @@index([creatorId, type, readAt])
 }
 
 model ThemeSource {

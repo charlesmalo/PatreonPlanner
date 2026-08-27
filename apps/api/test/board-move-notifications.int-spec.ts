@@ -151,6 +151,115 @@ describe('Following what moves (integration)', () => {
     expect(await notifications.unreadCount(follower)).toBe(1);
   });
 
+  it('folds a second move into the one already waiting', async () => {
+    // Eight entries tidied into Now Playing is one act, not eight pieces of news. The newest
+    // move is the headline because it is the one a reader cares about most; burying it under
+    // seven older ones is the flooding this exists to prevent.
+    await favourite(follower);
+
+    await moveToActive();
+    await actions.changeStatus(creatorId, recId, moderator, 'COMPLETED');
+
+    const { items } = await notifications.list(follower);
+    expect(items).toHaveLength(1);
+    expect(items[0].payload).toMatchObject({ status: 'COMPLETED' });
+    expect(items[0].groupCount).toBe(2);
+  });
+
+  it('surfaces a folded notification as fresh news rather than leaving it buried', async () => {
+    // The bell sorts on createdAt. A rewritten row that keeps its original timestamp sinks below
+    // older and less interesting items, which defeats the point of putting the newest move in it.
+    await favourite(follower);
+    await moveToActive();
+    const first = await ctx.prisma.notification.findFirstOrThrow({
+      where: { userId: follower, type: 'ENTRY_MOVED' },
+    });
+
+    await actions.changeStatus(creatorId, recId, moderator, 'COMPLETED');
+
+    const folded = await ctx.prisma.notification.findFirstOrThrow({
+      where: { userId: follower, type: 'ENTRY_MOVED' },
+    });
+    expect(folded.id).toBe(first.id);
+    expect(folded.createdAt.getTime()).toBeGreaterThan(first.createdAt.getTime());
+  });
+
+  it('starts a fresh notification once the last one has been read', async () => {
+    await favourite(follower);
+    await moveToActive();
+    await notifications.markRead(follower);
+
+    await actions.changeStatus(creatorId, recId, moderator, 'COMPLETED');
+
+    const { items } = await notifications.list(follower);
+    expect(items).toHaveLength(2);
+    expect(items[0].groupCount).toBe(1);
+  });
+
+  it('does not fold one reader’s notification into another’s', async () => {
+    // A grouping keyed on the board alone rather than on (reader, board) collapses everybody's
+    // into one row and hands it to whoever the UPDATE touched last.
+    await favourite(follower);
+    await favourite(stranger);
+
+    await moveToActive();
+
+    expect(await notifications.unreadCount(follower)).toBe(1);
+    expect(await notifications.unreadCount(stranger)).toBe(1);
+    const both = await ctx.prisma.notification.findMany({ where: { type: 'ENTRY_MOVED' } });
+    expect(both.map((n) => n.groupCount)).toEqual([1, 1]);
+  });
+
+  it('never rewrites the notification of somebody not in this move’s audience', async () => {
+    // The leak the reader scope prevents. This follower asked to hear about ACTIVE only, so the
+    // move to COMPLETED is not theirs — but a fold keyed on the board alone would rewrite their
+    // waiting row with a title from an event they deliberately opted out of.
+    await favourite(follower);
+    await ctx.prisma.boardNotificationPreference.create({
+      data: { userId: follower, creatorId, statuses: ['ACTIVE'] },
+    });
+    await favourite(stranger);
+
+    await moveToActive();
+    await actions.changeStatus(creatorId, recId, moderator, 'COMPLETED');
+
+    const theirs = await ctx.prisma.notification.findFirstOrThrow({
+      where: { userId: follower, type: 'ENTRY_MOVED' },
+    });
+    expect(theirs.payload).toMatchObject({ status: 'ACTIVE' });
+    expect(theirs.groupCount).toBe(1);
+    // The reader who did want it still gets the fold, so this is not passing by refusing everyone.
+    const others = await ctx.prisma.notification.findFirstOrThrow({
+      where: { userId: stranger, type: 'ENTRY_MOVED' },
+    });
+    expect(others.payload).toMatchObject({ status: 'COMPLETED' });
+    expect(others.groupCount).toBe(2);
+  });
+
+  it('leaves a report notification out of the group', async () => {
+    // ENTRY_FLAGGED coalesces too, with different reasoning. A predicate that catches both would
+    // rewrite a moderator's report into a board update and lose the report entirely.
+    // The owner, not the moderator: the moderator is excluded from the audience as the actor, so
+    // the reader scope would mask a missing type filter and the test would prove nothing.
+    await favourite(owner);
+    await ctx.prisma.notification.create({
+      data: {
+        userId: owner,
+        creatorId,
+        type: 'ENTRY_FLAGGED',
+        payload: { recommendationId: recId, title: 'Cowboy Bebop', creatorSlug: 'move-co' },
+      },
+    });
+
+    await moveToActive();
+
+    const flag = await ctx.prisma.notification.findFirstOrThrow({
+      where: { userId: owner, type: 'ENTRY_FLAGGED' },
+    });
+    expect(flag.groupCount).toBe(1);
+    expect(flag.payload).toMatchObject({ title: 'Cowboy Bebop' });
+  });
+
   it('says nothing to someone who does not follow the board', async () => {
     await moveToActive();
 

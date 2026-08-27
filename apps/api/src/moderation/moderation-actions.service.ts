@@ -96,7 +96,9 @@ export class ModerationActionsService {
         actorUserId,
         current.submittedByUserId,
       ]);
-      await this.notifications.emit(
+      // Coalesced: a creator tidying eight entries into Now Playing is one act, not eight pieces
+      // of news in every follower's bell.
+      await this.notifications.emitCoalesced(
         tx,
         audience.map((userId) => ({
           userId,
