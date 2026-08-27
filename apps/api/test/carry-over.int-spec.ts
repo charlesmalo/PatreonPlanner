@@ -403,6 +403,36 @@ describe('Carrying a list across boards (integration)', () => {
       expect(res.body.queued).toBe(0);
     });
 
+    it('offers the reader their own past suggestions, each one once', async () => {
+      // Amendment A.3's retroactive consolidation. The same title suggested on three boards is
+      // one thing they want carried, not three — and somebody who started before the feature
+      // existed should not be punished for it.
+      await setPremium(new Date(Date.now() + 86_400_000));
+      const me = await ctx.prisma.user.findUniqueOrThrow({ where: { patreonUserId: 'co-api' } });
+      for (const creatorId of [sourceCreatorId, targetCreatorId]) {
+        await ctx.prisma.recommendation.create({
+          data: {
+            creatorId,
+            submittedByUserId: me.id,
+            type: 'EXTERNAL_LINK',
+            customTitle: 'Paprika',
+            normalizedTitle: 'paprika',
+          },
+        });
+      }
+
+      const res = await request(ctx.app.getHttpServer())
+        .get('/api/v1/carry-over/options')
+        .set('Cookie', [auth.session, auth.csrf])
+        .expect(200);
+
+      expect(
+        res.body.sources.filter((x: { customTitle: string }) => x.customTitle === 'Paprika'),
+      ).toHaveLength(1);
+      // And never somebody else's, which would let a list be built from other people's words.
+      expect(res.body.sources.map((x: { id: string }) => x.id)).not.toContain(sourceId);
+    });
+
     it('rejects a request larger than the cap', async () => {
       await setPremium(new Date(Date.now() + 86_400_000));
       const slugs = Array.from({ length: 51 }, (_, i) => `board-${i}`);

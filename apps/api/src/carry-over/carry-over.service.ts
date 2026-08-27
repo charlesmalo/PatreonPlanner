@@ -175,6 +175,50 @@ export class CarryOverService {
     );
   }
 
+  /**
+   * What this reader could carry, and where to.
+   *
+   * Amendment A.3's retroactive consolidation: somebody who has been submitting by hand for
+   * months should not be punished for having started before the feature existed, and their own
+   * past submissions are the natural list. De-duplicated by normalised title, because the same
+   * suggestion made on three boards is one thing they want carried, not three.
+   *
+   * Targets are boards they actually support. Offering boards they cannot submit to would produce
+   * a page of choices that all resolve to NOT_ELIGIBLE hours later.
+   */
+  async optionsFor(userId: string) {
+    const [mine, memberships] = await Promise.all([
+      this.prisma.recommendation.findMany({
+        where: { submittedByUserId: userId, status: { notIn: ['DELETED', 'REJECTED'] } },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          customTitle: true,
+          normalizedTitle: true,
+          type: true,
+          creator: { select: { slug: true, displayName: true } },
+        },
+        take: 500,
+      }),
+      this.prisma.membership.findMany({
+        where: { userId, isActivePatron: true },
+        select: { creator: { select: { slug: true, displayName: true } } },
+      }),
+    ]);
+
+    const seen = new Set<string>();
+    const sources = mine.filter((entry) => {
+      if (seen.has(entry.normalizedTitle)) return false;
+      seen.add(entry.normalizedTitle);
+      return true;
+    });
+
+    return {
+      sources: sources.map(({ normalizedTitle: _ignored, ...entry }) => entry),
+      targets: memberships.map((m) => m.creator),
+    };
+  }
+
   /** What became of everything this reader carried, newest first. */
   listFor(userId: string) {
     return this.prisma.carryOverDelivery.findMany({

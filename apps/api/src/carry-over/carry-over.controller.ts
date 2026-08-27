@@ -24,6 +24,11 @@ export class CarryOverController {
     return { queued: await this.carryOver.enqueueBySlug(user.id, dto.sourceIds, dto.creatorSlugs) };
   }
 
+  @Get('options')
+  options(@CurrentUser() user: CurrentUserPayload) {
+    return this.carryOver.optionsFor(user.id);
+  }
+
   @Get()
   list(@CurrentUser() user: CurrentUserPayload) {
     return this.carryOver.listFor(user.id);
