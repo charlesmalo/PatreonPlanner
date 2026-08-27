@@ -46,11 +46,11 @@ place. Open questions below are the engineer's to answer.
 
 ## Open Questions Blocking Work
 
-| Question                                          | Blocks | Why it matters                                                         |
-| ------------------------------------------------- | ------ | ---------------------------------------------------------------------- |
-| Does email get a paid provider?                   | A.4    | The first collision with the free-tier-only constraint; blocks digests |
-| Where do notification filter rules get evaluated? | A.4    | Fan-out vs read time; depends on follower counts nobody has yet        |
-| Which permissions stay bundled under `MODERATE`?  | —      | The five that exist cover today's endpoints                            |
+| Question                                         | Blocks | Why it matters                                                            |
+| ------------------------------------------------ | ------ | ------------------------------------------------------------------------- |
+| Does email get a paid provider?                  | A.4    | The first collision with the free-tier-only constraint; blocks digests    |
+| Does interest tagging reuse a creator's themes?  | A.4    | Reusing them couples a reader's private interests to a creator's taxonomy |
+| Which permissions stay bundled under `MODERATE`? | —      | The five that exist cover today's endpoints                               |
 
 ## Known Debt
 
