@@ -35,16 +35,22 @@ tests passing**, typecheck clean across every package.
 
 ## Active Task
 
-None. The Phase 2 sequence is complete, nothing in the design is left unbuilt,
+Nothing in flight. The Phase 2 sequence is complete and nothing in §1–§11 of the
+design is left unbuilt; **Amendment A** adds two premium features that are
+designed but not planned — carrying a list across boards, and following what
+moves. Its A.5 gives the order.
+
+Nothing else is outstanding,
 and every recorded debt item has been cleared or has its reason recorded in
 place. Open questions below are the engineer's to answer.
 
 ## Open Questions Blocking Work
 
-| Question                                               | Blocks | Why it matters                                                           |
-| ------------------------------------------------------ | ------ | ------------------------------------------------------------------------ |
-| What does premium contain beyond the reaction palette? | M14    | It may withhold no functionality and may not override a creator's limits |
-| Which permissions stay bundled under `MODERATE`?       | —      | The five that exist cover today's endpoints                              |
+| Question                                          | Blocks | Why it matters                                                         |
+| ------------------------------------------------- | ------ | ---------------------------------------------------------------------- |
+| Does email get a paid provider?                   | A.4    | The first collision with the free-tier-only constraint; blocks digests |
+| Where do notification filter rules get evaluated? | A.4    | Fan-out vs read time; depends on follower counts nobody has yet        |
+| Which permissions stay bundled under `MODERATE`?  | —      | The five that exist cover today's endpoints                            |
 
 ## Known Debt
 

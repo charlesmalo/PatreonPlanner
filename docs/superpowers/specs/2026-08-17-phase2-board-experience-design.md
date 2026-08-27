@@ -1,7 +1,11 @@
 # Phase 2 — Board Experience Design
 
-**Status:** draft for review. Nothing here is built. Decisions marked **OPEN** need an answer
-before the plan that touches them.
+**Status:** every section below is built and merged, except where an amendment says otherwise.
+Decisions marked **OPEN** need an answer before the plan that touches them.
+
+**Amendment A (2026-08-26)** is appended at the end: it resolves what premium contains, and adds
+two premium features that were not in the original scope. It is appended rather than renumbered
+because plans, commits and code comments reference these sections by number.
 
 **What this covers:** the kanban board, weighted voting, grouping related entries, where watch
 links come from, disputes and contact tickets, granular moderator permissions, the moderator view
@@ -302,9 +306,9 @@ perk eventually would.
 **The token presentation is built regardless of payment.** "3 suggestions left, next unlocks at
 14:20" is far better than an opaque 429 and reads as a budget rather than a punishment.
 
-**OPEN:** what premium actually contains beyond the reaction palette below — candidates that cost
-nothing to serve and withhold no functionality: colour schemes, profile flair, board themes for
-one's own view.
+**Resolved in Amendment A.** Premium contains usage headroom on limits that are ours, quality-of-
+life conveniences, and cosmetics — and two features, carrying a list across boards and following
+what moves, that were not in the original scope.
 
 ### Creator-gifted cosmetics
 
@@ -392,6 +396,212 @@ Cheapest and highest-value first; each produces something usable on its own.
 
 ## Open questions
 
-- Premium: what it contains beyond the reaction palette, given it may withhold no functionality
-  and may not override a creator's limits (§9)
+- ~~Premium: what it contains beyond the reaction palette~~ — resolved in Amendment A
+- **Does email get a paid provider?** Amendment A.4 needs this answered before anything is built
+  against it — it is the first collision with the free-tier-only constraint
+- Where notification filter rules are evaluated, and whether interest tagging reuses a creator's
+  themes (Amendment A.4)
 - Which permissions belong in the granular set, and which stay bundled under `MODERATE`? (§7)
+
+---
+
+# Amendment A — What premium contains
+
+**Date:** 2026-08-26. **Status:** decided in principle; A.3 and A.4 need plans before they are
+built. Appended rather than renumbered because §1–§11 are referenced by number from plans, commit
+messages and code comments.
+
+## A.1 The rule, restated so it can actually be applied
+
+§9 says premium is *"cosmetic and quality-of-life only"* and that *"no feature is withheld from
+free users."* Read strictly those two clauses contradict each other: any quality-of-life feature
+only premium users get **is** a withheld feature, so the strict reading leaves premium containing
+nothing but cosmetics.
+
+**The operative rule is therefore narrower and testable:**
+
+> Nothing the board's purpose depends on is ever withheld. Reading, voting, submitting, searching,
+> moderating and being notified are free forever, on every board, for everyone. Premium buys
+> convenience *around* those, and headroom on limits that belong to us rather than to a creator.
+
+The three constraints from §9 are unchanged and bind everything below:
+
+1. **A creator's limit is never overridden by something a user bought from us.** The per-board
+   submission quota is the creator's policy about how much one patron may put on their board.
+2. **Premium never enters `can(capability, viewer, policy)`.** It is a property of the `User`, not
+   of a `(user, creator)` pair, so it cannot become an authorization input.
+3. **Nothing may require a paid dependency.** See A.4, which is the first place this bites.
+
+Per-*pair* **preferences** are fine and do not violate (2): a preference is not an authorization.
+
+## A.2 What premium contains — **decided**
+
+**Usage headroom.** Limits that are ours to raise, never a creator's:
+
+- **A larger catalogue search allowance.** `SEARCH_LIMIT` is 30 burst / 60 per minute. Searching
+  lands on nobody's board and results are already cached, so a heavier allowance costs us close to
+  nothing. §9 names this route explicitly.
+- **A larger cross-board submission cap.** `SUBMIT_LIMIT_PER_HOUR_GLOBAL` is 5;
+  `SUBMIT_LIMIT_PER_HOUR` is 1 **per creator**. Raising only the global figure lets an active
+  patron take part on more boards per hour while **no individual creator receives one extra
+  submission**, because their own limit still binds. This is the only place "more usage" is
+  honestly available, and it is what makes A.3 possible at all.
+- **Never the coarse limiter**, which is a security control, and **never the per-board quota**.
+
+**Quality of life.** Convenience around capabilities everyone already has:
+
+- **Settings that follow you.** Column collapse, per-column sort and view mode live in
+  `localStorage` (`pp.board.${slug}.*`), so a reader following six creators re-derives all of it on
+  every device. Premium syncs them server-side. Free users keep every feature — per device.
+- **Cross-board interest alerts** and **granular notification control** — A.4.
+- **Carrying a list across boards** — A.3.
+
+**Cosmetics.** As §9 and §10 already establish: the expanded reaction palette, colour schemes and
+board themes for one's own view, and profile flair.
+
+Flair appears on somebody else's board, so it takes the same creator toggle reactions already
+have. Some boards will not want our badges on them, and finding that out after the fact is worse
+than offering the switch.
+
+### What premium never contains — **decided**
+
+These are ruled out permanently, not deferred:
+
+- **A limit invented in order to sell its removal.** There is no cap on favourites or followed
+  boards today. Adding one so premium can lift it is the exact move this section exists to
+  prevent, and it is far more visible to users than it feels when shipping it.
+- **Data export.** Cheap to serve, an expectation rather than a luxury, and paywalling it earns
+  little relative to how it reads.
+- **Shorter notification retention for free users.** Technically not a withheld feature, but it
+  takes away rather than adds, and anyone who had the longer window during beta experiences it as
+  a downgrade.
+- **Relief from moderation-visible limits.** Anything that puts our revenue in proportion to a
+  creator's workload, by any mechanism, including indirect ones. A.3 is checked against this.
+
+## A.3 Carrying a list across boards — **decided in principle**
+
+A patron who follows several creators wants the same handful of titles in front of all of them.
+Doing it by hand means repeating every submission per board and tracking what already landed
+where. This is a legitimate premium feature on the strongest available test: **it cannot be done
+by hand at any useful scale.** Compute cost is a much weaker justification and should not be the
+one used.
+
+**The user builds a list** — from titles they have already submitted anywhere, or assembled
+directly — and broadcasts it to the creators they support. Delivery is a **background queue**, not
+a burst.
+
+### The queue feeds the existing submit endpoint — **decided**
+
+Carry-over does **not** get its own submission path. Every item is delivered through the endpoint
+patrons already use, which gets four things right that a parallel path would have to re-derive:
+
+- **Order of operations.** Moderation, then rate limit, then de-duplication. §5 fixed this order
+  deliberately: de-duping first would let a blocked resubmission confirm what exists on a board the
+  sender cannot read.
+- **Eligibility at delivery time.** A pledge can lapse between queuing forty titles and delivering
+  the fortieth. Capabilities resolve per request, so the queue cannot outlive the entitlement that
+  authorised it.
+- **De-duplication and its disclosure properties**, already correct and already tested.
+- **Rate limiting per board.** One title to ten boards is one submission per board and exceeds
+  nobody's quota — which is what keeps this inside constraint (1) of A.1.
+
+### Rejection must block carry-over, though it does not block a person — **decided**
+
+De-duplication filters on `status: { notIn: HIDDEN_STATUSES }`, and `HIDDEN_STATUSES` is
+`['DELETED', 'REJECTED']`. **A rejected entry therefore does not prevent a fresh submission of the
+same title.**
+
+That is correct for a human: a creator may have rejected something for a reason since resolved,
+and a person choosing to resubmit is exercising judgement. It is wrong for an automated one, which
+would re-propose refused content on a schedule and has no judgement to exercise.
+
+**Carry-over needs a rejection check that manual submission deliberately lacks.** Small to build,
+easy to omit, and genuinely hostile if omitted.
+
+### Auto-submit is automatic; auto-vote is confirmed — **decided**
+
+They are not the same risk and must not share a switch.
+
+A submission lands in `PENDING` and a moderator reviews it — there is a human gate between the
+robot and the board. **An upvote is a direct, tier-weighted input to the canonical ordering with no
+review step.** Automating that across ten boards scales one person's influence over entries they
+never looked at, and we would be selling it. §2 makes weighted voting the signal the whole board
+produces; feeding it automatically is not a feature, it is a defect with a price.
+
+So: where a title is already on the board, the dashboard reports it and offers **one click** to
+upvote. Where it is not, the queue submits.
+
+### Creators get a labelled class and a switch — **decided**
+
+Even respecting every limit, a creator who attracts ten broadcasters absorbs ten submissions an
+hour they did not before. §9 forbids putting our revenue in proportion to their workload, and this
+would do exactly that through a side door.
+
+- Carried-over submissions **arrive labelled as such**, so moderators can judge them as a class
+  rather than one at a time.
+- A **board policy toggle** governs whether they are accepted at all. **Default on**, because
+  opt-in strands the feature at zero reach and the label plus the existing review queue is real
+  protection. Creators who dislike it turn it off in one place.
+
+### Retroactive consolidation — **decided**
+
+Someone who has been submitting by hand for months should not be punished for having started
+before the feature existed. Gathering their unique past submissions into a list is the same queue
+fed from a different query, and it is the natural onboarding into the feature.
+
+Results per board — submitted, upvoted, already present, refused before, not eligible — land in
+their existing submissions dashboard. This discloses nothing new: it is limited to boards they can
+already submit to, and `duplicate: true` is already returned to submitters today.
+
+### What is not achievable
+
+- **Guaranteeing a carried-over suggestion is welcome.** It is a proposal, reviewed like any other.
+- **Carrying to creators they do not support at a submitting tier.** Entitlement is the creator's.
+- **Knowing what a board holds that the user cannot see.** The de-dupe answer is bounded by what
+  the existing endpoint already discloses, and that boundary is not widened here.
+
+## A.4 Following what moves — **decided in principle**
+
+Notification when an entry moves on a board they follow, filtered on three axes:
+
+- **By creator** — immediate for one board, silence for another they would rather check by hand.
+- **By destination column** — only when something reaches `ACTIVE`, say, which is the question
+  "who is lining up something I want to watch" in its most direct form.
+- **By title or tag** — updates on two specific shows from a board without the rest of its output.
+
+This is the feature that gives a patron a reason to open the app daily, and the filtering work is
+reusable by A.3.
+
+### In-app first. Email is a digest, and it is the first thing that costs money — **decided**
+
+There is no mailer in the project: no dependency, no configuration, nothing. Email means a
+provider, and with it deliverability, bounce handling and unsubscribe obligations. **This is the
+first collision with the free-tier-only constraint, and it needs the engineer's decision before
+anything is built against it.**
+
+When it does arrive it is a **daily digest, never per-event**. A digest is cheaper by an order of
+magnitude, fits inside a free provider tier, and is the better product regardless — nobody wants
+an email per episode moved.
+
+### Fan-out is a different order of magnitude — **decided**
+
+`notifications.service.ts` fans out with `createMany` sized to **staff**. Followers are not that
+size: one move on a popular board becomes thousands of rows. The coalescing already built for
+flags — *does not repeat while the last one is unread* — is the right instinct to extend, and the
+volume question must be settled in the plan rather than discovered in production.
+
+### OPEN
+
+- **Where filter rules are evaluated**: at fan-out (fewer rows, more work per move) or at read
+  (cheaper writes, stores noise the reader never sees). Depends on follower counts nobody has yet.
+- **Whether tagging is per-reader or shares a creator's themes.** Themes already exist per board;
+  reusing them is cheaper but couples a reader's private interests to a creator's taxonomy.
+
+## A.5 Sequencing
+
+1. **Notification filtering, in-app only.** Felt daily, needs no new dependency, and its filtering
+   is reused by carry-over.
+2. **Fan-out and coalescing at follower scale**, forced by (1).
+3. **Carry-over**, including the rejection check and the creator toggle.
+4. **Email digests**, only once the free-tier question in A.4 has an answer.
+5. **Cosmetics and settings sync**, at any point — they depend on nothing above.
