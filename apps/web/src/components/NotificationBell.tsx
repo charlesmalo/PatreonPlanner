@@ -127,9 +127,13 @@ function describe(item: Notification): string {
       item.payload.reason ? ` (${item.payload.reason.toLowerCase()})` : ''
     }.`;
   }
+  // A folded row stands for several moves and its payload describes the newest. Saying so keeps
+  // the sentence true — "was completed on Ada Writes" alone would quietly drop the other five.
+  const alsoCount = (item.groupCount ?? 1) - 1;
+  const also = alsoCount > 0 ? ` and ${alsoCount} other change${alsoCount === 1 ? '' : 's'}` : '';
   // The status is optional on the type; without it there is no sentence to write, so say the
   // neutral thing rather than rendering "was  on Ada Writes."
   return item.payload.status
-    ? `was ${item.payload.status.toLowerCase()} on ${item.payload.creatorName}.`
-    : `was updated on ${item.payload.creatorName}.`;
+    ? `was ${item.payload.status.toLowerCase()} on ${item.payload.creatorName}${also}.`
+    : `was updated on ${item.payload.creatorName}${also}.`;
 }

@@ -56,7 +56,7 @@ That does not transfer. Here the notification **is** the product — a follower 
 **Interfaces:**
 - Produces: `NotificationsService.emitCoalesced(tx, rows)` — same shape as `emit`, one row per recipient.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 it('folds a second move into the one already waiting', async () => {
@@ -97,9 +97,9 @@ it('leaves a flag notification alone', async () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify they fail.** Run: `cd apps/api && pnpm test -- board-move-notifications`
-- [ ] **Step 3: Schema.** `groupCount Int @default(1)` on `Notification`, plus an index supporting the coalescing lookup: `@@index([creatorId, type, readAt, userId])`. Additive only — no exemption needed in `migration-safety.e2e-spec.ts`.
-- [ ] **Step 4: Implement `emitCoalesced`.**
+- [x] **Step 2: Run to verify they fail.** Run: `cd apps/api && pnpm test -- board-move-notifications`
+- [x] **Step 3: Schema.** `groupCount Int @default(1)` on `Notification`, plus an index supporting the coalescing lookup: `@@index([creatorId, type, readAt, userId])`. Additive only — no exemption needed in `migration-safety.e2e-spec.ts`.
+- [x] **Step 4: Implement `emitCoalesced`.**
 
 ```ts
 // Two statements regardless of how many people follow the board. A per-recipient read would
@@ -119,9 +119,9 @@ const folded = await tx.$executeRaw`
 
 Then `createMany` for the recipients that `UPDATE` did not touch, found with one `findMany` over the same predicate.
 
-- [ ] **Step 5: Run to verify they pass.**
-- [ ] **Step 6: Mutation-check.** Each must fail exactly one test: dropping `readAt IS NULL`; keying the `UPDATE` on `creatorId` alone without `userId`; leaving `groupCount` at 1; not bumping `createdAt`; letting the predicate match `ENTRY_FLAGGED`.
-- [ ] **Step 7: Commit.**
+- [x] **Step 5: Run to verify they pass.**
+- [x] **Step 6: Mutation-check.** Each must fail exactly one test: dropping `readAt IS NULL`; keying the `UPDATE` on `creatorId` alone without `userId`; leaving `groupCount` at 1; not bumping `createdAt`; letting the predicate match `ENTRY_FLAGGED`.
+- [x] **Step 7: Commit.**
 
 ### Task 2: Measure it, then decide
 
@@ -129,19 +129,35 @@ Then `createMany` for the recipients that `UPDATE` did not touch, found with one
 - Test: `apps/api/test/fanout-scale.int-spec.ts`
 - Modify: `docs/superpowers/specs/2026-08-17-phase2-board-experience-design.md` (Amendment A.4's OPEN entry)
 
-- [ ] **Step 1: Write the test.** Seed 500 followers, move an entry, and assert **every one of them gets exactly one notification** and a second move leaves 500 rows with `groupCount` 2. Correctness at a scale the other tests never reach.
-- [ ] **Step 2: Count the statements.** Attach a Prisma query listener for the duration of one move and assert the count does not grow with follower count — run it at 50 and at 500 and compare. This is the assertion that actually forbids an N+1; the row counts above pass happily with one.
-- [ ] **Step 3: Record the measured numbers** in Amendment A.4 in place of its OPEN entry, and state plainly whether an outbox is needed yet. A number in the design beats an opinion in a plan.
-- [ ] **Step 4: Commit.**
+- [x] **Step 1: Write the test.** Seed 500 followers, move an entry, and assert **every one of them gets exactly one notification** and a second move leaves 500 rows with `groupCount` 2. Correctness at a scale the other tests never reach.
+- [x] **Step 2: Count the statements.** Attach a Prisma query listener for the duration of one move and assert the count does not grow with follower count — run it at 50 and at 500 and compare. This is the assertion that actually forbids an N+1; the row counts above pass happily with one.
+- [x] **Step 3: Record the measured numbers** in Amendment A.4 in place of its OPEN entry, and state plainly whether an outbox is needed yet. A number in the design beats an opinion in a plan.
+- [x] **Step 4: Commit.**
 
 ### Task 3: The SPA says how many
 
 **Files:**
 - Modify: `apps/web/src/api/types.ts`, `NotificationsPage.tsx`, the bell dropdown, and their tests
 
-- [ ] **Step 1: Failing tests.** A `groupCount` of 1 renders exactly as it does today; a group of 3 says so; the unread badge counts rows, not moves — one grouped notification is one unread thing.
-- [ ] **Step 2–4:** Run, implement, run.
-- [ ] **Step 5: Commit.**
+- [x] **Step 1: Failing tests.** A `groupCount` of 1 renders exactly as it does today; a group of 3 says so; the unread badge counts rows, not moves — one grouped notification is one unread thing.
+- [x] **Step 2–4:** Run, implement, run.
+- [x] **Step 5: Commit.**
+
+## What it found
+
+**Two mutations survived the first pass, both masked by a neighbouring predicate.** Dropping the
+reader scope from the `UPDATE` looked safe because the only multi-follower test used a single
+move, where there is nothing yet to fold — and it is a *leak*, not a tidiness bug: an unscoped
+fold rewrites the waiting row of somebody who is not in this move's audience. Dropping the type
+filter looked safe because the test's subject was the moderator, who is excluded from the audience
+as the actor, so the reader scope caught it first.
+
+**The measured numbers answered the outbox question with a no.** 500 followers: two moves in 63ms,
+a fold in 21ms, 3 database calls on a first fan-out and 1 on a fold. An outbox would add a queue, a
+worker and a delivery-failure story to save 63ms, and cost the in-transaction guarantee.
+
+**A per-recipient loop is invisible to every test but one.** Verified by writing one: correctness
+at 500 followers still passed, 8x slower, and only the call count noticed.
 
 ## Known risks
 
