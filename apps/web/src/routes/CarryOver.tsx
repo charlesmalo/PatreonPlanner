@@ -48,6 +48,7 @@ export function CarryOver() {
   const [chosenTargets, setChosenTargets] = useState<string[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -64,6 +65,9 @@ export function CarryOver() {
       })
       .catch(() => {
         if (!cancelled) setFailed('Could not load your suggestions.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
@@ -97,6 +101,10 @@ export function CarryOver() {
   }
 
   if (failed) return <p className="p-4">{failed}</p>;
+  // Gated rather than rendering the shell around an empty list: without this the page says "you
+  // have not suggested anything yet" while the answer is still in flight, which is a different
+  // claim from "still looking" and the wrong one.
+  if (loading) return <p className="p-4">Loading…</p>;
 
   return (
     <section className="mx-auto max-w-2xl p-4">

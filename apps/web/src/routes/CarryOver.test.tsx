@@ -41,6 +41,27 @@ describe('CarryOver', () => {
     global.fetch = originalFetch;
   });
 
+  it('does not claim you have suggested nothing while it is still looking', async () => {
+    // Two different statements, and rendering the empty one first tells the reader something
+    // untrue. It is also what made a test read the page before its data arrived.
+    let release: () => void = () => {};
+    global.fetch = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          release = () => resolve({ ok: true, status: 200, json: async () => options } as Response);
+        }),
+    ) as unknown as typeof global.fetch;
+    render(
+      <MemoryRouter>
+        <CarryOver />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText(/loading/i)).toBeInTheDocument();
+    expect(screen.queryByText(/have not suggested anything/i)).not.toBeInTheDocument();
+    release();
+  });
+
   it('offers what you have suggested and where it could go', async () => {
     renderPage(routes());
 
@@ -50,10 +71,14 @@ describe('CarryOver', () => {
 
   it('will not send until both a source and a board are chosen', async () => {
     renderPage(routes());
-    const send = await screen.findByRole('button', { name: /send these/i });
+    // Waits on a checkbox, not on the button. The button renders immediately whether or not the
+    // options have arrived, so awaiting *it* waits for nothing and the synchronous read below
+    // races the fetch — which is a non-retrying read wearing a findBy disguise.
+    const source = await screen.findByRole('checkbox', { name: /Perfect Blue/ });
+    const send = screen.getByRole('button', { name: /send these/i });
     expect(send).toBeDisabled();
 
-    await userEvent.click(screen.getByRole('checkbox', { name: /Perfect Blue/ }));
+    await userEvent.click(source);
     // A source with no board is not a request; neither is a board with nothing to send.
     expect(send).toBeDisabled();
 

@@ -141,6 +141,29 @@ column count that read `0`, once a `filter({ hasText: undefined })` that matched
 surfaced as a strict-mode violation on an unrelated drag. **Neither looked like a timing bug**,
 and a flake that only fails one run in three is one CI `retries: 1` will hide completely.
 
+**`findBy` only helps if the thing you wait for is the thing that arrives late.** Awaiting an
+element that renders regardless of the data is a non-retrying read wearing a disguise — it
+resolves immediately and the synchronous read after it still races the request.
+
+```ts
+// Wrong: the button renders whether or not the options have loaded, so this waits for nothing.
+const send = await screen.findByRole('button', { name: /send/i });
+await userEvent.click(screen.getByRole('checkbox', { name: /Perfect Blue/ }));
+
+// Right: wait on the thing that only exists once the data does.
+const source = await screen.findByRole('checkbox', { name: /Perfect Blue/ });
+const send = screen.getByRole('button', { name: /send/i });
+```
+
+This one passed locally and failed on CI, which is the signature: the mock resolves inside the
+same microtask batch on an idle machine and does not on a loaded one. Reproduce it by adding a
+`setTimeout` to the mock — if the test fails with a delay, it was always broken.
+
+**A component that renders its shell around an empty list invites this**, and it is usually a
+product bug too: "you have not suggested anything yet" and "still looking" are different claims,
+and showing the first while the second is true tells the reader something untrue. Gate on a
+loading state and the whole class disappears.
+
 If a test is intermittent, suspect a non-retrying read before suspecting the browser.
 
 ## 7. Mutation Discipline
