@@ -59,7 +59,7 @@
 - Consumes: `can` and `Viewer` from `../access/capability`, `NotificationsService.emit`, `PrismaService`.
 - Produces: `BoardFollowersService.audienceFor(tx, creatorId, toStatus, excludeUserIds): Promise<string[]>`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 it('tells a follower when an entry reaches ACTIVE', async () => {
@@ -124,12 +124,12 @@ it('writes nothing if the transaction it rides in rolls back', async () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `cd apps/api && pnpm test -- board-move-notifications`
 Expected: FAIL — `ENTRY_MOVED` is not a member of `NotificationType`.
 
-- [ ] **Step 3: Schema and migration**
+- [x] **Step 3: Schema and migration**
 
 ```prisma
 enum NotificationType {
@@ -143,7 +143,7 @@ enum NotificationType {
 
 `User.premiumUntil DateTime?` in the same migration. Additive only — no `DROP COLUMN`, no `SET NOT NULL`, so `migration-safety.e2e-spec.ts` stays green without an exemption.
 
-- [ ] **Step 4: Implement the audience**
+- [x] **Step 4: Implement the audience**
 
 ```ts
 /**
@@ -184,9 +184,9 @@ async audienceFor(
 }
 ```
 
-- [ ] **Step 5: Run to verify they pass**
+- [x] **Step 5: Run to verify they pass**
 
-- [ ] **Step 6: Mutation-check**
+- [x] **Step 6: Mutation-check**
 
 Each must fail, and only its own test:
 - Drop the `can('VIEW', ...)` filter → the `SUBSCRIBERS_ONLY` test fails.
@@ -194,7 +194,7 @@ Each must fail, and only its own test:
 - Default to every status → the ACCEPTED test fails.
 - Emit after the transaction rather than inside → the rollback test fails.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ### Task 2: The preference
 
@@ -219,12 +219,12 @@ model BoardNotificationPreference {
 }
 ```
 
-- [ ] **Step 1: Failing tests** — a set is stored and honoured; an empty set silences the board; an absent row uses the default; a non-premium reader is refused a custom set with 402; one board's preference does not affect another's; a preference for a board they cannot see is a 404 (not 403, per the standing rule).
-- [ ] **Step 2: Run, verify they fail.**
-- [ ] **Step 3: Implement.** Replace the set outright rather than patching it — the page edits checkboxes, and a partial update races two tabs into a merge nobody asked for. `staff.service.ts#setPermissions` carries the same reasoning.
-- [ ] **Step 4: Run, verify they pass.**
-- [ ] **Step 5: Mutation-check** — treating an empty array as absent must fail the silence test; dropping the premium check must fail the 402 test; dropping `creatorId` scope must fail the cross-board test.
-- [ ] **Step 6: Commit.**
+- [x] **Step 1: Failing tests** — a set is stored and honoured; an empty set silences the board; an absent row uses the default; a non-premium reader is refused a custom set with 402; one board's preference does not affect another's; a preference for a board they cannot see is a 404 (not 403, per the standing rule).
+- [x] **Step 2: Run, verify they fail.**
+- [x] **Step 3: Implement.** Replace the set outright rather than patching it — the page edits checkboxes, and a partial update races two tabs into a merge nobody asked for. `staff.service.ts#setPermissions` carries the same reasoning.
+- [x] **Step 4: Run, verify they pass.**
+- [x] **Step 5: Mutation-check** — treating an empty array as absent must fail the silence test; dropping the premium check must fail the 402 test; dropping `creatorId` scope must fail the cross-board test.
+- [x] **Step 6: Commit.**
 
 ### Task 3: The page
 
@@ -232,12 +232,28 @@ model BoardNotificationPreference {
 - Create: `apps/web/src/routes/NotificationSettings.tsx` + test
 - Modify: `apps/web/src/api/types.ts`, `use-moderation.ts`, `NotificationsPage.tsx`
 
-- [ ] **Step 1: Failing tests** — the default is shown as the default rather than as an empty choice; checking a column stores the whole set; a non-premium reader sees the controls **disabled with the reason**, not hidden; silencing a board is one action and says what it did.
-- [ ] **Step 2: Run, verify they fail.**
-- [ ] **Step 3: Implement.** Disabled-with-a-reason rather than hidden: this is the one place premium is visible, and a control that vanishes teaches nothing. It is also the opposite of the `EDIT_ENTRIES` rule in plan 10 — there, a hidden control is right because the API refuses it; here, the reader is *eligible to buy* the thing.
-- [ ] **Step 4: Run, verify they pass.**
-- [ ] **Step 5:** Full verification set, plus one e2e journey: follow a board, a moderator moves an entry to Now Playing, the bell shows it.
-- [ ] **Step 6: Commit.**
+- [x] **Step 1: Failing tests** — the default is shown as the default rather than as an empty choice; checking a column stores the whole set; a non-premium reader sees the controls **disabled with the reason**, not hidden; silencing a board is one action and says what it did.
+- [x] **Step 2: Run, verify they fail.**
+- [x] **Step 3: Implement.** Disabled-with-a-reason rather than hidden: this is the one place premium is visible, and a control that vanishes teaches nothing. It is also the opposite of the `EDIT_ENTRIES` rule in plan 10 — there, a hidden control is right because the API refuses it; here, the reader is *eligible to buy* the thing.
+- [x] **Step 4: Run, verify they pass.**
+- [x] **Step 5:** Full verification set, plus one e2e journey: follow a board, a moderator moves an entry to Now Playing, the bell shows it.
+- [x] **Step 6: Commit.**
+
+## What it actually took
+
+Three surprises, none of them in the fan-out itself:
+
+- **`api.put` did not exist on the web client.** The API has spoken PUT since the
+  webhook-secret endpoint; the client had simply never needed it. Adding it beat bending this
+  endpoint to PATCH, which would have muddied "replace outright" — the property the whole design
+  rests on.
+- **One mutation was equivalent, not a real change.** `preference?.statuses ?? DEFAULT` and
+  `preference ? preference.statuses : DEFAULT` behave identically, because a Prisma list field is
+  never null. The mutation that genuinely collapses empty-into-default is
+  `preference?.statuses.length ? … : …`, and that one is caught.
+- **The rollback test in `notification-triggers.int-spec.ts` needed two more models on its stub
+  transaction.** The fan-out reads `creatorFavorite` and `creatorPolicy` inside the same
+  transaction, so a stub that omits them fails for a reason unrelated to what it tests.
 
 ## Known risks
 
