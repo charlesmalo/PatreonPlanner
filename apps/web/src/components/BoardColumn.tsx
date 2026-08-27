@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client';
 import type { StaffPermission } from '../api/types';
+import { localCollapsed, localSort, remember } from '../api/board-settings';
 import { useBoard } from '../api/hooks';
 import { readDrag } from './drag';
 import { buildTree, type TreeNode } from './board-tree';
@@ -20,19 +21,6 @@ interface BoardColumnProps {
   /** What an empty column says. Suggestions invites a submission; the rest simply say so. */
   emptyText?: string;
 }
-
-/** Per reader and local: which columns are folded away is not board configuration. */
-const collapseKey = (slug: string, status: string) => `pp.board.${slug}.collapsed.${status}`;
-
-/**
- * The chosen sort is persisted for the same reason collapse is — it is the reader's own view of
- * the board, not its configuration.
- *
- * It also has to survive a remount: a move refetches by remounting the columns, and holding the
- * sort in component state alone meant every move silently threw the reader back to the default.
- * That was invisible until a hand-arranged order needed to survive the move that made it.
- */
-const sortKey = (slug: string, status: string) => `pp.board.${slug}.sort.${status}`;
 
 /**
  * One kanban column, with its own cursor.
@@ -61,24 +49,24 @@ export function BoardColumn({
   onMoved,
   emptyText = 'Nothing here yet.',
 }: BoardColumnProps) {
-  const [sort, setSort] = useState(() => window.localStorage.getItem(sortKey(slug, status)) ?? '');
+  const [sort, setSort] = useState(() => localSort(slug, status));
   const [dragOver, setDragOver] = useState(false);
 
   const chooseSort = (next: string) => {
     setSort(next);
-    window.localStorage.setItem(sortKey(slug, status), next);
+    void remember(slug, status, { sort: next });
   };
   const board = useBoard(slug, true, theme, status, sort);
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
-    setCollapsed(window.localStorage.getItem(collapseKey(slug, status)) === 'true');
+    setCollapsed(localCollapsed(slug, status));
   }, [slug, status]);
 
   const toggle = useCallback(() => {
     setCollapsed((current) => {
       const next = !current;
-      window.localStorage.setItem(collapseKey(slug, status), String(next));
+      void remember(slug, status, { collapsed: next });
       return next;
     });
   }, [slug, status]);

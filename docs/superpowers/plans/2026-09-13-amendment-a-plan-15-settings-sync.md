@@ -36,17 +36,17 @@
 
 ### Task 1: Storing them
 
-- [ ] **Failing tests:** a set is stored and read back; an absent row reads as empty rather than erroring; a free reader is refused a write with 402 but still reads; one board's settings stay out of another's; a status that is not a column is rejected; a board the reader cannot see is a 404.
-- [ ] Schema (`collapsed RecommendationStatus[]`, `sorts Json`), migration, service, controller.
-- [ ] **Mutation-check:** dropping the premium check; dropping the `creatorId` scope; accepting an unknown status.
-- [ ] Commit.
+- [x] **Failing tests:** a set is stored and read back; an absent row reads as empty rather than erroring; a free reader is refused a write with 402 but still reads; one board's settings stay out of another's; a status that is not a column is rejected; a board the reader cannot see is a 404.
+- [x] Schema (`collapsed RecommendationStatus[]`, `sorts Json`), migration, service, controller.
+- [x] **Mutation-check:** dropping the premium check; dropping the `creatorId` scope; accepting an unknown status.
+- [x] Commit.
 
 ### Task 2: Using them
 
-- [ ] **Failing tests:** the first paint uses the local value without waiting; a stored value replaces it once loaded; a change writes both; a free reader's change writes local only; a failed write does not lose the local change.
-- [ ] A `board-settings` module the column uses instead of reaching for `window.localStorage`.
-- [ ] **Mutation-check:** waiting on the request before first paint; letting the local value win over the stored one; not writing locally when the server write fails.
-- [ ] Commit.
+- [x] **Failing tests:** the first paint uses the local value without waiting; a stored value replaces it once loaded; a change writes both; a free reader's change writes local only; a failed write does not lose the local change.
+- [x] A `board-settings` module the column uses instead of reaching for `window.localStorage`.
+- [x] **Mutation-check:** waiting on the request before first paint; letting the local value win over the stored one; not writing locally when the server write fails.
+- [x] Commit.
 
 ## Known risks
 
