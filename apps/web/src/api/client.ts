@@ -96,6 +96,8 @@ export const api = {
   get: <T>(path: string) => request<T>('GET', path),
   post: <T>(path: string, body?: unknown) => request<T>('POST', path, body),
   patch: <T>(path: string, body?: unknown) => request<T>('PATCH', path, body),
+  /** Replaces a resource outright. The API already speaks it; the client had not needed it. */
+  put: <T>(path: string, body?: unknown) => request<T>('PUT', path, body),
   del: <T>(path: string) => request<T>('DELETE', path),
   /** For the root-mounted auth routes, which sit outside the versioned prefix. */
   postRoot: <T>(path: string, body?: unknown) => request<T>('POST', path, body, { rootPath: true }),

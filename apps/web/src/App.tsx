@@ -5,6 +5,7 @@ import { CreatorBoard } from './routes/CreatorBoard';
 import { EntryDetail } from './routes/EntryDetail';
 import { LandingPage } from './routes/LandingPage';
 import { MyVotes } from './routes/MyVotes';
+import { NotificationSettings } from './routes/NotificationSettings';
 import { NotificationsPage } from './routes/NotificationsPage';
 import { AcceptInvite } from './routes/AcceptInvite';
 import { ReviewQueue } from './routes/ReviewQueue';
@@ -30,6 +31,7 @@ export default function App() {
           <Route path="/c/:slug/e/:id" element={<EntryDetail />} />
           <Route path="/c/:slug/review" element={<ReviewQueue />} />
           <Route path="/c/:slug/my-votes" element={<MyVotes />} />
+          <Route path="/c/:slug/notifications" element={<NotificationSettings />} />
           <Route path="/c/:slug/staff" element={<StaffPage />} />
           <Route path="/c/:slug/tickets" element={<Tickets />} />
           <Route path="/notifications" element={<NotificationsPage />} />
