@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useCreator, useThemes, useViewMode } from '../api/hooks';
+import { hydrate } from '../api/board-settings';
 import { narrowCapabilities } from '../api/view-mode';
 import { ContactForm } from '../components/ContactForm';
 import { ModeBanner } from '../components/ModeBanner';
@@ -36,6 +37,20 @@ export function CreatorBoard() {
   // certainty.
   const [revision, setRevision] = useState(0);
   const refresh = () => setRevision((current) => current + 1);
+
+  // Brings a stored arrangement down from the server, then remounts the columns so they pick it
+  // up. Deliberately after the first paint rather than before it: the board renders immediately
+  // from the local copy, and on the same device the two already agree so nothing moves. Only a
+  // reader who arranged this board elsewhere sees it change, which is the feature working.
+  useEffect(() => {
+    let cancelled = false;
+    void hydrate(slug).then((changed) => {
+      if (changed && !cancelled) setRevision((current) => current + 1);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [slug]);
 
   if (loading) {
     return <p role="status">Loading board…</p>;

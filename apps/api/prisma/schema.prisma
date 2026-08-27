@@ -138,6 +138,7 @@ model User {
   memberships        Membership[]
   notificationPreferences BoardNotificationPreference[]
   carryOverDeliveries     CarryOverDelivery[]
+  boardViewPreferences    BoardViewPreference[]
   staffRoles         CreatorStaff[]       @relation("StaffMember")
   staffAssigned      CreatorStaff[]       @relation("StaffAssigner")
   recommendations    Recommendation[]
@@ -210,6 +211,7 @@ model Creator {
   favoritedBy       CreatorFavorite[]
   notificationPrefs BoardNotificationPreference[]
   carryOverDeliveries CarryOverDelivery[]
+  boardViewPrefs      BoardViewPreference[]
   staffInvites      StaffInvite[]
 
   // Postgres does not index foreign keys automatically, and the cascade from Creator scans them.
@@ -686,6 +688,29 @@ model BoardNotificationPreference {
   userId    String                 @db.Uuid
   creatorId String                 @db.Uuid
   statuses  RecommendationStatus[]
+  updatedAt DateTime               @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  creator Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@id([userId, creatorId])
+  @@index([creatorId])
+}
+
+// How one reader has arranged one board for themselves.
+//
+// Kept apart from BoardNotificationPreference because they answer different questions and change
+// at completely different rates: this one moves every time somebody folds a column, that one when
+// they sit down and decide what they want to hear about.
+//
+// `sorts` is Json rather than columns because the set of columns is the lifecycle enum and a
+// column per status would need a migration every time that grows. The DTO validates on the way
+// in, which is the only place a bad value can be caught.
+model BoardViewPreference {
+  userId    String                 @db.Uuid
+  creatorId String                 @db.Uuid
+  collapsed RecommendationStatus[]
+  sorts     Json                   @default("{}")
   updatedAt DateTime               @updatedAt
 
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
