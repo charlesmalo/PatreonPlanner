@@ -1,5 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { ModerationActionType, RecommendationStatus } from '@prisma/client';
+import { BoardFollowersService } from '../notifications/board-followers.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { isLegalTransition } from './transitions';
@@ -9,6 +10,7 @@ export class ModerationActionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly followers: BoardFollowersService,
   ) {}
 
   /**
@@ -68,22 +70,41 @@ export class ModerationActionsService {
       // someone their entry was accepted, when the move it describes was rolled back, is worse
       // than no notification at all. Not sent to the actor — a moderator who moves their own
       // entry already knows.
+      const payload = {
+        recommendationId,
+        title: current.customTitle,
+        creatorSlug: current.creator.slug,
+        creatorName: current.creator.displayName,
+        status: to,
+      };
       if (current.submittedByUserId !== actorUserId) {
         await this.notifications.emit(tx, [
           {
             userId: current.submittedByUserId,
             creatorId,
             type: 'ENTRY_STATUS_CHANGED',
-            payload: {
-              recommendationId,
-              title: current.customTitle,
-              creatorSlug: current.creator.slug,
-              creatorName: current.creator.displayName,
-              status: to,
-            },
+            payload,
           },
         ]);
       }
+
+      // Amendment A.4: everyone following the board hears the moves they asked to hear about.
+      // In the same transaction as the move itself, for the reason above — and excluding the two
+      // people already accounted for, because the submitter has just been told and a moderator
+      // moving something knows what they moved.
+      const audience = await this.followers.audienceFor(tx, creatorId, to, [
+        actorUserId,
+        current.submittedByUserId,
+      ]);
+      await this.notifications.emit(
+        tx,
+        audience.map((userId) => ({
+          userId,
+          creatorId,
+          type: 'ENTRY_MOVED' as const,
+          payload,
+        })),
+      );
       return updated;
     });
   }

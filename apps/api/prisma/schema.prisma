@@ -127,11 +127,16 @@ model User {
   // When the staleness job last *attempted* this user, success or not. Ordering on it stops a
   // permanently failing user from occupying the batch forever and starving everyone else.
   membershipsRefreshedAt DateTime?
+  // Amendment A.2: premium buys granularity, never notification itself. Added unset and gated
+  // closed on purpose — the column costs nothing now, and adding it later would mean taking
+  // granularity away from people who already had it.
+  premiumUntil           DateTime?
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
   ownedCreators      Creator[]            @relation("CreatorOwner")
   memberships        Membership[]
+  notificationPreferences BoardNotificationPreference[]
   staffRoles         CreatorStaff[]       @relation("StaffMember")
   staffAssigned      CreatorStaff[]       @relation("StaffAssigner")
   recommendations    Recommendation[]
@@ -202,6 +207,7 @@ model Creator {
   blockwords        CreatorBlockword[]
   tickets           Ticket[]
   favoritedBy       CreatorFavorite[]
+  notificationPrefs BoardNotificationPreference[]
   staffInvites      StaffInvite[]
 
   // Postgres does not index foreign keys automatically, and the cascade from Creator scans them.
@@ -659,6 +665,25 @@ model CreatorFavorite {
   @@index([creatorId])
 }
 
+// How much of a followed board's news a reader wants.
+//
+// An absent row means the default; an empty `statuses` array means silence. They are different
+// answers and must stay distinguishable: collapse them and "I want nothing from this board" reads
+// identically to "I have not chosen", so any later change to the default silently un-silences
+// everyone who had asked for quiet.
+model BoardNotificationPreference {
+  userId    String                 @db.Uuid
+  creatorId String                 @db.Uuid
+  statuses  RecommendationStatus[]
+  updatedAt DateTime               @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  creator Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@id([userId, creatorId])
+  @@index([creatorId])
+}
+
 // Enthusiasm, kept apart from demand. Never an input to any ordering — the moment a reaction
 // could move an entry it would be a second voting system, with none of the tier weighting that
 // makes the first one meaningful, and one anybody could flood.
@@ -789,6 +814,9 @@ model ModerationResult {
 enum NotificationType {
   ENTRY_STATUS_CHANGED
   ENTRY_FLAGGED
+  // Something moved on a board you follow. Deliberately distinct from ENTRY_STATUS_CHANGED, which
+  // answers "your entry moved": the submitter must not receive both for one move.
+  ENTRY_MOVED
   TICKET_RAISED
   TICKET_RESOLVED
 }
