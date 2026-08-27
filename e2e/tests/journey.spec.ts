@@ -13,6 +13,10 @@ import {
   makeOwner,
   makeStaff,
   seedCreator,
+  seedSecondBoard,
+  makePremium,
+  supports,
+  OTHER_CREATOR,
   seedRelation,
   seedTheme,
   timeOutPatron,
@@ -738,6 +742,32 @@ test('a patron link waits for a moderator, who publishes it from the card', asyn
   const published = page.getByRole('link', { name: 'https://example.test/perfect-blue' });
   await expect(published).toBeVisible();
   await expect(published).toHaveAttribute('rel', /noopener/);
+});
+
+test('a patron carries a suggestion to another board they support', async ({ page }) => {
+  // The page-to-queue path end to end. What happens to each delivery afterwards is covered by
+  // twenty integration tests; what only this can prove is that the page, the endpoint and the
+  // dashboard agree with each other through the real proxy.
+  seedSecondBoard();
+  await signIn(page, 500, 'patreon-carrier-e2e');
+  makePremium('patreon-carrier-e2e');
+  supports('patreon-carrier-e2e', CREATOR.id);
+  supports('patreon-carrier-e2e', OTHER_CREATOR.id);
+
+  // Something of their own to carry.
+  await page.goto(`/c/${CREATOR.slug}`);
+  await page.getByLabel(/add something the catalogue does not have/i).fill('Millennium Actress');
+  await page.getByRole('button', { name: 'Suggest', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Millennium Actress' })).toBeVisible();
+
+  await page.goto('/carry-over');
+  await page.getByRole('checkbox', { name: /Millennium Actress/ }).check();
+  await page.getByRole('checkbox', { name: OTHER_CREATOR.displayName }).check();
+  await page.getByRole('button', { name: /send these/i }).click();
+
+  // Queued, and said to be queued rather than done — they drain at each board's own rate.
+  await expect(page.getByText(/on the way/i)).toBeVisible();
+  await expect(page.getByText(/Waiting its turn/i)).toBeVisible();
 });
 
 test('a patron can suggest a whole franchise', async ({ page }) => {

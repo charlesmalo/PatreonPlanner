@@ -104,6 +104,45 @@ export const CREATOR = {
   tierId: '44444444-4444-4444-4444-444444444444',
 };
 
+/** A second board, for the journeys that are about more than one. */
+export const OTHER_CREATOR = {
+  id: '55555555-5555-5555-5555-555555555555',
+  campaignId: 'campaign-two-e2e',
+  slug: 'bea-reads',
+  displayName: 'Bea Reads',
+  policyId: '66666666-6666-6666-6666-666666666666',
+};
+
+export function seedSecondBoard(): void {
+  seed(`
+    DELETE FROM "Recommendation" WHERE "creatorId" = '${OTHER_CREATOR.id}';
+    INSERT INTO "Creator"(id,"patreonCampaignId","ownerUserId","displayName",slug,"claimedAt","createdAt","updatedAt")
+      VALUES ('${OTHER_CREATOR.id}','${OTHER_CREATOR.campaignId}','${CREATOR.ownerId}','${OTHER_CREATOR.displayName}','${OTHER_CREATOR.slug}',now(),now(),now())
+      ON CONFLICT ("patreonCampaignId") DO NOTHING;
+    INSERT INTO "CreatorPolicy"(id,"creatorId","createdAt","updatedAt")
+      VALUES ('${OTHER_CREATOR.policyId}','${OTHER_CREATOR.id}',now(),now())
+      ON CONFLICT ("creatorId") DO NOTHING;
+  `);
+}
+
+/** Carry-over is premium. Nothing sets this in the app yet, so the journey sets it directly. */
+export function makePremium(patreonUserId: string): void {
+  seed(`
+    UPDATE "User" SET "premiumUntil" = now() + interval '1 year'
+     WHERE "patreonUserId" = ${sqlLiteral(patreonUserId)};
+  `);
+}
+
+/** An active pledge to a board, which is what makes it a carry-over target. */
+export function supports(patreonUserId: string, creatorId: string): void {
+  seed(`
+    INSERT INTO "Membership"(id,"userId","creatorId","amountCents","isActivePatron","createdAt","updatedAt")
+      SELECT gen_random_uuid(), u.id, '${creatorId}', 500, true, now(), now()
+      FROM "User" u WHERE u."patreonUserId" = ${sqlLiteral(patreonUserId)}
+      ON CONFLICT ("userId","creatorId") DO UPDATE SET "isActivePatron" = true, "amountCents" = 500;
+  `);
+}
+
 export function seedCreator(): void {
   seed(`
     DELETE FROM "Recommendation" WHERE "creatorId" = '${CREATOR.id}';

@@ -61,7 +61,7 @@ What makes it legitimate is that it never exceeds a **creator's** limit. Amendme
 - Consumes: `SubmissionsService.submit`, `PrismaService`.
 - Produces: `CarryOverService.enqueue(userId, sourceIds, creatorIds)`, `CarryOverService.deliver(deliveryId)`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 it('submits a title the board has not seen', async () => { ... outcome === 'SUBMITTED' ... });
@@ -103,30 +103,47 @@ it('labels what it creates so moderators can judge it as a class', async () => {
 it('is idempotent: broadcasting the same list twice queues one delivery', async () => { ... });
 ```
 
-- [ ] **Step 2: Run to verify they fail.**
-- [ ] **Step 3: Schema and migration.** Additive only.
-- [ ] **Step 4: Implement `deliver`, in this order** — the order *is* the design:
+- [x] **Step 2: Run to verify they fail.**
+- [x] **Step 3: Schema and migration.** Additive only.
+- [x] **Step 4: Implement `deliver`, in this order** — the order *is* the design:
   1. creator switched it off → `NOT_ACCEPTED`
   2. refused here before → `REFUSED_BEFORE`
   3. `submit()` → `SUBMITTED`, or `duplicate: true` → `ALREADY_PRESENT`
   4. capability refusal → `NOT_ELIGIBLE`
   5. rate limited → stays `PENDING`
-- [ ] **Step 5: Run to verify they pass.**
-- [ ] **Step 6: Mutation-check.** Each fails exactly one test: dropping the rejection check; auto-upvoting on `ALREADY_PRESENT`; treating a 429 as failure; ignoring `acceptsCarryOver`; checking eligibility at enqueue instead of delivery.
-- [ ] **Step 7: Commit.**
+- [x] **Step 5: Run to verify they pass.**
+- [x] **Step 6: Mutation-check.** Each fails exactly one test: dropping the rejection check; auto-upvoting on `ALREADY_PRESENT`; treating a 429 as failure; ignoring `acceptsCarryOver`; checking eligibility at enqueue instead of delivery.
+- [x] **Step 7: Commit.**
 
 ### Task 2: Draining the queue
 
-- [ ] **Step 1: Failing tests** — a batch is bounded; a delivery that throws does not stop the batch; a `PENDING` left by a rate limit is retried on the next tick; a processed delivery is not processed twice.
-- [ ] **Step 2–4:** Run, implement `CarryOverJob.runOnce()` on the existing tick, run.
-- [ ] **Step 5: Commit.**
+- [x] **Step 1: Failing tests** — a batch is bounded; a delivery that throws does not stop the batch; a `PENDING` left by a rate limit is retried on the next tick; a processed delivery is not processed twice.
+- [x] **Step 2–4:** Run, implement `CarryOverJob.runOnce()` on the existing tick, run.
+- [x] **Step 5: Commit.**
 
 ### Task 3: Asking for it, and seeing what happened
 
-- [ ] **Step 1: Failing tests** — `POST /carry-over` enqueues from the reader's own entries only; a source that is not theirs is refused; the dashboard groups outcomes per board; `ALREADY_PRESENT` offers one-click upvote and casting it works.
-- [ ] **Step 2–4:** Run, implement, run.
-- [ ] **Step 5:** Full verification, plus an e2e journey: broadcast to a second board, the entry appears there labelled.
-- [ ] **Step 6: Commit.**
+- [x] **Step 1: Failing tests** — `POST /carry-over` enqueues from the reader's own entries only; a source that is not theirs is refused; the dashboard groups outcomes per board; `ALREADY_PRESENT` offers one-click upvote and casting it works.
+- [x] **Step 2–4:** Run, implement, run.
+- [x] **Step 5:** Full verification, plus an e2e journey: broadcast to a second board, the entry appears there labelled.
+- [x] **Step 6: Commit.**
+
+## What it found
+
+**`SubmissionsService.submit` does not check the SUBMIT capability.** The guard on the controller
+does, and a queue calling the service walks straight past it — a test caught this delivering to a
+board whose tier gate the reader did not meet. This plan had assumed reusing `submit` made
+eligibility come for free. It does not, and the same would be true of anything else that calls the
+service directly. Now resolved explicitly with the same pure `can()` the guard uses.
+
+**Two drain mutations survived the first pass.** The batch bound had nothing asserting it. And the
+guard against re-delivering a settled row looked untested, because the obvious assertion — no
+duplicate entry — passes without it: de-duplication catches the second submit. The real damage is
+rewriting a settled outcome, so `SUBMITTED` becomes `ALREADY_PRESENT` and the dashboard tells the
+reader their title was already there when they are the one who put it there.
+
+**Prisma does not accept `/** */` comments**, only `//` and `///`. Worth knowing before writing a
+schema block in the house style.
 
 ## Known risks
 
