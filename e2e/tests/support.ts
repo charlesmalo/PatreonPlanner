@@ -125,6 +125,18 @@ export function seedSecondBoard(): void {
   `);
 }
 
+/**
+ * Nobody starts premium.
+ *
+ * Called from `beforeEach`, because `premiumUntil` outlives a run: `seedCreator` clears
+ * recommendations but not users, so a test that grants premium leaves the next run's reader
+ * already holding it. That passes on a fresh database and fails on every run afterwards — which
+ * is the worst shape of failure, because the first thing anybody does is re-run it.
+ */
+export function clearPremium(): void {
+  seed(`UPDATE "User" SET "premiumUntil" = NULL;`);
+}
+
 /** Carry-over is premium. Nothing sets this in the app yet, so the journey sets it directly. */
 export function makePremium(patreonUserId: string): void {
   seed(`

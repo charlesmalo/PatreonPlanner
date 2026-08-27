@@ -164,6 +164,18 @@ product bug too: "you have not suggested anything yet" and "still looking" are d
 and showing the first while the second is true tells the reader something untrue. Gate on a
 loading state and the whole class disappears.
 
+**A test that grants state must take it back.** The end-to-end database is not rebuilt between
+runs — `seedCreator` clears recommendations, not users — so anything written to a `User` row
+outlives the run that wrote it. A test granting premium and not clearing it passes on a fresh
+database and fails on every run afterwards, which is the worst shape of failure available: the
+first thing anybody does with a failing test is re-run it, and re-running is what keeps it broken.
+
+Reset it in `beforeEach` rather than at the end of the test that set it, so a test that fails
+half-way does not poison the next one.
+
+**Verify by running the suite twice in a row.** Once proves nothing about state that leaks between
+runs, and this is the second time that class of bug has reached a commit here.
+
 If a test is intermittent, suspect a non-retrying read before suspecting the browser.
 
 ## 7. Mutation Discipline
