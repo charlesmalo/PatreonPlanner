@@ -1,4 +1,4 @@
-import { CarryOverService } from '../src/carry-over/carry-over.service';
+import { CARRY_OVER_BATCH, CarryOverService } from '../src/carry-over/carry-over.service';
 import { RateLimitService } from '../src/limits/rate-limit.service';
 import { AuthTestContext, startAuthApp } from './support/auth-app';
 
@@ -226,6 +226,115 @@ describe('Carrying a list across boards (integration)', () => {
     await carryOver.enqueue(patron, [sourceId], [targetCreatorId]);
 
     expect(await ctx.prisma.carryOverDelivery.count({ where: { userId: patron } })).toBe(1);
+  });
+
+  describe('draining the queue', () => {
+    it('processes what is waiting and leaves nothing behind', async () => {
+      await carryOver.enqueue(patron, [sourceId], [targetCreatorId]);
+
+      const processed = await carryOver.runOnce();
+
+      expect(processed).toBe(1);
+      expect(await ctx.prisma.carryOverDelivery.count({ where: { outcome: 'PENDING' } })).toBe(0);
+    });
+
+    it('does not process a delivery twice', async () => {
+      // The drain is not the only caller and a tick can overlap a slow one. Re-delivering would
+      // submit the same title again, which the board sees as a duplicate and the reader sees as
+      // the feature spamming on their behalf.
+      await carryOver.enqueue(patron, [sourceId], [targetCreatorId]);
+      await carryOver.runOnce();
+
+      expect(await carryOver.runOnce()).toBe(0);
+      expect(await entriesOn(targetCreatorId)).toHaveLength(1);
+    });
+
+    it('refuses to deliver a row that has already been settled', async () => {
+      // The guard for an overlapping tick, which `runOnce` alone cannot reach because it only
+      // ever selects PENDING rows. Without it a slow tick and the next one both deliver the same
+      // title, and the board sees a duplicate the reader never asked for twice.
+      await carryOver.enqueue(patron, [sourceId], [targetCreatorId]);
+      const delivery = await ctx.prisma.carryOverDelivery.findFirstOrThrow({});
+      await carryOver.deliver(delivery.id);
+
+      await carryOver.deliver(delivery.id);
+
+      expect(await entriesOn(targetCreatorId)).toHaveLength(1);
+      // The damage a second delivery does is not a duplicate entry — de-duplication catches that
+      // — it is rewriting a settled outcome. SUBMITTED becoming ALREADY_PRESENT tells the reader
+      // their title was already on the board when in fact they are the one who put it there.
+      const after = await ctx.prisma.carryOverDelivery.findUniqueOrThrow({
+        where: { id: delivery.id },
+      });
+      expect(after.outcome).toBe('SUBMITTED');
+    });
+
+    it('takes a bounded batch rather than everything waiting', async () => {
+      // A reader with forty titles across ten boards is four hundred deliveries, each one a
+      // submission with moderation and a catalogue call behind it. An unbounded tick holds the
+      // worker while five other jobs wait on it.
+      const many = await Promise.all(
+        Array.from({ length: CARRY_OVER_BATCH + 3 }, (_, i) =>
+          ctx.prisma.recommendation.create({
+            data: {
+              creatorId: sourceCreatorId,
+              submittedByUserId: patron,
+              type: 'EXTERNAL_LINK',
+              customTitle: `Batch ${i}`,
+              normalizedTitle: `batch ${i}`,
+            },
+          }),
+        ),
+      );
+      await carryOver.enqueue(
+        patron,
+        many.map((m) => m.id),
+        [targetCreatorId],
+      );
+
+      expect(await carryOver.runOnce()).toBe(CARRY_OVER_BATCH);
+    });
+
+    it('keeps going when one delivery fails', async () => {
+      // One bad row must not strand every other reader's list behind it.
+      const other = await ctx.prisma.recommendation.create({
+        data: {
+          creatorId: sourceCreatorId,
+          submittedByUserId: patron,
+          type: 'EXTERNAL_LINK',
+          customTitle: 'Paprika',
+          normalizedTitle: 'paprika',
+        },
+      });
+      await carryOver.enqueue(patron, [sourceId, other.id], [targetCreatorId]);
+      // Break exactly one of them: a source with no title of any kind cannot make a valid DTO.
+      await ctx.prisma.recommendation.update({
+        where: { id: other.id },
+        data: { customTitle: '' },
+      });
+
+      await carryOver.runOnce();
+
+      const outcomes = await ctx.prisma.carryOverDelivery.findMany({ select: { outcome: true } });
+      expect(outcomes.map((o) => o.outcome).sort()).toEqual(['FAILED', 'SUBMITTED']);
+    });
+
+    it('retries a delivery the rate limit made it wait on', async () => {
+      const limit = Number(process.env.SUBMIT_LIMIT_PER_HOUR);
+      const key = `submit:${patron}:${targetCreatorId}`;
+      for (let i = 0; i < limit; i += 1) await limits.consume(key, limit, 3600);
+      await carryOver.enqueue(patron, [sourceId], [targetCreatorId]);
+
+      await carryOver.runOnce();
+      expect(await ctx.prisma.carryOverDelivery.count({ where: { outcome: 'PENDING' } })).toBe(1);
+
+      // ...and once the window has room again, the next tick delivers it.
+      for (let spent = await limits.count(key, 3600); spent > 0; spent -= 1)
+        await limits.refund(key);
+      await carryOver.runOnce();
+
+      expect(await ctx.prisma.carryOverDelivery.count({ where: { outcome: 'SUBMITTED' } })).toBe(1);
+    });
   });
 
   it('refuses to carry an entry that is not the reader’s own', async () => {

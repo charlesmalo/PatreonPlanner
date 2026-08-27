@@ -15,6 +15,12 @@ import type { SubmitRecommendationDto } from '../recommendations/dto/submit-reco
  * delivery time, and the disclosure properties right. A second path would have to re-derive all
  * of that, and would be wrong in a way nothing would notice.
  */
+/**
+ * How many deliveries one tick attempts. Small on purpose: every one of them is a submission,
+ * with moderation and a catalogue call behind it, and the tick is shared with five other jobs.
+ */
+export const CARRY_OVER_BATCH = 25;
+
 @Injectable()
 export class CarryOverService {
   private readonly logger = new Logger(CarryOverService.name);
@@ -139,6 +145,31 @@ export class CarryOverService {
       this.logger.warn(`Carry-over delivery ${delivery.id} failed: ${String(error)}`);
       await this.settle(delivery.id, 'FAILED', null, messageOf(error));
     }
+  }
+
+  /**
+   * Delivers a bounded batch of what is waiting, oldest first.
+   *
+   * Bounded because a reader with forty titles across ten boards is four hundred deliveries, and
+   * a tick that tries to finish all of them holds the worker while every other job waits. Each
+   * delivery is isolated: one bad row must not strand every other reader's list behind it.
+   */
+  async runOnce(): Promise<number> {
+    const waiting = await this.prisma.carryOverDelivery.findMany({
+      where: { outcome: 'PENDING' },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+      take: CARRY_OVER_BATCH,
+    });
+
+    let processed = 0;
+    for (const { id } of waiting) {
+      // `deliver` already re-reads the row and returns if it is no longer PENDING, so a tick
+      // overlapping a slow one cannot deliver the same title twice.
+      await this.deliver(id);
+      processed += 1;
+    }
+    return processed;
   }
 
   /** The same pure resolver the guard uses — never a second implementation of "may they post". */
