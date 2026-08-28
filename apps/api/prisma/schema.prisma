@@ -139,6 +139,7 @@ model User {
   notificationPreferences BoardNotificationPreference[]
   carryOverDeliveries     CarryOverDelivery[]
   boardViewPreferences    BoardViewPreference[]
+  subscription            Subscription?
   staffRoles         CreatorStaff[]       @relation("StaffMember")
   staffAssigned      CreatorStaff[]       @relation("StaffAssigner")
   recommendations    Recommendation[]
@@ -718,6 +719,64 @@ model BoardViewPreference {
 
   @@id([userId, creatorId])
   @@index([creatorId])
+}
+
+// Where a subscription stands with the provider.
+//
+// REFUNDED is kept apart from CANCELLED because they mean opposite things about the money:
+// cancelling stops the next renewal and leaves the month already paid for intact, while a refund
+// takes the money back and the entitlement goes with it.
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+  REFUNDED
+}
+
+// One reader's standing with the payment provider.
+//
+// Deliberately holds no personal data: the provider is the merchant of record and keeps the name,
+// the address and the card. What is here is their identifier for the subscription, their
+// identifier for the customer, and what state it is in — enough to answer "is this reader
+// premium" and nothing a regulator would call personal.
+//
+// `User.premiumUntil` is a projection of this, not a second source of truth. Five gates read that
+// column already; pointing them all at this table instead would be five call sites and five
+// chances to disagree.
+model Subscription {
+  id                     String             @id @default(uuid()) @db.Uuid
+  // One per reader: two would make "are they premium" a question with two answers.
+  userId                 String             @unique @db.Uuid
+  provider               String
+  providerSubscriptionId String             @unique
+  providerCustomerId     String
+  status                 SubscriptionStatus
+  // What has been paid for. Entitlement runs to here, plus a grace window when a payment failed.
+  currentPeriodEnd       DateTime
+  cancelAtPeriodEnd      Boolean            @default(false)
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // The reconciliation job reads the ones whose period has run out without a renewal.
+  @@index([status, currentPeriodEnd])
+}
+
+// One row per webhook the provider has already delivered.
+//
+// Providers retry on any non-2xx and on a timeout, so the same event arrives more than once as a
+// matter of course rather than as a fault. Without this, a retry after a slow response extends a
+// subscription a second time — and the slower we are, the more likely it is.
+model ProcessedWebhookEvent {
+  // The provider's own event id, so the uniqueness is theirs rather than something we derive.
+  id         String   @id
+  provider   String
+  eventType  String
+  receivedAt DateTime @default(now())
+
+  @@index([receivedAt])
 }
 
 // How a carried-over suggestion ended up.
