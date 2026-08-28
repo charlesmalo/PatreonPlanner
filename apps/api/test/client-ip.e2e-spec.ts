@@ -1,4 +1,4 @@
-import { clientIp } from '../src/limits/client-ip';
+import { clientIp, looksLikeProxy } from '../src/limits/client-ip';
 
 const req = (opts: { socket?: string; xff?: string }) => ({
   socket: { remoteAddress: opts.socket },
@@ -49,4 +49,24 @@ describe('clientIp', () => {
     expect(clientIp(req({ xff: '  ,  ' }), 1)).toBe('unknown');
     expect(clientIp(req({}), 0)).toBe('unknown');
   });
+});
+
+describe('looksLikeProxy', () => {
+  // The other half of the rule in RateLimitGuard: with TRUSTED_PROXY_HOPS at 0, an address that
+  // looks like a proxy is *not* bucketed by IP. Bucketing the whole internet together would turn
+  // the limiter into a lever anyone could pull to refuse everyone else's writes.
+  it.each(['127.0.0.1', '::1', '::ffff:127.0.0.1', '127.5.5.5', 'unknown'])(
+    'treats %s as a proxy or an unknown, not as a client address',
+    (address) => {
+      expect(looksLikeProxy(address)).toBe(true);
+    },
+  );
+
+  it.each(['203.0.113.9', '198.51.100.4', '2001:db8::1'])(
+    'treats %s as a real client address',
+    (address) => {
+      // Public addresses must still be limited, or the guard protects nothing at all.
+      expect(looksLikeProxy(address)).toBe(false);
+    },
+  );
 });
