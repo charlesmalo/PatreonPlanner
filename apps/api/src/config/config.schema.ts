@@ -12,6 +12,10 @@ export const configSchema = z.object({
   // end-to-end stack, and for anybody self-hosting who does not want to sell anything.
   LEMONSQUEEZY_WEBHOOK_SECRET: z.string().min(1).optional(),
   LEMONSQUEEZY_CHECKOUT_URL: z.string().url().optional(),
+  // Only reconciliation needs this — asking the provider what a subscription is really doing when
+  // a webhook never arrived. Absent means that safety net is off, not that billing is broken.
+  LEMONSQUEEZY_API_KEY: z.string().min(1).optional(),
+  LEMONSQUEEZY_API_BASE_URL: z.string().url().default('https://api.lemonsqueezy.com'),
 
   PATREON_CLIENT_ID: z.string().min(1),
   PATREON_CLIENT_SECRET: z.string().min(1),

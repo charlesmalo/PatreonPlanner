@@ -1,5 +1,6 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '../config/config.module';
 import { SubscriptionStatus } from '@prisma/client';
 
 /**
@@ -39,6 +40,31 @@ const STATUS: Record<string, SubscriptionStatus> = {
 @Injectable()
 export class LemonSqueezyAdapter {
   readonly provider = 'lemonsqueezy';
+
+  constructor(private readonly config: ConfigService) {}
+
+  /**
+   * Asks the provider what a subscription is actually doing.
+   *
+   * The only network call in `billing/`, and the only reason reconciliation exists: webhooks get
+   * lost to a deploy mid-delivery, a timeout, or a bug in our own handler. Returns null when it
+   * cannot answer — which the caller must treat as "unknown", never as "cancelled".
+   */
+  async fetchSubscription(providerSubscriptionId: string): Promise<SubscriptionEvent | null> {
+    const key = this.config.get('LEMONSQUEEZY_API_KEY');
+    if (!key) return null;
+
+    const url = `${this.config.get('LEMONSQUEEZY_API_BASE_URL')}/v1/subscriptions/${encodeURIComponent(providerSubscriptionId)}`;
+    const response = await fetch(url, {
+      headers: { Accept: 'application/vnd.api+json', Authorization: `Bearer ${key}` },
+    });
+    if (!response.ok) return null;
+
+    // Reusing `parse` so the reconciled shape and the webhook shape cannot drift apart. The
+    // meta block a webhook carries is not on a direct read, so the caller's own id fills it in.
+    const body = (await response.json()) as { data?: unknown };
+    return this.parse({ meta: { event_name: 'subscription_reconciled' }, data: body.data });
+  }
 
   /**
    * HMAC-SHA256 over the exact bytes that arrived.
@@ -103,7 +129,10 @@ export class LemonSqueezyAdapter {
     const providerSubscriptionId = payload.data?.id;
 
     if (!eventType?.startsWith('subscription_')) return null;
-    if (!userId || !providerSubscriptionId || !attributes) return null;
+    // `subscription_reconciled` is ours, not theirs: a direct read carries no custom data, and
+    // the reader is already known from the subscription row being reconciled.
+    if (eventType !== 'subscription_reconciled' && !userId) return null;
+    if (!providerSubscriptionId || !attributes) return null;
 
     const status = STATUS[attributes.status ?? ''];
     if (!status) return null;
@@ -117,7 +146,7 @@ export class LemonSqueezyAdapter {
 
     return {
       eventType,
-      userId,
+      userId: userId ?? '',
       providerSubscriptionId: String(providerSubscriptionId),
       providerCustomerId: String(attributes.customer_id ?? ''),
       status,

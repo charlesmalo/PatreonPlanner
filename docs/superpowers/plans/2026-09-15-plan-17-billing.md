@@ -58,7 +58,7 @@
 **Interfaces:**
 - Produces: `EntitlementService.applyTo(userId, subscription)` → writes `User.premiumUntil`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 it('grants premium to the end of the paid period', async () => { ... });
@@ -92,14 +92,14 @@ it('never shortens premium somebody already has', async () => {
 });
 ```
 
-- [ ] **Step 2–5:** Run to see them fail; implement; run; **mutation-check** — dropping the grace window, applying grace to a refund, letting an out-of-order event shorten entitlement.
-- [ ] **Step 6: Commit.**
+- [x] **Step 2–5:** Run to see them fail; implement; run; **mutation-check** — dropping the grace window, applying grace to a refund, letting an out-of-order event shorten entitlement.
+- [x] **Step 6: Commit.**
 
 ### Task 2: Webhooks, verified and exactly once
 
 **Files:** `lemon-squeezy.adapter.ts`, `billing.service.ts`, `billing.controller.ts`, `apps/api/test/billing-webhook.int-spec.ts`
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 ```ts
 it('refuses an unsigned request', async () => { ... 401 ... });
@@ -118,24 +118,44 @@ it('returns 2xx for an event type it does not handle', async () => {
 it('records the event before acting on it, so a crash mid-handler does not double-apply', ...);
 ```
 
-- [ ] **Step 2–5:** Run; implement with `@RequireRawBody`-style verification mirroring `webhook-signature.service.ts`; run; **mutation-check** — accepting an unsigned request, verifying the parsed body instead of raw bytes, dropping the idempotency check, returning 4xx for unknown types.
-- [ ] **Step 6: Commit.**
+- [x] **Step 2–5:** Run; implement with `@RequireRawBody`-style verification mirroring `webhook-signature.service.ts`; run; **mutation-check** — accepting an unsigned request, verifying the parsed body instead of raw bytes, dropping the idempotency check, returning 4xx for unknown types.
+- [x] **Step 6: Commit.**
 
 ### Task 3: Buying it
 
 **Files:** `billing.controller.ts` (checkout), `apps/web/src/routes/Premium.tsx` + test
 
-- [ ] **Step 1: Failing tests** — a signed-in reader gets a checkout URL carrying their user id as the provider's custom data; an anonymous one is refused; the URL is never built from client-supplied data; the page shows current status and a manage link when subscribed.
-- [ ] **Step 2–5:** Run, implement, run, **mutation-check** — trusting a client-supplied user id, granting entitlement on the return redirect.
-- [ ] **Step 6: Commit.**
+- [x] **Step 1: Failing tests** — a signed-in reader gets a checkout URL carrying their user id as the provider's custom data; an anonymous one is refused; the URL is never built from client-supplied data; the page shows current status and a manage link when subscribed.
+- [x] **Step 2–5:** Run, implement, run, **mutation-check** — trusting a client-supplied user id, granting entitlement on the return redirect.
+- [x] **Step 6: Commit.**
 
 ### Task 4: When the webhook never arrives
 
 **Files:** `billing-reconcile.job.ts`, wired into the existing tick
 
-- [ ] **Step 1: Failing tests** — a subscription past its period end with no renewal event is re-checked against the provider; a provider error leaves entitlement alone rather than revoking; the batch is bounded.
-- [ ] **Step 2–5:** Run, implement, run, **mutation-check** — revoking on a provider error is the one that matters.
-- [ ] **Step 6: Commit.**
+- [x] **Step 1: Failing tests** — a subscription past its period end with no renewal event is re-checked against the provider; a provider error leaves entitlement alone rather than revoking; the batch is bounded.
+- [x] **Step 2–5:** Run, implement, run, **mutation-check** — revoking on a provider error is the one that matters.
+- [x] **Step 6: Commit.**
+
+## What it found
+
+**The CSRF exemption had to be an exact path, not a namespace.** `/billing/checkout` sits beside
+the webhook, is session-authenticated, and needs the token like anything else — a `/billing/`
+prefix would have quietly left a mutating endpoint open to a cross-site post. The test for it was
+too loose at first: "not 200" passes whether the rejection is CSRF's 403 or the session guard's
+401, so it now asserts 403 exactly.
+
+**The idempotency pre-check is not what guarantees exactly-once** — the primary key is. A mutation
+removing the read alone changed nothing, because the unique violation path catches it; removing
+both makes the redelivery throw and the test notices. The comment now says which is which.
+
+**Coverage found that checkout had no tests at all**, including the property that the user id
+comes from the session rather than the request body. That one matters: taking it from the body
+would let anyone pay once and name somebody else.
+
+**An anonymous checkout request is 403, not 401.** The CSRF token is session-bound, so it cannot
+be produced without a session and the request never reaches the guard. Asserting 401 would have
+been asserting a route that does not exist.
 
 ## Known risks
 

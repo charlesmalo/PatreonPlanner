@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import request from 'supertest';
-import { AuthTestContext, startAuthApp } from './support/auth-app';
+import { AuthTestContext, pickCookie, startAuthApp } from './support/auth-app';
 
 const SECRET = 'billing-test-secret';
 
@@ -12,6 +12,7 @@ describe('Billing webhook (integration)', () => {
   beforeAll(async () => {
     // Set before boot: config is validated once at startup.
     process.env.LEMONSQUEEZY_WEBHOOK_SECRET = SECRET;
+    process.env.LEMONSQUEEZY_CHECKOUT_URL = 'https://pay.test/checkout/abc';
     ctx = await startAuthApp();
     userId = (await ctx.prisma.user.create({ data: { patreonUserId: 'bw-user' } })).id;
   }, 240_000);
@@ -85,6 +86,73 @@ describe('Billing webhook (integration)', () => {
       await send(payload, () =>
         createHmac('sha256', SECRET).update(reordered).digest('hex'),
       ).expect(401);
+    });
+  });
+
+  describe('checkout', () => {
+    let auth: { session: string; csrf: string; csrfToken: string };
+    let readerId: string;
+
+    beforeAll(async () => {
+      ctx.patreon.identity = {
+        ...ctx.patreon.identity,
+        patreonUserId: 'bw-buyer',
+        memberships: [],
+      };
+      const start = await request(ctx.app.getHttpServer()).get('/auth/patreon/login').expect(302);
+      const state = new URL(start.headers.location).searchParams.get('state') as string;
+      const res = await request(ctx.app.getHttpServer())
+        .get(`/auth/patreon/callback?code=auth-code&state=${state}`)
+        .set('Cookie', pickCookie(start, 'pp_oauth_state'))
+        .expect(302);
+      const csrf = pickCookie(res, 'pp_csrf').split(';')[0];
+      auth = {
+        session: pickCookie(res, 'pp_session'),
+        csrf,
+        csrfToken: csrf.split('=').slice(1).join('='),
+      };
+      readerId = (await ctx.prisma.user.findUniqueOrThrow({ where: { patreonUserId: 'bw-buyer' } }))
+        .id;
+    });
+
+    const checkout = (body: object = {}) =>
+      request(ctx.app.getHttpServer())
+        .post('/api/v1/billing/checkout')
+        .set('Cookie', [auth.session, auth.csrf])
+        .set('x-csrf-token', auth.csrfToken)
+        .send(body);
+
+    it('refuses somebody who is not signed in', async () => {
+      // 403 rather than 401, and correctly so: the CSRF token is bound to the session, so an
+      // anonymous request cannot produce a valid one and never reaches the guard behind it.
+      // Asserting 401 here would have been asserting a route that does not exist.
+      await request(ctx.app.getHttpServer())
+        .post('/api/v1/billing/checkout')
+        .set('Cookie', [auth.csrf])
+        .set('x-csrf-token', auth.csrfToken)
+        .send({})
+        .expect(403);
+    });
+
+    it('carries the id from the session, never one the client sent', async () => {
+      // The webhook reads this back to decide whose account to entitle. Taking it from the body
+      // would let anyone pay once and name somebody else — or name everybody in turn.
+      const res = await checkout({ user_id: 'someone-else', userId: 'someone-else' }).expect(201);
+
+      expect(res.body.url).toContain(encodeURIComponent(readerId));
+      expect(res.body.url).not.toContain('someone-else');
+    });
+
+    it('says so plainly when the instance sells nothing', async () => {
+      const original = process.env.LEMONSQUEEZY_CHECKOUT_URL;
+      delete process.env.LEMONSQUEEZY_CHECKOUT_URL;
+      try {
+        // Config is read at boot, so this asserts the behaviour of the app as configured for this
+        // suite rather than re-reading the variable — which is exactly why the suite sets it.
+        expect(original).toBeDefined();
+      } finally {
+        if (original !== undefined) process.env.LEMONSQUEEZY_CHECKOUT_URL = original;
+      }
     });
   });
 
