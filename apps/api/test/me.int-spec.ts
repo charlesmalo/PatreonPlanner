@@ -62,7 +62,41 @@ describe('GET /api/v1/me (integration)', () => {
       patreonUserId: 'patreon-user-1',
       fullName: 'Ada Lovelace',
       avatarUrl: 'https://example.com/ada.png',
+      isPremium: false,
     });
+  });
+
+  it('reports premium as a boolean, never the date behind it', async () => {
+    // Derived server-side on purpose: a date on the wire invites a client to compare it against
+    // its own clock, and a device with a wrong clock would grant itself premium.
+    const cookie = await login();
+    await ctx.prisma.user.update({
+      where: { patreonUserId: 'patreon-user-1' },
+      data: { premiumUntil: new Date(Date.now() + 86_400_000) },
+    });
+
+    const res = await request(ctx.app.getHttpServer())
+      .get('/api/v1/me')
+      .set('Cookie', cookie)
+      .expect(200);
+
+    expect(res.body.isPremium).toBe(true);
+    expect(res.body).not.toHaveProperty('premiumUntil');
+  });
+
+  it('reports an expired subscription as not premium', async () => {
+    const cookie = await login();
+    await ctx.prisma.user.update({
+      where: { patreonUserId: 'patreon-user-1' },
+      data: { premiumUntil: new Date(Date.now() - 1000) },
+    });
+
+    const res = await request(ctx.app.getHttpServer())
+      .get('/api/v1/me')
+      .set('Cookie', cookie)
+      .expect(200);
+
+    expect(res.body.isPremium).toBe(false);
   });
 
   it('never exposes stored patreon tokens', async () => {

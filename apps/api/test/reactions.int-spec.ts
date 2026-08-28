@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { REACTIONS } from '../src/reactions/palette';
+import { FREE_REACTIONS, PREMIUM_REACTIONS, REACTIONS } from '../src/reactions/palette';
 import { AuthTestContext, pickCookie, startAuthApp } from './support/auth-app';
 
 describe('Reactions (integration)', () => {
@@ -110,6 +110,52 @@ describe('Reactions (integration)', () => {
       .set('Cookie', [auth.session, auth.csrf]);
 
   const first = REACTIONS[0];
+  const locked = PREMIUM_REACTIONS[0];
+
+  const setPremium = (patreonUserId: string, until: Date | null) =>
+    ctx.prisma.user.update({ where: { patreonUserId }, data: { premiumUntil: until } });
+
+  describe('the premium palette', () => {
+    it('refuses a free reader the premium half, and says why', async () => {
+      const res = await react(patron, { recommendationId: entryId, emote: locked });
+
+      expect(res.status).toBe(402);
+      expect(await ctx.prisma.reaction.count({ where: { emote: locked } })).toBe(0);
+    });
+
+    it('lets a premium reader use either half', async () => {
+      await setPremium('rx-patron', new Date(Date.now() + 86_400_000));
+      try {
+        await react(patron, { recommendationId: entryId, emote: locked }).expect(201);
+        await react(patron, { recommendationId: entryId, emote: first }).expect(201);
+      } finally {
+        await setPremium('rx-patron', null);
+      }
+    });
+
+    it('keeps showing a premium reaction after the subscription lapses', async () => {
+      // Reading is never gated. Gating it would make the count vanish the day somebody stopped
+      // paying — a lie about the data, and a clawback of something already given.
+      await setPremium('rx-patron', new Date(Date.now() + 86_400_000));
+      await react(patron, { recommendationId: entryId, emote: locked }).expect(201);
+      await setPremium('rx-patron', null);
+
+      const entry = (await board(patron).expect(200)).body.items.find(
+        (i: { id: string }) => i.id === entryId,
+      );
+
+      expect(entry.reactions).toContainEqual(expect.objectContaining({ emote: locked, count: 1 }));
+    });
+
+    it('still refuses a lapsed reader a new one', async () => {
+      // The old reaction stands; the next one does not. Lapsing stops future casts rather than
+      // undoing past ones.
+      await setPremium('rx-patron', new Date(Date.now() - 1000));
+
+      await react(patron, { recommendationId: entryId, emote: locked }).expect(402);
+    });
+  });
+
   const second = REACTIONS[1];
 
   describe('reacting', () => {
@@ -239,8 +285,10 @@ describe('Reactions (integration)', () => {
           weightedScore: 1,
         },
       });
-      // Akira has every reaction available and no upvotes; Quiet has one upvote and none.
-      for (const emote of REACTIONS) {
+      // Akira carries every reaction a free reader can cast and no upvotes; Quiet has one upvote
+      // and none. The free set rather than the whole palette, so this stays a test about ordering
+      // rather than one that fails the day the premium half changes.
+      for (const emote of FREE_REACTIONS) {
         await react(patron, { recommendationId: entryId, emote }).expect(201);
         await react(other, { recommendationId: entryId, emote }).expect(201);
       }

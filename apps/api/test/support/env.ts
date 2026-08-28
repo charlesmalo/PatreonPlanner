@@ -17,6 +17,14 @@ export function applyTestConfigDefaults(): void {
     COARSE_LIMIT_PER_MINUTE: '100000',
     SEARCH_LIMIT_BURST: '100000',
     SEARCH_LIMIT_PER_MINUTE: '100000',
+    // One proxy, matching the deployed stack. Supertest connects over loopback, and loopback is
+    // what `looksLikeProxy` treats as a proxy — so at the production default of 0 every mutating
+    // request in every suite logged "per-IP limiting is disabled" at ERROR level. Thirty of those
+    // a run is not a warning anybody reads; it is cover for a real one.
+    //
+    // The guard's behaviour at 0 is not lost with it: `looksLikeProxy` is pinned directly in
+    // client-ip.e2e-spec.ts, and the coarse limiter's own suite sets this itself.
+    TRUSTED_PROXY_HOPS: '1',
     // Non-zero: the config schema rejects an all-zero key so a placeholder cannot reach
     // production. Fixed rather than random so failures stay reproducible.
     ENCRYPTION_KEY: Buffer.alloc(32, 1).toString('base64'),

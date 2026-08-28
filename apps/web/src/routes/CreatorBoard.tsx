@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { useCreator, useThemes, useViewMode } from '../api/hooks';
+import { useCreator, useSession, useThemes, useViewMode } from '../api/hooks';
 import { hydrate } from '../api/board-settings';
 import { narrowCapabilities } from '../api/view-mode';
 import { ContactForm } from '../components/ContactForm';
@@ -25,6 +25,9 @@ const COLUMNS: Array<[string, string]> = [
 export function CreatorBoard() {
   const { slug = '' } = useParams();
   const { creator, capabilities: granted, error, loading } = useCreator(slug);
+  // Read here rather than in each card: the reaction bar renders once per entry, and a hook that
+  // fetches would turn one question into one request per card.
+  const { user } = useSession();
   const { mode, needsAck, choose } = useViewMode(slug);
   // Applied once, here, rather than at each gate: a call site that forgot would keep offering a
   // control the reader asked not to see. Narrowing only — see `narrowCapabilities`.
@@ -133,6 +136,7 @@ export function CreatorBoard() {
             canUpvote={capabilities.upvote}
             canModerate={capabilities.moderate}
             permissions={capabilities.permissions}
+            isPremium={user?.isPremium ?? false}
             onMoved={refresh}
             emptyText={
               status === 'PENDING'

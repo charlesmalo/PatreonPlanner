@@ -1,11 +1,13 @@
 import {
   BadRequestException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import type { Reaction } from './palette';
+import { needsPremium, type Reaction } from './palette';
 
 export interface ReactionCount {
   emote: string;
@@ -25,6 +27,15 @@ export class ReactionsService {
    * system with none of the tier weighting that makes the first one meaningful — and one anybody
    * could flood.
    */
+  /** A `User` property, never a `(user, creator)` one, and never an input to `can()`. */
+  private async isPremium(userId: string): Promise<boolean> {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { premiumUntil: true },
+    });
+    return user.premiumUntil !== null && user.premiumUntil > new Date();
+  }
+
   async toggle(
     creator: { id: string; allowReactions: boolean },
     userId: string,
@@ -33,6 +44,14 @@ export class ReactionsService {
   ): Promise<ReactionCount> {
     if (!creator.allowReactions) {
       throw new ForbiddenException('This board does not use reactions');
+    }
+    // Casting only. Whoever reads this entry afterwards sees the reaction and its count whether
+    // or not they pay, and whether or not the person who cast it still does.
+    if (needsPremium(emote) && !(await this.isPremium(userId))) {
+      throw new HttpException(
+        'That reaction is part of the premium palette',
+        HttpStatus.PAYMENT_REQUIRED,
+      );
     }
     const { recommendationId, noteId } = subject;
     if (!recommendationId === !noteId) {

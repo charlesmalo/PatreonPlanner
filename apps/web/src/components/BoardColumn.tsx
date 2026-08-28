@@ -16,6 +16,8 @@ interface BoardColumnProps {
   canModerate: boolean;
   /** Which staff controls the cards may draw. The API checks each one again. */
   permissions: StaffPermission[];
+  /** Which half of the reaction palette this reader may cast from. */
+  isPremium: boolean;
   /** Told when an entry leaves this column, so the destination can refetch. */
   onMoved: (id: string, status: string) => void;
   /** What an empty column says. Suggestions invites a submission; the rest simply say so. */
@@ -46,6 +48,7 @@ export function BoardColumn({
   canUpvote,
   canModerate,
   permissions,
+  isPremium,
   onMoved,
   emptyText = 'Nothing here yet.',
 }: BoardColumnProps) {
@@ -107,6 +110,7 @@ export function BoardColumn({
       canUpvote={canUpvote}
       canModerate={canModerate}
       permissions={permissions}
+      isPremium={isPremium}
       onCount={board.applyUpvote}
       onStatusChanged={(id, next) => {
         board.remove(id);

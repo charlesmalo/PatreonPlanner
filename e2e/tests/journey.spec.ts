@@ -8,6 +8,7 @@ import {
   clearReaderState,
   clearStaff,
   clearReactions,
+  clearPremium,
   clearTickets,
   setTierWeights,
   makeOwner,
@@ -43,6 +44,9 @@ test.beforeEach(() => {
   clearReactions();
   // Every test starts from the same state regardless of what ran before, including CI retries.
   resetRateLimits();
+  // Premium outlives a run; without this the second run of the suite starts with a reader who
+  // is already premium and the palette test fails for a reason nowhere near itself.
+  clearPremium();
 });
 
 async function signIn(
@@ -389,6 +393,25 @@ test('a patron reacts to an entry without moving it up the board', async ({ page
   await expect(suggestions.getByRole('button', { name: /🔥 1 on Nausicaa/ })).toBeVisible();
   // And it has not moved: the upvoted entry still leads. Enthusiasm is not demand.
   await expect(suggestions.getByRole('heading', { level: 3 }).first()).toHaveText('Porco Rosso');
+});
+
+test('the premium half of the palette is offered only to a premium reader', async ({ page }) => {
+  // The seam only this can prove: the session flag reaching the reaction bar through the board
+  // and the card. Both halves are unit-tested; neither says they are wired to each other.
+  seedEntryFrom('patreon-other-e2e', 'Ponyo', 'PENDING');
+  await signIn(page, 500, 'patreon-palette-e2e');
+  await page.goto(`/c/${CREATOR.slug}`);
+
+  const card = page.getByRole('listitem').filter({ hasText: 'Ponyo' });
+  await expect(card.getByRole('button', { name: /🔥 0 on Ponyo/ })).toBeVisible();
+  // A premium emote is not offered at all until somebody has used it.
+  await expect(card.getByRole('button', { name: /🍿/ })).toHaveCount(0);
+
+  makePremium('patreon-palette-e2e');
+  await page.reload();
+
+  const withPremium = page.getByRole('listitem').filter({ hasText: 'Ponyo' });
+  await expect(withPremium.getByRole('button', { name: /🍿 0 on Ponyo/ })).toBeEnabled();
 });
 
 test('a moderator arranges a column by hand and it stays arranged', async ({ page }) => {

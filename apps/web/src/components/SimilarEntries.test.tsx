@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DEBOUNCE_MS, SimilarEntries } from './SimilarEntries';
 import { fakeApi, recommendation } from '../test-support';
@@ -87,10 +87,18 @@ describe('SimilarEntries', () => {
       global.fetch = fetchMock;
       render(<SimilarEntries slug="ada-writes" query="spirited" canUpvote onCount={vi.fn()} />);
 
-      vi.advanceTimersByTime(DEBOUNCE_MS - 50);
+      // Advanced inside `act` so the state update the resolved request causes is flushed while
+      // React is still watching. Left bare, it lands after the test has finished and React warns
+      // — which is a real signal being spent on a test that is otherwise correct, and noise that
+      // hides the next genuine one.
+      await act(async () => {
+        vi.advanceTimersByTime(DEBOUNCE_MS - 50);
+      });
       expect(fetchMock).not.toHaveBeenCalled();
 
-      vi.advanceTimersByTime(100);
+      await act(async () => {
+        vi.advanceTimersByTime(100);
+      });
       expect(fetchMock).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
