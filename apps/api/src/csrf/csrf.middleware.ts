@@ -8,10 +8,16 @@ import { CsrfTokenService } from './csrf-token.service';
 
 const CSRF_HEADER = 'x-csrf-token';
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-// Patreon's servers cannot carry our double-submit token; this route authenticates with an
-// HMAC signature instead. Scoped to exactly the namespace WebhookSignatureGuard covers, so the
-// exempt boundary and the verified boundary are the same set by construction.
+// Nobody else's servers can carry our double-submit token; these routes authenticate with an
+// HMAC signature over the raw body instead. The exempt boundary and the signature-verified
+// boundary must stay the same set — an exemption wider than the verification is an unauthenticated
+// mutating endpoint.
+//
+// The billing entry is the exact path rather than the `/billing/` namespace for that reason:
+// `/billing/checkout` sits beside it, is session-authenticated, and needs the token like anything
+// else. A prefix here would have quietly exempted it.
 const CSRF_EXEMPT_PREFIXES = ['/webhooks/patreon/'];
+const CSRF_EXEMPT_PATHS = ['/api/v1/billing/webhook'];
 
 /**
  * Double-submit CSRF over signed, session-bound tokens. The token sits in a cookie the SPA can
@@ -27,7 +33,11 @@ export class CsrfMiddleware implements NestMiddleware {
   ) {}
 
   use(req: Request, res: Response, next: NextFunction): void {
-    if (CSRF_EXEMPT_PREFIXES.some((prefix) => req.originalUrl.startsWith(prefix))) {
+    const path = req.originalUrl.split('?')[0];
+    if (
+      CSRF_EXEMPT_PREFIXES.some((prefix) => req.originalUrl.startsWith(prefix)) ||
+      CSRF_EXEMPT_PATHS.includes(path)
+    ) {
       return next();
     }
 

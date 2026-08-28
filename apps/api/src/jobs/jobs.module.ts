@@ -3,6 +3,8 @@ import { Queue, Worker } from 'bullmq';
 import { ConfigService } from '../config/config.module';
 import { AbuseDecayJob } from './abuse-decay.job';
 import { AvailabilityRefreshJob } from './availability-refresh.job';
+import { BillingReconcileJob } from '../billing/billing-reconcile.job';
+import { BillingModule } from '../billing/billing.module';
 import { CarryOverJob } from '../carry-over/carry-over.job';
 import { CarryOverModule } from '../carry-over/carry-over.module';
 import { EmbedTitlesJob } from './embed-titles.job';
@@ -16,7 +18,7 @@ const EVERY_MS = 15 * 60 * 1000;
 @Module({
   // CarryOverModule rather than the job alone: the job's service needs the submission path, and
   // importing the module is how that arrives without re-registering half of it here.
-  imports: [CarryOverModule],
+  imports: [CarryOverModule, BillingModule],
   providers: [
     MembershipRefreshJob,
     AvailabilityRefreshJob,
@@ -45,6 +47,7 @@ export class JobsModule implements OnModuleInit, OnApplicationShutdown {
     private readonly abuseDecayJob: AbuseDecayJob,
     private readonly embedJob: EmbedTitlesJob,
     private readonly carryOverJob: CarryOverJob,
+    private readonly billingJob: BillingReconcileJob,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -71,6 +74,9 @@ export class JobsModule implements OnModuleInit, OnApplicationShutdown {
         // Last: it is the only job that writes to other people's boards, so everything that keeps
         // the app honest — decay, memberships, moderation inputs — is already current when it runs.
         await this.runJob('carry-over delivery', () => this.carryOverJob.runOnce());
+        // Ahead of nothing in particular, but isolated like the rest: a provider being down must
+        // not stop the jobs that keep strikes decaying and memberships current.
+        await this.runJob('billing reconciliation', () => this.billingJob.runOnce());
       },
       { connection },
     );
