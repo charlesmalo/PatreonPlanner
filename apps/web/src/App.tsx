@@ -6,6 +6,7 @@ import { EntryDetail } from './routes/EntryDetail';
 import { LandingPage } from './routes/LandingPage';
 import { MyVotes } from './routes/MyVotes';
 import { CarryOver } from './routes/CarryOver';
+import { Premium } from './routes/Premium';
 import { NotificationSettings } from './routes/NotificationSettings';
 import { NotificationsPage } from './routes/NotificationsPage';
 import { AcceptInvite } from './routes/AcceptInvite';
@@ -37,6 +38,7 @@ export default function App() {
           <Route path="/c/:slug/tickets" element={<Tickets />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/carry-over" element={<CarryOver />} />
+          <Route path="/premium" element={<Premium />} />
           <Route path="/support" element={<Support />} />
           <Route path="/invite" element={<AcceptInvite user={user} />} />
           <Route path="*" element={<p>Page not found.</p>} />

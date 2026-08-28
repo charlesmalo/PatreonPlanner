@@ -13,6 +13,19 @@ export class BillingService {
   ) {}
 
   /**
+   * What this reader is paying for, or null.
+   *
+   * Deliberately narrow: a status, when the period ends, and whether it will renew. Nothing here
+   * comes from the provider's customer record, because none of that is ours to hold.
+   */
+  forUser(userId: string) {
+    return this.prisma.subscription.findUnique({
+      where: { userId },
+      select: { status: true, currentPeriodEnd: true, cancelAtPeriodEnd: true },
+    });
+  }
+
+  /**
    * Records a delivery and applies it, or does nothing because we have seen it before.
    *
    * The record and the effect share one transaction. Recording first and applying after would

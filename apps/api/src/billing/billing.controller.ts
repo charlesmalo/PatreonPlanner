@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Post,
@@ -57,6 +58,22 @@ export class BillingController {
       event,
     );
     return { ok: true, handled: applied };
+  }
+
+  /**
+   * What this reader's subscription looks like, for the page that shows it.
+   *
+   * Reads the subscription rather than `premiumUntil` because the page says more than yes or no —
+   * when it renews, and whether it is set to stop. The gates elsewhere still read the projection.
+   */
+  @Get('subscription')
+  @UseGuards(SessionGuard)
+  async subscription(@CurrentUser() user: CurrentUserPayload) {
+    const subscription = await this.billing.forUser(user.id);
+    return {
+      available: this.config.get('LEMONSQUEEZY_CHECKOUT_URL') !== undefined,
+      subscription,
+    };
   }
 
   /**
