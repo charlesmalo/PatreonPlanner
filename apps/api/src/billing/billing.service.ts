@@ -45,6 +45,21 @@ export class BillingService {
     // read only avoids raising an expected exception on the common retry path, and removing it
     // changes nothing but the noise. Verified: with both this and the catch below removed, a
     // redelivery throws and the test notices.
+    // A user id that names nobody. Retrying cannot fix it — the account will not appear — so a
+    // 5xx here would have the provider retry this event for as long as it keeps them, forever.
+    // Recorded as handled and dropped instead, with a warning, because the alternative is a
+    // retry loop that outlives whoever caused it.
+    const exists = await this.prisma.user.findUnique({
+      where: { id: event.userId },
+      select: { id: true },
+    });
+    if (!exists) {
+      this.logger.warn(
+        `Webhook ${event.eventType} named a user that does not exist; ignoring the delivery`,
+      );
+      return false;
+    }
+
     const seen = await this.prisma.processedWebhookEvent.findUnique({
       where: { id: idempotencyKey },
       select: { id: true },

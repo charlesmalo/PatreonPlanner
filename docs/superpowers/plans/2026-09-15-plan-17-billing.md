@@ -157,6 +157,30 @@ would let anyone pay once and name somebody else.
 be produced without a session and the request never reaches the guard. Asserting 401 would have
 been asserting a route that does not exist.
 
+## Verified against the provider's documentation
+
+The plan named the untested contract as the weakest link. Checking the adapter against Lemon
+Squeezy's published docs closed most of that gap and found three real problems, none of which any
+amount of local testing would have surfaced:
+
+- **`renews_at` was preferred over `ends_at` unconditionally.** `renews_at` stays populated on a
+  cancelled subscription, pointing at an invoice that will never be issued; `ends_at` is when
+  access actually stops. The original rule handed a cancelled subscriber entitlement past the date
+  they were told it ends.
+- **`paused` was unmapped.** Their docs are explicit that payment collection has stopped and the
+  subscription is *still active*. Unmapped, the event was ignored entirely.
+- **`refunded` is not a subscription status at all** — refunds are an order event there. The
+  entitlement rule for it is correct and stays, but nothing in a subscription webhook will produce
+  it. In practice a refund surfaces as the subscription moving to `cancelled` or `expired`, which
+  is handled. **Handling `order_refunded` directly is not built**, so a refund that leaves the
+  subscription untouched will not revoke until the period ends.
+
+Confirmed correct as written: the `X-Signature` header, HMAC-SHA256 hex over the raw body, and the
+`meta.event_name` / `meta.custom_data` / `data.attributes` payload shape.
+
+Still unverified, and only a sandbox purchase settles it: that a real delivery parses end to end,
+and the exact response shape of the subscriptions API that reconciliation reads.
+
 ## Known risks
 
 - **This is the first code path where a bug costs somebody money**, or costs us a reader's trust. Every other failure in this project loses a suggestion.

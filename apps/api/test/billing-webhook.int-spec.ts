@@ -227,6 +227,66 @@ describe('Billing webhook (integration)', () => {
       expect(await isPremium()).toBe(false);
     });
 
+    it('uses ends_at for a cancelled subscription, not the renewal that will never happen', async () => {
+      // `renews_at` stays populated on a cancelled subscription, pointing at an invoice that will
+      // not be issued. `ends_at` is when access actually stops. Preferring renews_at hands a
+      // cancelled subscriber entitlement past the date they were told it ends — which is what the
+      // first version of this adapter did.
+      const endsAt = new Date(Date.now() + 3 * 86_400_000);
+      const renewsAt = new Date(Date.now() + 33 * 86_400_000);
+
+      await send(
+        body({
+          attributes: {
+            status: 'cancelled',
+            cancelled: true,
+            ends_at: endsAt.toISOString(),
+            renews_at: renewsAt.toISOString(),
+          },
+        }),
+      ).expect(200);
+
+      const { premiumUntil } = await ctx.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+      expect(premiumUntil?.getTime()).toBe(endsAt.getTime());
+    });
+
+    it('uses renews_at while it is still renewing, even if ends_at is present', async () => {
+      const renewsAt = new Date(Date.now() + 30 * 86_400_000);
+
+      await send(
+        body({
+          attributes: { status: 'active', renews_at: renewsAt.toISOString(), ends_at: null },
+        }),
+      ).expect(200);
+
+      const { premiumUntil } = await ctx.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+      expect(premiumUntil?.getTime()).toBe(renewsAt.getTime());
+    });
+
+    it('keeps access while payment collection is paused', async () => {
+      // Their docs: paused means collection has stopped and the subscription is still active.
+      // Unmapped, it fell through as an unknown status and the event was ignored entirely.
+      await send(body({ attributes: { status: 'paused' } })).expect(200);
+
+      expect(await isPremium()).toBe(true);
+    });
+
+    it('drops a delivery naming a user that does not exist, rather than retrying forever', async () => {
+      // Their example shows `"user_id": 123` — a shape that could never be one of our UUIDs. A
+      // 5xx here would have the provider retry this delivery for as long as they keep it, and no
+      // amount of retrying makes the account appear.
+      const res = await send({
+        ...body(),
+        meta: {
+          event_name: 'subscription_created',
+          custom_data: { user_id: '00000000-0000-4000-8000-000000000000' },
+        },
+      }).expect(200);
+
+      expect(res.body.handled).toBe(false);
+      expect(await ctx.prisma.subscription.count()).toBe(0);
+    });
+
     it('revokes on a refund, even though the period has not ended', async () => {
       await send(body()).expect(200);
       expect(await isPremium()).toBe(true);

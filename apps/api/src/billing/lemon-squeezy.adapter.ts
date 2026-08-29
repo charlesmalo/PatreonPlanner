@@ -30,12 +30,24 @@ export interface SubscriptionEvent {
 const STATUS: Record<string, SubscriptionStatus> = {
   active: 'ACTIVE',
   on_trial: 'ACTIVE',
+  // "Payment collection has been paused and the subscription is still active" — so access
+  // continues. Absent from the first version of this map, which meant a pause was ignored
+  // entirely rather than handled.
+  paused: 'ACTIVE',
   past_due: 'PAST_DUE',
+  // All renewal retries have failed. Still PAST_DUE rather than EXPIRED: the grace window is
+  // what decides when access actually stops, and it is measured from the period end either way.
+  unpaid: 'PAST_DUE',
   cancelled: 'CANCELLED',
   expired: 'EXPIRED',
-  unpaid: 'PAST_DUE',
+  // Not a status Lemon Squeezy puts on a subscription — refunds are an *order* event there. Kept
+  // because the entitlement rule for it is real and correct, and because a provider that ever
+  // does send it should be handled rather than ignored. See the note on refunds below.
   refunded: 'REFUNDED',
 };
+
+/** Cancelled and expired subscriptions carry their end date in `ends_at`; everything else renews. */
+const ENDED: SubscriptionStatus[] = ['CANCELLED', 'EXPIRED'];
 
 @Injectable()
 export class LemonSqueezyAdapter {
@@ -107,7 +119,7 @@ export class LemonSqueezyAdapter {
    */
   parse(body: unknown): SubscriptionEvent | null {
     const payload = body as {
-      meta?: { event_name?: string; custom_data?: { user_id?: string } };
+      meta?: { event_name?: string; custom_data?: { user_id?: string | number } };
       data?: {
         id?: string;
         attributes?: {
@@ -137,16 +149,27 @@ export class LemonSqueezyAdapter {
     const status = STATUS[attributes.status ?? ''];
     if (!status) return null;
 
-    // `renews_at` while it will renew, `ends_at` once it will not. Both absent is a shape we do
-    // not understand, and inventing a date here is inventing entitlement.
-    const periodEnd = attributes.renews_at ?? attributes.ends_at;
+    // Which field holds the truth depends on the status, and getting this backwards grants time
+    // nobody paid for.
+    //
+    // `renews_at` is when the next invoice would be issued — and it stays populated on a
+    // cancelled subscription, pointing at a renewal that will never happen. `ends_at` is set only
+    // on cancelled and expired ones and is when access actually stops. Preferring `renews_at`
+    // unconditionally, as the first version of this did, hands a cancelled subscriber entitlement
+    // past the date they were told it ends.
+    //
+    // Both absent is a shape we do not understand, and inventing a date here is inventing
+    // entitlement.
+    const periodEnd = ENDED.includes(status)
+      ? (attributes.ends_at ?? attributes.renews_at)
+      : (attributes.renews_at ?? attributes.ends_at);
     if (!periodEnd) return null;
     const currentPeriodEnd = new Date(periodEnd);
     if (Number.isNaN(currentPeriodEnd.getTime())) return null;
 
     return {
       eventType,
-      userId: userId ?? '',
+      userId: userId === undefined ? '' : String(userId),
       providerSubscriptionId: String(providerSubscriptionId),
       providerCustomerId: String(attributes.customer_id ?? ''),
       status,
