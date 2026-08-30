@@ -31,6 +31,6 @@ export class NotificationPreferencesController {
     @CurrentUser() user: CurrentUserPayload,
     @Body() dto: SetNotificationPreferencesDto,
   ) {
-    return this.preferences.set(user.id, creator.id, dto.statuses);
+    return this.preferences.set(user.id, creator.id, dto.statuses, dto.themeIds ?? []);
   }
 }

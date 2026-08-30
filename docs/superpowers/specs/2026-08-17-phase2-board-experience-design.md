@@ -614,10 +614,30 @@ A per-recipient loop is *invisible* to every other test: correctness at 500 foll
 one, only 8x slower. The call-count assertion is the only thing that forbids it, and it exists for
 that reason alone.
 
-### OPEN
+### Interest tagging shares the creator's themes — **decided**
 
-- **Whether tagging is per-reader or shares a creator's themes.** Themes already exist per board;
-  reusing them is cheaper but couples a reader's private interests to a creator's taxonomy.
+A reader narrows a board's news to the themes they care about. Themes rather than a private
+vocabulary: they exist per board already, are already attached to titles, and a second set would
+need its own model, its own upkeep, and its own answer to "what is this called on that board".
+
+An empty choice means **every** theme, which is the opposite of the empty `statuses` beside it
+meaning silence. Narrowing is opted into; choosing no columns is choosing nothing. Collapsing the
+two would have silenced everybody who set a column preference before themes existed.
+
+**What this does not do, and it is the reason to read this paragraph:** themes are seeded from
+TMDB's genres and keywords — *anime*, *dystopia*, *space opera*. They are categories, not titles.
+A reader who wants to hear about *one particular show* and nothing else cannot express that here,
+and the original request for this feature was phrased exactly that way. Two further consequences
+follow from themes hanging off a catalogue title:
+
+- An external link or a hand-typed name carries **no themes at all**, so a reader who narrows
+  stops hearing about those entirely. The settings page says so rather than leaving it to be
+  discovered from silence.
+- A board whose entries are mostly uncatalogued has little to narrow by.
+
+**Following a single entry is a different mechanism** — a `(reader, board, title)` row rather than
+a theme — and is not built. It composes with this rather than replacing it: themes for breadth,
+a follow for the one show somebody is waiting on.
 
 ## A.5 Sequencing
 

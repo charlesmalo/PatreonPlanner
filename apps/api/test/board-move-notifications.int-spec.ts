@@ -63,6 +63,8 @@ describe('Following what moves (integration)', () => {
     await ctx.prisma.notification.deleteMany();
     await ctx.prisma.creatorFavorite.deleteMany();
     await ctx.prisma.boardNotificationPreference.deleteMany();
+    await ctx.prisma.titleTheme.deleteMany();
+    await ctx.prisma.title.deleteMany();
     await ctx.prisma.recommendation.deleteMany();
     await setVisibility('PUBLIC');
     recId = (
@@ -258,6 +260,124 @@ describe('Following what moves (integration)', () => {
     });
     expect(flag.groupCount).toBe(1);
     expect(flag.payload).toMatchObject({ title: 'Cowboy Bebop' });
+  });
+
+  describe('narrowing by theme', () => {
+    let anime: string;
+    let documentary: string;
+    let titleId: string;
+
+    beforeEach(async () => {
+      await ctx.prisma.theme.deleteMany();
+      const theme = async (name: string) =>
+        (
+          await ctx.prisma.theme.create({
+            data: { creatorId, name, slug: name.toLowerCase() },
+          })
+        ).id;
+      anime = await theme('Anime');
+      documentary = await theme('Documentary');
+
+      const title = await ctx.prisma.title.create({
+        data: { tmdbId: 987654, mediaType: 'MOVIE', name: 'Perfect Blue' },
+      });
+      titleId = title.id;
+      await ctx.prisma.titleTheme.create({ data: { titleId, themeId: anime } });
+      await ctx.prisma.recommendation.update({ where: { id: recId }, data: { titleId } });
+    });
+
+    const wants = (themeIds: string[]) =>
+      ctx.prisma.boardNotificationPreference.create({
+        data: { userId: follower, creatorId, statuses: ['ACTIVE'], themeIds },
+      });
+
+    it('tells a follower about a theme they asked for', async () => {
+      await favourite(follower);
+      await wants([anime]);
+
+      await moveToActive();
+
+      expect(await notifications.unreadCount(follower)).toBe(1);
+    });
+
+    it('says nothing about a theme they did not ask for', async () => {
+      await favourite(follower);
+      await wants([documentary]);
+
+      await moveToActive();
+
+      expect(await notifications.unreadCount(follower)).toBe(0);
+    });
+
+    it('treats an empty theme list as every theme, not as silence', async () => {
+      // The opposite of the empty `statuses` beside it. Narrowing by theme is opted into;
+      // choosing no columns is choosing nothing. Collapsing the two would silence everybody who
+      // set a column preference before themes existed.
+      await favourite(follower);
+      await wants([]);
+
+      await moveToActive();
+
+      expect(await notifications.unreadCount(follower)).toBe(1);
+    });
+
+    it('matches when an entry carries any one of the themes asked for', async () => {
+      await favourite(follower);
+      await wants([documentary, anime]);
+
+      await moveToActive();
+
+      expect(await notifications.unreadCount(follower)).toBe(1);
+    });
+
+    it('says nothing about an entry with no catalogue title at all', async () => {
+      // The cost of reusing the creator's themes, and the one worth knowing about: themes hang
+      // off a catalogue title, so an external link or a hand-typed name carries none. A reader
+      // who narrows by theme stops hearing about those entirely.
+      await favourite(follower);
+      await wants([anime]);
+      await ctx.prisma.recommendation.update({ where: { id: recId }, data: { titleId: null } });
+
+      await moveToActive();
+
+      expect(await notifications.unreadCount(follower)).toBe(0);
+    });
+
+    it('leaves a follower who narrowed nothing hearing about untitled entries', async () => {
+      // ...which is why the empty list has to mean "everything" rather than "nothing".
+      await favourite(follower);
+      await ctx.prisma.recommendation.update({ where: { id: recId }, data: { titleId: null } });
+
+      await moveToActive();
+
+      expect(await notifications.unreadCount(follower)).toBe(1);
+    });
+
+    it('keeps one board’s themes out of another’s decision', async () => {
+      // Themes are per creator. A theme id from elsewhere must narrow to nothing rather than
+      // matching by accident.
+      await favourite(follower);
+      const elsewhere = await ctx.prisma.creator.create({
+        data: {
+          patreonCampaignId: 'bm-other',
+          ownerUserId: owner,
+          displayName: 'Other',
+          slug: 'bm-other',
+          policy: { create: {} },
+          staff: { create: { userId: owner, role: 'OWNER' } },
+        },
+      });
+      const theirTheme = await ctx.prisma.theme.create({
+        data: { creatorId: elsewhere.id, name: 'Anime', slug: 'anime' },
+      });
+      await ctx.prisma.titleTheme.create({ data: { titleId, themeId: theirTheme.id } });
+      await wants([theirTheme.id]);
+
+      await moveToActive();
+
+      expect(await notifications.unreadCount(follower)).toBe(0);
+      await ctx.prisma.creator.delete({ where: { id: elsewhere.id } });
+    });
   });
 
   it('says nothing to someone who does not follow the board', async () => {

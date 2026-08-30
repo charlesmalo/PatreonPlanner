@@ -1,4 +1,4 @@
-import { ArrayUnique, IsArray, IsIn } from 'class-validator';
+import { ArrayUnique, IsArray, IsIn, IsOptional, IsUUID } from 'class-validator';
 
 /**
  * Only the columns a reader can actually look at.
@@ -19,4 +19,15 @@ export class SetNotificationPreferencesDto {
   @ArrayUnique()
   @IsIn(NOTIFIABLE_STATUSES, { each: true })
   statuses!: NotifiableStatus[];
+
+  /**
+   * Which of this board's themes to hear about. Absent or empty means all of them — the opposite
+   * of `statuses`, where empty means silence. Narrowing is opted into; choosing no columns is
+   * choosing nothing.
+   */
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  themeIds?: string[];
 }

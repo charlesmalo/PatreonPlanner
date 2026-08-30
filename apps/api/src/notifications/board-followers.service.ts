@@ -17,7 +17,7 @@ type FollowerRow = {
   user: {
     memberships: Array<{ amountCents: number; isActivePatron: boolean }>;
     staffRoles: Array<{ role: 'OWNER' | 'MOD' }>;
-    notificationPreferences: Array<{ statuses: RecommendationStatus[] }>;
+    notificationPreferences: Array<{ statuses: RecommendationStatus[]; themeIds: string[] }>;
   };
 };
 
@@ -42,6 +42,9 @@ export class BoardFollowersService {
     creatorId: string,
     toStatus: RecommendationStatus,
     exclude: Array<string | null>,
+    // The themes of the entry that moved, already scoped to this board by the caller. Empty for
+    // an entry with no catalogue title, which is the whole cost of reusing the creator's themes.
+    entryThemeIds: string[] = [],
   ): Promise<string[]> {
     const excluded = exclude.filter((id): id is string => id !== null);
 
@@ -57,7 +60,10 @@ export class BoardFollowersService {
                 select: { amountCents: true, isActivePatron: true },
               },
               staffRoles: { where: { creatorId }, select: { role: true } },
-              notificationPreferences: { where: { creatorId }, select: { statuses: true } },
+              notificationPreferences: {
+                where: { creatorId },
+                select: { statuses: true, themeIds: true },
+              },
             },
           },
         },
@@ -67,7 +73,7 @@ export class BoardFollowersService {
 
     return (
       (followers as FollowerRow[])
-        .filter((row) => wants(row, toStatus))
+        .filter((row) => wants(row, toStatus) && aboutSomethingTheyAskedFor(row, entryThemeIds))
         // The same pure resolver the guard calls. Never a second implementation of "may they see
         // this board" — two of those drift, and the one over here fails silently.
         .filter((row) => can('VIEW', viewerFrom(row), policy))
@@ -97,6 +103,25 @@ function wants(row: FollowerRow, toStatus: RecommendationStatus): boolean {
   const preference = row.user.notificationPreferences[0];
   const statuses = preference ? preference.statuses : DEFAULT_MOVE_STATUSES;
   return statuses.includes(toStatus);
+}
+
+/**
+ * Whether this entry is about something the reader narrowed to.
+ *
+ * An empty list means every theme, which is the opposite of the empty `statuses` beside it meaning
+ * silence. Narrowing by theme is something you opt into; choosing no columns is choosing nothing.
+ * Collapsing the two would have silenced everybody who set a column preference before themes
+ * existed.
+ *
+ * A reader who has narrowed hears nothing about an entry carrying no themes at all — which is
+ * every external link and every hand-typed name, because themes hang off a catalogue title. That
+ * is the price of reusing the creator's vocabulary rather than keeping a private one, and it is
+ * paid here.
+ */
+function aboutSomethingTheyAskedFor(row: FollowerRow, entryThemeIds: string[]): boolean {
+  const wanted = row.user.notificationPreferences[0]?.themeIds ?? [];
+  if (wanted.length === 0) return true;
+  return entryThemeIds.some((id) => wanted.includes(id));
 }
 
 function viewerFrom(row: FollowerRow): Viewer {

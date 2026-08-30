@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { BadRequestException, HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { RecommendationStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { DEFAULT_MOVE_STATUSES } from './board-followers.service';
@@ -20,7 +20,7 @@ export class NotificationPreferencesService {
     const [preference, user] = await Promise.all([
       this.prisma.boardNotificationPreference.findUnique({
         where: { userId_creatorId: { userId, creatorId } },
-        select: { statuses: true },
+        select: { statuses: true, themeIds: true },
       }),
       this.prisma.user.findUniqueOrThrow({
         where: { id: userId },
@@ -30,6 +30,7 @@ export class NotificationPreferencesService {
 
     return {
       statuses: preference ? preference.statuses : DEFAULT_MOVE_STATUSES,
+      themeIds: preference?.themeIds ?? [],
       isDefault: preference === null,
       canCustomise: isPremium(user.premiumUntil),
     };
@@ -40,7 +41,12 @@ export class NotificationPreferencesService {
    * granularity is bought, so a free reader is refused rather than silently ignored — a no-op
    * would leave them believing they had configured something.
    */
-  async set(userId: string, creatorId: string, statuses: NotifiableStatus[]) {
+  async set(
+    userId: string,
+    creatorId: string,
+    statuses: NotifiableStatus[],
+    themeIds: string[] = [],
+  ) {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
       select: { premiumUntil: true },
@@ -52,14 +58,30 @@ export class NotificationPreferencesService {
       );
     }
 
+    // Scoped to this board: a theme id from elsewhere would narrow to nothing at fan-out time
+    // anyway, but storing it means the settings page renders a choice that does not exist here.
+    if (themeIds.length > 0) {
+      const theirs = await this.prisma.theme.count({
+        where: { creatorId, id: { in: themeIds } },
+      });
+      if (theirs !== themeIds.length) {
+        throw new BadRequestException('That is not a theme on this board');
+      }
+    }
+
     const asStatuses = statuses as RecommendationStatus[];
     const preference = await this.prisma.boardNotificationPreference.upsert({
       where: { userId_creatorId: { userId, creatorId } },
-      create: { userId, creatorId, statuses: asStatuses },
-      update: { statuses: asStatuses },
-      select: { statuses: true },
+      create: { userId, creatorId, statuses: asStatuses, themeIds },
+      update: { statuses: asStatuses, themeIds },
+      select: { statuses: true, themeIds: true },
     });
-    return { statuses: preference.statuses, isDefault: false, canCustomise: true };
+    return {
+      statuses: preference.statuses,
+      themeIds: preference.themeIds,
+      isDefault: false,
+      canCustomise: true,
+    };
   }
 }
 

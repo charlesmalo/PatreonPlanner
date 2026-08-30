@@ -689,6 +689,15 @@ model BoardNotificationPreference {
   userId    String                 @db.Uuid
   creatorId String                 @db.Uuid
   statuses  RecommendationStatus[]
+  // Which of this board's themes the reader wants to hear about. Empty means all of them, which
+  // is a different answer from the empty `statuses` above meaning silence — narrowing by theme is
+  // something you opt into, while choosing no columns is choosing nothing.
+  //
+  // Themes rather than a set of the reader's own: they already exist per board, are already
+  // attached to titles, and a private vocabulary would need its own model and its own upkeep.
+  // The cost is real and is stated where the filter is applied — an entry with no catalogue title
+  // carries no themes at all.
+  themeIds  String[]               @db.Uuid
   updatedAt DateTime               @updatedAt
 
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)

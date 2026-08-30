@@ -8,7 +8,7 @@ being built in sequence. Every sequenced step has shipped, including the
 link/candidate model (design §4), which was split out of grouping rather than
 dropped.
 
-The verification baseline at the time of writing: **996 API + 315 web + 42 e2e
+The verification baseline at the time of writing: **1008 API + 320 web + 42 e2e
 tests passing**, typecheck clean across every package.
 
 ## Milestones
@@ -46,11 +46,11 @@ place. Open questions below are the engineer's to answer.
 
 ## Open Questions Blocking Work
 
-| Question                                         | Blocks | Why it matters                                                            |
-| ------------------------------------------------ | ------ | ------------------------------------------------------------------------- |
-| Does email get a paid provider?                  | A.4    | The first collision with the free-tier-only constraint; blocks digests    |
-| Does interest tagging reuse a creator's themes?  | A.4    | Reusing them couples a reader's private interests to a creator's taxonomy |
-| Which permissions stay bundled under `MODERATE`? | —      | The five that exist cover today's endpoints                               |
+| Question                                         | Blocks | Why it matters                                                              |
+| ------------------------------------------------ | ------ | --------------------------------------------------------------------------- |
+| Does email get a paid provider?                  | A.4    | The first collision with the free-tier-only constraint; blocks digests      |
+| Should a reader be able to follow one entry?     | —      | Themes are categories; the original request was title-level (Amendment A.4) |
+| Which permissions stay bundled under `MODERATE`? | —      | The five that exist cover today's endpoints                                 |
 
 ## Known Debt
 

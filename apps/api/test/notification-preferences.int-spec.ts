@@ -149,6 +149,41 @@ describe('Notification preferences (integration)', () => {
       await put(premiumReader, { statuses: ['REJECTED'] }).expect(400);
     });
 
+    it('stores which themes to hear about', async () => {
+      const theme = await ctx.prisma.theme.create({
+        data: { creatorId, name: 'Anime', slug: 'anime' },
+      });
+
+      await put(premiumReader, { statuses: ['ACTIVE'], themeIds: [theme.id] }).expect(200);
+
+      expect((await get(premiumReader).expect(200)).body.themeIds).toEqual([theme.id]);
+      await ctx.prisma.theme.delete({ where: { id: theme.id } });
+    });
+
+    it('reads no themes as no narrowing rather than as silence', async () => {
+      // The opposite of `statuses`, where empty means nothing. A reader who set columns before
+      // themes existed must keep hearing about everything.
+      await put(premiumReader, { statuses: ['ACTIVE'] }).expect(200);
+
+      expect((await get(premiumReader).expect(200)).body.themeIds).toEqual([]);
+    });
+
+    it('refuses a theme that belongs to another board', async () => {
+      // It would narrow to nothing at fan-out anyway, but storing it means the settings page
+      // renders a choice this board does not have.
+      const elsewhere = await ctx.prisma.theme.create({
+        data: { creatorId: otherCreatorId, name: 'Anime', slug: 'anime' },
+      });
+
+      await put(premiumReader, { statuses: ['ACTIVE'], themeIds: [elsewhere.id] }).expect(400);
+
+      await ctx.prisma.theme.delete({ where: { id: elsewhere.id } });
+    });
+
+    it('rejects a theme id that is not a uuid', async () => {
+      await put(premiumReader, { statuses: ['ACTIVE'], themeIds: ['not-a-uuid'] }).expect(400);
+    });
+
     it('404s a board that does not exist', async () => {
       await put(premiumReader, { statuses: [] }, 'no-such-board').expect(404);
     });
