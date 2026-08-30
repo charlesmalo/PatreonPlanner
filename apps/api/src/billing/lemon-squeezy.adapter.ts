@@ -68,12 +68,23 @@ export class LemonSqueezyAdapter {
 
     const url = `${this.config.get('LEMONSQUEEZY_API_BASE_URL')}/v1/subscriptions/${encodeURIComponent(providerSubscriptionId)}`;
     const response = await fetch(url, {
-      headers: { Accept: 'application/vnd.api+json', Authorization: `Bearer ${key}` },
+      headers: {
+        // Both content headers, as their docs specify. JSON:API servers are entitled to refuse a
+        // request that does not ask for the media type by name.
+        Accept: 'application/vnd.api+json',
+        'Content-Type': 'application/vnd.api+json',
+        Authorization: `Bearer ${key}`,
+      },
     });
     if (!response.ok) return null;
 
     // Reusing `parse` so the reconciled shape and the webhook shape cannot drift apart. The
     // meta block a webhook carries is not on a direct read, so the caller's own id fills it in.
+    //
+    // It also decides what is *not* taken. A retrieved subscription carries `user_email`,
+    // `user_name`, `card_brand` and `card_last_four`; `parse` reads none of them, which is what
+    // keeps the promise that this application holds no billing PII. Passing the response
+    // through anything that copies attributes wholesale would break that silently.
     const body = (await response.json()) as { data?: unknown };
     return this.parse({ meta: { event_name: 'subscription_reconciled' }, data: body.data });
   }
@@ -118,6 +129,11 @@ export class LemonSqueezyAdapter {
    * null rather than a default, because every plausible default here grants somebody a month.
    */
   parse(body: unknown): SubscriptionEvent | null {
+    // A JSON body can legitimately be `null`, and reading through it throws — which on the
+    // webhook path is a 500, and a 500 is a delivery the provider retries forever. Everything
+    // else here returns null to mean "not something we act on"; this has to as well.
+    if (body === null || typeof body !== 'object') return null;
+
     const payload = body as {
       meta?: { event_name?: string; custom_data?: { user_id?: string | number } };
       data?: {
