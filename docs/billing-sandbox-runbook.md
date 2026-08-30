@@ -73,5 +73,7 @@ signature will not match, which is the check working rather than failing.
 - **Cancelling happens on Lemon Squeezy's side**, from the link in their receipt email. There is
   no cancel button in this application, which is normal for a merchant-of-record setup and keeps
   this app out of the payment flow entirely.
-- **Reconciliation reads the subscriptions API**, and that response shape has not been seen either.
-  It fails closed the same way: an unrecognised response leaves entitlement alone.
+- **Reconciliation reads the subscriptions API.** Its shape is now checked against their
+  documentation the same way the webhook's was — `billing-adapter.e2e-spec.ts` parses a
+  documented retrieve response — but no real response has been seen. It fails closed either way:
+  an unrecognised one leaves entitlement alone rather than revoking.
