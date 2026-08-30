@@ -41,15 +41,34 @@ This is the other half rather than a replacement: themes for breadth, a follow f
 
 ### Task 1: The follow, and who it reaches
 
-- [ ] **Failing tests:** a follower of an entry hears about it; a follow beats theme narrowing; a follow does not beat status narrowing; it works without favouriting the board; somebody who may not see the board hears nothing however hard they followed; the actor and submitter are still excluded; unfollowing stops it; following twice is one row.
-- [ ] Schema + migration; union in `audienceFor`.
-- [ ] **Mutation-check:** dropping the union; letting a follow bypass the visibility check; letting it bypass the status filter; applying the theme filter to a followed entry.
-- [ ] Commit.
+- [x] **Failing tests:** a follower of an entry hears about it; a follow beats theme narrowing; a follow does not beat status narrowing; it works without favouriting the board; somebody who may not see the board hears nothing however hard they followed; the actor and submitter are still excluded; unfollowing stops it; following twice is one row.
+- [x] Schema + migration; union in `audienceFor`.
+- [x] **Mutation-check:** dropping the union; letting a follow bypass the visibility check; letting it bypass the status filter; applying the theme filter to a followed entry.
+- [x] Commit.
 
 ### Task 2: Asking for it
 
-- [ ] **Failing tests:** `POST`/`DELETE /creators/:slug/recommendations/:id/follow`; an entry on another board is a 404; an anonymous reader is refused; the card shows the state and toggles it.
-- [ ] Commit.
+- [x] **Failing tests:** `POST`/`DELETE /creators/:slug/recommendations/:id/follow`; an entry on another board is a 404; an anonymous reader is refused; the card shows the state and toggles it.
+- [x] Commit.
+
+## What it found
+
+**The board did not report whether the reader follows an entry**, so the control forgot on every
+reload — a feature that forgets looks broken rather than unset. Now selected per viewer the same
+way `hasUpvoted` is, with a test that somebody else's follow is not reported as yours.
+
+**The shape invariant caught it a second time.** Adding `following` to the board broke the tests
+asserting a submit response and a search hit have the same keys as a board entry — the same test
+that caught `candidateLinks` months of work ago. Search computes the real answer rather than
+taking the default, because a search hit may well be something the reader already follows.
+
+**A theme leaked between describe blocks.** Themes are unique per `(creator, slug)`, and one block
+creating "Documentary" and leaving it made the next block's create fail for a reason nowhere near
+what it was testing. Cleared at the top level now, which is where the rule in
+`07_TESTING_STANDARDS.md` §6a says it belongs.
+
+**Signing in re-syncs memberships.** A new test that logged in as an existing fixture emptied the
+very membership another test relies on as its control. Dedicated identities, not shared ones.
 
 ## Known risks
 

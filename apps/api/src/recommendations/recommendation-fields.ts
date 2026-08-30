@@ -21,6 +21,9 @@ export const BOARD_ONLY_DEFAULTS = {
   // A freshly submitted entry and a search hit both have none, and a client rendering a card
   // from either needs the same fields the board's card has.
   reactions: [] as ReactionCount[],
+  // A freshly submitted entry is not followed by definition — nobody has had the chance. Search
+  // overrides this with the real answer, the same way it does for hasUpvoted.
+  following: false,
 };
 
 type SelectedLink = { id: string; url: string; label: string | null; isPreferred: boolean } & {

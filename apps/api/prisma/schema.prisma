@@ -139,6 +139,7 @@ model User {
   notificationPreferences BoardNotificationPreference[]
   carryOverDeliveries     CarryOverDelivery[]
   boardViewPreferences    BoardViewPreference[]
+  entryFollows            EntryFollow[]
   subscription            Subscription?
   staffRoles         CreatorStaff[]       @relation("StaffMember")
   staffAssigned      CreatorStaff[]       @relation("StaffAssigner")
@@ -358,6 +359,7 @@ model Recommendation {
   // carry-over off can tell what it was doing.
   viaCarryOver      Boolean              @default(false)
   carriedTo         CarryOverDelivery[]  @relation("CarriedFrom")
+  followers         EntryFollow[]
   // What the board ranks by. Denormalised like upvoteCount beside it, and for the same reason:
   // it is the sort key, and a keyset cursor has to compare a column.
   weightedScore     Int                  @default(0)
@@ -705,6 +707,27 @@ model BoardNotificationPreference {
 
   @@id([userId, creatorId])
   @@index([creatorId])
+}
+
+// "Tell me about this one."
+//
+// The thing themes cannot express: they are TMDB genres and keywords, and somebody waiting on a
+// particular show is naming a title, not a category.
+//
+// The entry rather than the title it points at, because the notification is about something
+// moving on a *board* and a title is shared across boards. De-duplication means a resubmission
+// resolves to the same entry, so the row survives somebody suggesting it again.
+model EntryFollow {
+  userId           String   @db.Uuid
+  recommendationId String   @db.Uuid
+  createdAt        DateTime @default(now())
+
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recommendation Recommendation @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
+
+  @@id([userId, recommendationId])
+  // The fan-out asks "who follows this entry" on every move.
+  @@index([recommendationId])
 }
 
 // How one reader has arranged one board for themselves.

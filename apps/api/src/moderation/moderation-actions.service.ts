@@ -103,6 +103,7 @@ export class ModerationActionsService {
         to,
         [actorUserId, current.submittedByUserId],
         (current.title?.themes ?? []).map((link) => link.themeId),
+        recommendationId,
       );
       // Coalesced: a creator tidying eight entries into Now Playing is one act, not eight pieces
       // of news in every follower's bell.

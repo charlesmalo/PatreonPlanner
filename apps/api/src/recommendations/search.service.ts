@@ -90,7 +90,10 @@ export class SearchService {
           isStaff: viewer.staffRole !== null,
         }),
         ...(viewer.userId
-          ? { upvotes: { where: { userId: viewer.userId }, select: { id: true }, take: 1 } }
+          ? {
+              upvotes: { where: { userId: viewer.userId }, select: { id: true }, take: 1 },
+              followers: { where: { userId: viewer.userId }, select: { userId: true }, take: 1 },
+            }
           : {}),
       },
     });
@@ -101,15 +104,20 @@ export class SearchService {
     return {
       items: orderedIds
         .flatMap((id) => {
-          const row = byId.get(id) as ({ upvotes?: Array<{ id: string }> } & object) | undefined;
+          const row = byId.get(id) as
+            | ({ upvotes?: Array<{ id: string }>; followers?: Array<{ userId: string }> } & object)
+            | undefined;
           if (!row) return [];
-          const { upvotes, ...rest } = row;
+          const { upvotes, followers, ...rest } = row;
           return [
             {
               ...present(rest),
               hasUpvoted: (upvotes ?? []).length > 0,
               // Same shape as a board entry: a client renders these with the same card.
               ...BOARD_ONLY_DEFAULTS,
+              // After the defaults, because this one is computable here and the default is not
+              // the answer — a search hit may well be something the reader already follows.
+              following: (followers ?? []).length > 0,
             },
           ];
         })

@@ -45,10 +45,31 @@ export class BoardFollowersService {
     // The themes of the entry that moved, already scoped to this board by the caller. Empty for
     // an entry with no catalogue title, which is the whole cost of reusing the creator's themes.
     entryThemeIds: string[] = [],
+    // The entry that moved, so people who follow it specifically can be found. Absent means
+    // nobody can, which is what every caller before this feature meant.
+    recommendationId?: string,
   ): Promise<string[]> {
     const excluded = exclude.filter((id): id is string => id !== null);
 
-    const [followers, policy] = await Promise.all([
+    /** Both sources answer the same questions below, so they select the same shape. */
+    const aboutTheReader = {
+      userId: true,
+      user: {
+        select: {
+          memberships: {
+            where: { creatorId },
+            select: { amountCents: true, isActivePatron: true },
+          },
+          staffRoles: { where: { creatorId }, select: { role: true } },
+          notificationPreferences: {
+            where: { creatorId },
+            select: { statuses: true, themeIds: true },
+          },
+        },
+      },
+    } as const;
+
+    const [followers, watchers, policy] = await Promise.all([
       tx.creatorFavorite.findMany({
         where: { creatorId, userId: { notIn: excluded } },
         select: {
@@ -68,14 +89,38 @@ export class BoardFollowersService {
           },
         },
       }),
+      // People who follow this one entry, whether or not they follow the board. That is the case
+      // the feature exists for: a board too noisy to follow, with one thing on it worth hearing
+      // about.
+      recommendationId
+        ? tx.entryFollow.findMany({
+            where: { recommendationId, userId: { notIn: excluded } },
+            select: aboutTheReader,
+          })
+        : Promise.resolve([]),
       this.policyFor(tx, creatorId),
     ]);
 
+    // Following the entry beats the theme narrowing; following the board does not. Statuses
+    // answer *what counts as news* and are applied to both, because a reader who asked to hear
+    // only about Now Playing asked that about everything — including the show they wait on.
+    const watching = new Set((watchers as FollowerRow[]).map((row) => row.userId));
+    // Two reasons to hear about it is still one thing that happened.
+    const audience = new Map<string, FollowerRow>();
+    for (const row of [...(followers as FollowerRow[]), ...(watchers as FollowerRow[])]) {
+      audience.set(row.userId, row);
+    }
+
     return (
-      (followers as FollowerRow[])
-        .filter((row) => wants(row, toStatus) && aboutSomethingTheyAskedFor(row, entryThemeIds))
-        // The same pure resolver the guard calls. Never a second implementation of "may they see
-        // this board" — two of those drift, and the one over here fails silently.
+      [...audience.values()]
+        .filter(
+          (row) =>
+            wants(row, toStatus) &&
+            (watching.has(row.userId) || aboutSomethingTheyAskedFor(row, entryThemeIds)),
+        )
+        // The same pure resolver the guard calls, applied to both sources. Never a second
+        // implementation of "may they see this board" — two of those drift, and the one over here
+        // fails silently. A follow is a wish, not an entitlement.
         .filter((row) => can('VIEW', viewerFrom(row), policy))
         .map((row) => row.userId)
     );

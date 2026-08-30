@@ -160,6 +160,8 @@ export interface Recommendation {
    * decides how to draw them, never who gets them.
    */
   candidateLinks: RecommendationLink[];
+  /** Whether this reader asked to hear about this entry specifically. False when signed out. */
+  following?: boolean;
   submittedBy: { id: string; fullName: string | null; avatarUrl: string | null };
 }
 
