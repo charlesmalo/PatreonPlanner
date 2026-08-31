@@ -68,6 +68,10 @@ describe('LemonSqueezyAdapter shapes', () => {
       'currentPeriodEnd',
       'eventType',
       'providerCustomerId',
+      // An order id, like a customer id, is the provider's own identifier rather than anything
+      // about the person. This list growing is meant to be a deliberate act, which is why it is
+      // written out rather than derived.
+      'providerOrderId',
       'providerSubscriptionId',
       'status',
       'userId',

@@ -67,9 +67,12 @@ signature will not match, which is the check working rather than failing.
 
 ## What is still not covered after this
 
-- **`order_refunded` is not handled.** A refund normally also moves the subscription to
-  `cancelled` or `expired`, which is handled — but a refund that leaves the subscription untouched
-  will not revoke until the period ends.
+- **`order_refunded` is handled**, matched on the order id — a refund names an order and nothing
+  else, since subscriptions carry an `order_id` and not the reverse. Two limits stand: a
+  subscription created before the order id was recorded cannot be matched until some later event
+  backfills it, and **a partial refund may set the same `refunded` flag as a full one**, in which
+  case entitlement would be revoked outright. Worth checking against a real partial refund before
+  it matters.
 - **Cancelling happens on Lemon Squeezy's side**, from the link in their receipt email. There is
   no cancel button in this application, which is normal for a merchant-of-record setup and keeps
   this app out of the payment flow entirely.

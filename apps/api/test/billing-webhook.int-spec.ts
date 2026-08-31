@@ -44,6 +44,15 @@ describe('Billing webhook (integration)', () => {
     ...overrides,
   });
 
+  /** An order refund, which is what a real refund arrives as — never a subscription status. */
+  const refund = (orderId: number) => ({
+    meta: { event_name: 'order_refunded', custom_data: { user_id: userId } },
+    data: {
+      id: String(orderId),
+      attributes: { refunded: true, refunded_at: new Date().toISOString() },
+    },
+  });
+
   const send = (payload: object, signer: (raw: string) => string | undefined = sign) => {
     const raw = JSON.stringify(payload);
     const req = request(ctx.app.getHttpServer())
@@ -285,6 +294,75 @@ describe('Billing webhook (integration)', () => {
 
       expect(res.body.handled).toBe(false);
       expect(await ctx.prisma.subscription.count()).toBe(0);
+    });
+
+    it('records the order a subscription came from', async () => {
+      // A refund names an order and nothing else — the order payload carries no subscription id.
+      // Without this stored there is no way back from "this order was refunded".
+      await send(body({ attributes: { order_id: 5150 } })).expect(200);
+
+      expect((await ctx.prisma.subscription.findFirstOrThrow()).providerOrderId).toBe('5150');
+    });
+
+    it('backfills the order id for a subscription created before it was stored', async () => {
+      await send(body({ attributes: { order_id: 5150 } })).expect(200);
+      await ctx.prisma.subscription.updateMany({ data: { providerOrderId: null } });
+
+      await send(
+        body({
+          attributes: {
+            order_id: 5150,
+            renews_at: new Date(Date.now() + 60 * 86_400_000).toISOString(),
+          },
+        }),
+      ).expect(200);
+
+      expect((await ctx.prisma.subscription.findFirstOrThrow()).providerOrderId).toBe('5150');
+    });
+
+    it('revokes when the order behind a subscription is refunded', async () => {
+      // The rule this makes reachable. It has been correct and tested since billing shipped, and
+      // nothing could produce it: there is no `refunded` subscription status in Lemon Squeezy.
+      await send(body({ attributes: { order_id: 5150 } })).expect(200);
+      expect(await isPremium()).toBe(true);
+
+      await send(refund(5150)).expect(200);
+
+      expect(await isPremium()).toBe(false);
+      expect((await ctx.prisma.subscription.findFirstOrThrow()).status).toBe('REFUNDED');
+    });
+
+    it('ignores a refunded order that paid for nothing here', async () => {
+      // A store selling more than one thing refunds orders that are nothing to do with a
+      // subscription. Not a failure, and not something to answer 4xx to.
+      await send(body({ attributes: { order_id: 5150 } })).expect(200);
+
+      const res = await send(refund(9999)).expect(200);
+
+      expect(res.body.handled).toBe(false);
+      expect(await isPremium()).toBe(true);
+    });
+
+    it('does not revoke on an order event that is not actually a refund', async () => {
+      // `refunded: false` on an order_refunded event is a shape we do not understand, and
+      // revoking on it would take premium from somebody who still has it.
+      await send(body({ attributes: { order_id: 5150 } })).expect(200);
+
+      await send({ ...refund(5150), data: { id: '5150', attributes: { refunded: false } } }).expect(
+        200,
+      );
+
+      expect(await isPremium()).toBe(true);
+    });
+
+    it('treats a redelivered refund as the one it already handled', async () => {
+      await send(body({ attributes: { order_id: 5150 } })).expect(200);
+      const payload = refund(5150);
+      await send(payload).expect(200);
+
+      const second = await send(payload).expect(200);
+
+      expect(second.body.handled).toBe(false);
     });
 
     it('revokes on a refund, even though the period has not ended', async () => {

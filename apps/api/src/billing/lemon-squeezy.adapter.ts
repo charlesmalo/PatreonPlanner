@@ -15,9 +15,17 @@ export interface SubscriptionEvent {
   userId: string;
   providerSubscriptionId: string;
   providerCustomerId: string;
+  /** The order that created it — the only way back here from a refund. Absent on older rows. */
+  providerOrderId: string | null;
   status: SubscriptionStatus;
   currentPeriodEnd: Date;
   cancelAtPeriodEnd: boolean;
+}
+
+/** A refund. Separate from a subscription event because it names an order and nothing else. */
+export interface RefundEvent {
+  eventType: string;
+  providerOrderId: string;
 }
 
 /**
@@ -128,6 +136,30 @@ export class LemonSqueezyAdapter {
    * endpoint. What it must never do is guess: a missing period end or an unmapped status returns
    * null rather than a default, because every plausible default here grants somebody a month.
    */
+  /**
+   * A refunded order, or null.
+   *
+   * Refunds are an order event here — there is no `refunded` subscription status, which is what
+   * left the entitlement rule for one unreachable until now. The order payload carries no
+   * subscription id either: subscriptions have an `order_id`, not the reverse, so the caller
+   * matches on the order id this returns.
+   *
+   * Only an actual refund. `order_refunded` arriving with `refunded` false is a shape we do not
+   * understand, and revoking on it would take premium from somebody who still has it.
+   */
+  parseRefund(body: unknown): RefundEvent | null {
+    if (body === null || typeof body !== 'object') return null;
+    const payload = body as {
+      meta?: { event_name?: string };
+      data?: { id?: string; attributes?: { refunded?: boolean } };
+    };
+    if (payload.meta?.event_name !== 'order_refunded') return null;
+    if (payload.data?.attributes?.refunded !== true) return null;
+    if (!payload.data.id) return null;
+
+    return { eventType: 'order_refunded', providerOrderId: String(payload.data.id) };
+  }
+
   parse(body: unknown): SubscriptionEvent | null {
     // A JSON body can legitimately be `null`, and reading through it throws — which on the
     // webhook path is a 500, and a 500 is a delivery the provider retries forever. Everything
@@ -140,6 +172,7 @@ export class LemonSqueezyAdapter {
         id?: string;
         attributes?: {
           status?: string;
+          order_id?: number | string;
           renews_at?: string | null;
           ends_at?: string | null;
           customer_id?: number | string;
@@ -188,6 +221,7 @@ export class LemonSqueezyAdapter {
       userId: userId === undefined ? '' : String(userId),
       providerSubscriptionId: String(providerSubscriptionId),
       providerCustomerId: String(attributes.customer_id ?? ''),
+      providerOrderId: attributes.order_id === undefined ? null : String(attributes.order_id),
       status,
       currentPeriodEnd,
       cancelAtPeriodEnd: attributes.cancelled === true,

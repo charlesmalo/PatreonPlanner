@@ -46,6 +46,17 @@ export class BillingController {
       throw new UnauthorizedException();
     }
 
+    // Refunds first: they are an order event, and the subscription parse would reject one anyway.
+    const refund = this.adapter.parseRefund(request.body);
+    if (refund) {
+      const applied = await this.billing.applyRefund(
+        this.adapter.provider,
+        this.adapter.idempotencyKey(rawBody),
+        refund,
+      );
+      return { ok: true, handled: applied };
+    }
+
     const event = this.adapter.parse(request.body);
     // Something we do not act on, or a shape we do not recognise. Answered 2xx deliberately: a
     // 4xx makes the provider retry it forever and eventually disable the endpoint, and neither
