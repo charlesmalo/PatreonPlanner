@@ -223,7 +223,222 @@ async function main() {
     });
   }
 
-  console.log(`Seeded ${entries.length} entries on /c/ada-watches-things`);
+  // ---------------------------------------------------------------------------------------
+  // Everything below exists so the features built after the first demo are visible rather than
+  // described. A feature nobody can reach on the demo stack is a feature nobody reviews.
+  // ---------------------------------------------------------------------------------------
+
+  // Cal pays for premium. Without somebody who does, the expanded reaction palette, carrying a
+  // list, syncing settings and choosing which moves reach you are all invisible — every gate is
+  // built closed and there is nothing to open them with.
+  await prisma.user.update({
+    where: { id: users.cal },
+    data: { premiumUntil: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000) },
+  });
+  await prisma.subscription.upsert({
+    where: { userId: users.cal },
+    create: {
+      userId: users.cal,
+      provider: 'demo',
+      providerSubscriptionId: 'demo-sub-cal',
+      providerCustomerId: 'demo-cus-cal',
+      providerOrderId: 'demo-order-cal',
+      status: 'ACTIVE',
+      currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    },
+    update: { status: 'ACTIVE' },
+  });
+
+  // A second board, because carrying a list across boards needs somewhere to carry it to — and
+  // per-board notification settings mean little when there is only one board.
+  const second = await prisma.creator.upsert({
+    where: { patreonCampaignId: 'demo-campaign-two' },
+    create: {
+      patreonCampaignId: 'demo-campaign-two',
+      ownerUserId: users.mo,
+      displayName: 'Mo Reads Things',
+      slug: 'mo-reads-things',
+      policy: { create: { viewVisibility: 'PUBLIC' } },
+      staff: { create: { userId: users.mo, role: 'OWNER' } },
+    },
+    update: {},
+    select: { id: true },
+  });
+  for (const userId of [users.bea, users.cal]) {
+    await prisma.membership.upsert({
+      where: { userId_creatorId: { userId, creatorId: second.id } },
+      create: { userId, creatorId: second.id, amountCents: 500, isActivePatron: true },
+      update: { isActivePatron: true },
+    });
+  }
+  // Following a board is what puts its news in your bell.
+  for (const userId of [users.bea, users.cal]) {
+    for (const boardId of [creatorId, second.id]) {
+      await prisma.creatorFavorite.upsert({
+        where: { userId_creatorId: { userId, creatorId: boardId } },
+        create: { userId, creatorId: boardId },
+        update: {},
+      });
+    }
+  }
+
+  // A board with nothing on it reads as broken rather than as a fresh start.
+  const secondEntries = [
+    { title: 'The Left Hand of Darkness', by: 'bea' as const, status: 'ACTIVE' as const },
+    { title: 'Piranesi', by: 'cal' as const, status: 'PENDING' as const },
+    { title: 'A Memory Called Empire', by: 'bea' as const, status: 'ACCEPTED' as const },
+  ];
+  for (const entry of secondEntries) {
+    const normalizedTitle = entry.title.toLowerCase();
+    const exists = await prisma.recommendation.findFirst({
+      where: { creatorId: second.id, normalizedTitle, type: 'EXTERNAL_LINK' },
+      select: { id: true },
+    });
+    if (!exists) {
+      await prisma.recommendation.create({
+        data: {
+          creatorId: second.id,
+          submittedByUserId: users[entry.by],
+          type: 'EXTERNAL_LINK',
+          customTitle: entry.title,
+          normalizedTitle,
+          status: entry.status,
+        },
+      });
+    }
+  }
+
+  // Themes, so narrowing a board's news to what you care about has something to narrow by. They
+  // hang off catalogue titles in production; here they are attached by hand.
+  const themes: Record<string, string> = {};
+  for (const name of ['Anime', 'Documentary', 'Long Watch']) {
+    const theme = await prisma.theme.upsert({
+      where: { creatorId_slug: { creatorId, slug: name.toLowerCase().replace(/ /g, '-') } },
+      create: { creatorId, name, slug: name.toLowerCase().replace(/ /g, '-') },
+      update: {},
+      select: { id: true },
+    });
+    themes[name] = theme.id;
+  }
+
+  // Themes hang off a catalogue title, so an entry typed by hand carries none — which is exactly
+  // the limitation the design records. Two of these entries are bound to a catalogue title here so
+  // that narrowing by theme filters *something* rather than everything, and so the difference
+  // between a themed entry and an untyped one is visible side by side.
+  const themed: Array<[string, number, string[]]> = [
+    ['Spirited Away', 129, ['Anime', 'Long Watch']],
+    ['Perfect Blue', 10494, ['Anime']],
+  ];
+  for (const [title, tmdbId, names] of themed) {
+    const catalogTitle = await prisma.title.upsert({
+      where: { tmdbId_mediaType: { tmdbId, mediaType: 'MOVIE' } },
+      create: { tmdbId, mediaType: 'MOVIE', name: title },
+      update: {},
+      select: { id: true },
+    });
+    for (const name of names) {
+      await prisma.titleTheme.upsert({
+        where: { titleId_themeId: { titleId: catalogTitle.id, themeId: themes[name] } },
+        create: { titleId: catalogTitle.id, themeId: themes[name] },
+        update: {},
+      });
+    }
+    await prisma.recommendation.updateMany({
+      where: { creatorId, customTitle: title },
+      data: { titleId: catalogTitle.id },
+    });
+  }
+
+  // Bea hears about anime only, and about entries reaching Now Playing or Completed.
+  await prisma.boardNotificationPreference.upsert({
+    where: { userId_creatorId: { userId: users.bea, creatorId } },
+    create: {
+      userId: users.bea,
+      creatorId,
+      statuses: ['ACTIVE', 'COMPLETED'],
+      themeIds: [themes.Anime],
+    },
+    update: {},
+  });
+
+  // A link somebody suggested, waiting for staff. The whole point of the candidate model is that
+  // it does not appear on the card until a human says so, which needs one sitting there to see.
+  const mononoke = await prisma.recommendation.findFirst({
+    where: { creatorId, customTitle: 'Princess Mononoke' },
+    select: { id: true },
+  });
+  if (mononoke) {
+    await prisma.recommendationLink.upsert({
+      where: {
+        recommendationId_canonicalUrl: {
+          recommendationId: mononoke.id,
+          canonicalUrl: 'example.test/mononoke',
+        },
+      },
+      create: {
+        recommendationId: mononoke.id,
+        url: 'https://example.test/mononoke',
+        canonicalUrl: 'example.test/mononoke',
+        submittedByUserId: users.bea,
+        status: 'CANDIDATE',
+      },
+      update: {},
+    });
+    // ...and one already published, so the difference between the two is visible side by side.
+    await prisma.recommendationLink.upsert({
+      where: {
+        recommendationId_canonicalUrl: {
+          recommendationId: mononoke.id,
+          canonicalUrl: 'example.test/mononoke-official',
+        },
+      },
+      create: {
+        recommendationId: mononoke.id,
+        url: 'https://example.test/mononoke-official',
+        label: 'Official page',
+        canonicalUrl: 'example.test/mononoke-official',
+        submittedByUserId: users.ada,
+        status: 'PUBLISHED',
+      },
+      update: {},
+    });
+  }
+
+  // Cal is waiting on one particular entry, whatever his theme choices say.
+  //
+  // Deliberately one he did *not* submit. A submitter already hears about their own entry through
+  // ENTRY_STATUS_CHANGED and is excluded from the follower fan-out so they are not told twice —
+  // so a seeded follow on his own suggestion would do nothing visible, and the feature would look
+  // broken on the one screen anybody checks it on.
+  const followed = await prisma.recommendation.findFirst({
+    where: { creatorId, customTitle: 'Princess Mononoke' },
+    select: { id: true },
+  });
+  if (followed) {
+    await prisma.entryFollow.upsert({
+      where: { userId_recommendationId: { userId: users.cal, recommendationId: followed.id } },
+      create: { userId: users.cal, recommendationId: followed.id },
+      update: {},
+    });
+  }
+
+  // Cal narrows to Documentary, so the follow above is the *only* reason Princess Mononoke can
+  // reach him — which is the rule worth seeing: a follow beats the theme narrowing.
+  await prisma.boardNotificationPreference.upsert({
+    where: { userId_creatorId: { userId: users.cal, creatorId } },
+    create: {
+      userId: users.cal,
+      creatorId,
+      statuses: ['ACTIVE', 'COMPLETED'],
+      themeIds: [themes.Documentary],
+    },
+    update: {},
+  });
+
+  console.log(
+    `Seeded ${entries.length} entries on /c/ada-watches-things, a second board at ` +
+      `/c/mo-reads-things, and premium for Cal.`,
+  );
 }
 
 main()

@@ -18,6 +18,15 @@ export const configSchema = z.object({
   LEMONSQUEEZY_API_BASE_URL: z.string().url().default('https://api.lemonsqueezy.com'),
 
   // Digests. Optional as a set: no key means no email, and the app runs exactly as it does now.
+  // How often the background tick fires. Fifteen minutes suits a deployment; the demo stack sets
+  // it to seconds, because a playtester who queues something and watches nothing happen for a
+  // quarter of an hour concludes it is broken rather than slow.
+  JOB_TICK_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(15 * 60 * 1000),
+
   RESEND_API_KEY: z.string().min(1).optional(),
   RESEND_API_BASE_URL: z.string().url().default('https://api.resend.com'),
   // Must be an address on a domain with SPF and DKIM pointing at the provider, or the mail lands
