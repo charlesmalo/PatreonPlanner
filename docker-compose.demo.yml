@@ -96,6 +96,9 @@ services:
       # is to look at, and a demo with the background work switched off shows a thinner product
       # than the one that exists.
       JOBS_ENABLED: 'true'
+      # Seconds, not the deployed fifteen minutes: a carried-over suggestion that sits at
+      # "waiting its turn" for a quarter of an hour reads as broken rather than as queued.
+      JOB_TICK_MS: '15000'
       # One nginx in front of the API in this stack, so the real client address is the last
       # X-Forwarded-For entry rather than nginx's own.
       TRUSTED_PROXY_HOPS: '1'

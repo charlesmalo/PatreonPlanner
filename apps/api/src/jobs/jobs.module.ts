@@ -14,7 +14,6 @@ import { EnrichTitleJob } from './enrich-title.job';
 import { MembershipRefreshJob } from './membership-refresh.job';
 
 const QUEUE = 'membership-refresh';
-const EVERY_MS = 15 * 60 * 1000;
 
 @Global()
 @Module({
@@ -99,7 +98,7 @@ export class JobsModule implements OnModuleInit, OnApplicationShutdown {
       'tick',
       {},
       {
-        repeat: { every: EVERY_MS },
+        repeat: { every: this.config.get('JOB_TICK_MS') },
         jobId: 'membership-refresh-tick',
         // Bounded history: ~96 ticks a day would otherwise accumulate in Redis forever.
         removeOnComplete: 24,

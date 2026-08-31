@@ -166,20 +166,29 @@ const PERSONAS = {
   mo: {
     identity: { id: 'demo-mo', full_name: 'Mo Ferran', email: 'mo@example.com' },
     memberships: [],
-    campaigns: [],
-    note: 'moderator',
+    campaigns: [{ campaignId: 'demo-campaign-two', displayName: 'Mo Reads Things' }],
+    note: 'moderator on one board, owner of the other',
   },
   bea: {
     identity: { id: 'demo-bea', full_name: 'Bea Okonjo', email: 'bea@example.com' },
-    memberships: [{ campaignId: 'demo-campaign', amountCents: 500, isActivePatron: true }],
+    // Both boards: signing in re-syncs memberships from here, so a board the seed granted and
+    // this list omits is silently dropped the first time the persona logs in. Carrying a list
+    // across boards needs somewhere to carry it to.
+    memberships: [
+      { campaignId: 'demo-campaign', amountCents: 500, isActivePatron: true },
+      { campaignId: 'demo-campaign-two', amountCents: 500, isActivePatron: true },
+    ],
     campaigns: [],
-    note: 'patron, $5 tier',
+    note: 'patron of both boards, $5 tier',
   },
   cal: {
     identity: { id: 'demo-cal', full_name: 'Cal Nguyen', email: 'cal@example.com' },
-    memberships: [{ campaignId: 'demo-campaign', amountCents: 1500, isActivePatron: true }],
+    memberships: [
+      { campaignId: 'demo-campaign', amountCents: 1500, isActivePatron: true },
+      { campaignId: 'demo-campaign-two', amountCents: 500, isActivePatron: true },
+    ],
     campaigns: [],
-    note: 'patron, $15 tier',
+    note: 'patron of both boards, $15 tier — and the one with premium',
   },
   dee: {
     identity: { id: 'demo-dee', full_name: 'Dee Alvarez', email: 'dee@example.com' },
