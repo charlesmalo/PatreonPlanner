@@ -1,6 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { NotificationsController } from './notifications.controller';
 import { BoardFollowersService } from './board-followers.service';
+import { EntryFollowController } from './entry-follow.controller';
 import { NotificationPreferencesController } from './notification-preferences.controller';
 import { NotificationPreferencesService } from './notification-preferences.service';
 import { NotificationsService } from './notifications.service';
@@ -9,7 +10,7 @@ import { NotificationsService } from './notifications.service';
 // module — and threading an import into each of those is ceremony around one provider.
 @Global()
 @Module({
-  controllers: [NotificationsController, NotificationPreferencesController],
+  controllers: [NotificationsController, NotificationPreferencesController, EntryFollowController],
   providers: [NotificationsService, BoardFollowersService, NotificationPreferencesService],
   exports: [NotificationsService, BoardFollowersService],
 })

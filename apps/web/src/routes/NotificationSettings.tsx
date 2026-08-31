@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../api/client';
+import { useThemes } from '../api/hooks';
 
 /**
  * The columns a reader can be told about, in board order rather than alphabetically — the page
@@ -18,6 +19,7 @@ const COLUMNS: Array<[string, string]> = [
 
 interface Preferences {
   statuses: string[];
+  themeIds: string[];
   isDefault: boolean;
   canCustomise: boolean;
 }
@@ -35,6 +37,7 @@ export function NotificationSettings() {
   const [prefs, setPrefs] = useState<Preferences | null>(null);
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
+  const themes = useThemes(slug, true);
 
   const path = `/creators/${encodeURIComponent(slug)}/notification-preferences`;
 
@@ -53,15 +56,15 @@ export function NotificationSettings() {
     };
   }, [path]);
 
-  async function save(statuses: string[]) {
+  async function save(statuses: string[], themeIds: string[] = prefs?.themeIds ?? []) {
     if (!prefs) return;
     const previous = prefs;
     // Optimistic, then reconciled — the pattern the pick control already follows. A checkbox that
     // goes on claiming a change the server refused is worse than one that flickers.
-    setPrefs({ ...prefs, statuses, isDefault: false });
+    setPrefs({ ...prefs, statuses, themeIds, isDefault: false });
     setBusy(true);
     try {
-      await api.put(path, { statuses });
+      await api.put(path, { statuses, themeIds });
     } catch {
       setPrefs(previous);
     } finally {
@@ -72,7 +75,9 @@ export function NotificationSettings() {
   if (failed) return <p className="p-4">Could not load your notification settings.</p>;
   if (!prefs) return <p className="p-4">Loading…</p>;
 
-  const { statuses, isDefault, canCustomise } = prefs;
+  const { statuses, themeIds, isDefault, canCustomise } = prefs;
+  const toggleTheme = (id: string) =>
+    save(statuses, themeIds.includes(id) ? themeIds.filter((t) => t !== id) : [...themeIds, id]);
 
   return (
     <section className="mx-auto max-w-lg p-4">
@@ -116,6 +121,32 @@ export function NotificationSettings() {
           </li>
         ))}
       </ul>
+
+      {themes.length > 0 ? (
+        <>
+          <h2 className="mt-5 text-sm font-medium">Which of it you care about</h2>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+            {themeIds.length === 0
+              ? 'Everything on this board. Pick some to narrow it.'
+              : 'Only these. Entries with no theme of their own will not reach you.'}
+          </p>
+          <ul className="mt-2 space-y-2">
+            {themes.map((theme) => (
+              <li key={theme.id}>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={themeIds.includes(theme.id)}
+                    disabled={!canCustomise || busy}
+                    onChange={() => toggleTheme(theme.id)}
+                  />
+                  <span>{theme.name}</span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
 
       <button
         type="button"

@@ -13,8 +13,11 @@ export function useThemes(slug: string, enabled: boolean) {
     let cancelled = false;
     api
       .get<{ items: ThemeSummary[] }>(path)
-      // Themes are a way to narrow the board, not a reason to fail rendering it.
-      .then((body) => !cancelled && setThemes(body.items))
+      // Themes are a way to narrow the board, not a reason to fail rendering it — which is why
+      // the shape is checked as well as the request. A body without `items` set state to
+      // undefined, and every consumer reading `.length` off that crashed the page it was meant
+      // to be a convenience on.
+      .then((body) => !cancelled && setThemes(Array.isArray(body?.items) ? body.items : []))
       .catch(() => !cancelled && setThemes([]));
     return () => {
       cancelled = true;

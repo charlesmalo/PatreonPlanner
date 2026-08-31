@@ -36,6 +36,11 @@ export class ModerationActionsService {
         submittedByUserId: true,
         customTitle: true,
         creator: { select: { slug: true, displayName: true } },
+        // Scoped to this creator: themes are per board, and another creator's must not decide who
+        // hears about this move. Empty for an entry with no catalogue title.
+        title: {
+          select: { themes: { where: { theme: { creatorId } }, select: { themeId: true } } },
+        },
       },
     });
     if (!current) throw new NotFoundException();
@@ -92,10 +97,14 @@ export class ModerationActionsService {
       // In the same transaction as the move itself, for the reason above — and excluding the two
       // people already accounted for, because the submitter has just been told and a moderator
       // moving something knows what they moved.
-      const audience = await this.followers.audienceFor(tx, creatorId, to, [
-        actorUserId,
-        current.submittedByUserId,
-      ]);
+      const audience = await this.followers.audienceFor(
+        tx,
+        creatorId,
+        to,
+        [actorUserId, current.submittedByUserId],
+        (current.title?.themes ?? []).map((link) => link.themeId),
+        recommendationId,
+      );
       // Coalesced: a creator tidying eight entries into Now Playing is one act, not eight pieces
       // of news in every follower's bell.
       await this.notifications.emitCoalesced(

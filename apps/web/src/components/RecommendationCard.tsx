@@ -8,6 +8,7 @@ import { AvailabilityBadges } from './AvailabilityBadges';
 import { isSafeHttpUrl } from './safe-url';
 import { LinkCandidates } from './LinkCandidates';
 import { FlagButton } from './FlagButton';
+import { FollowButton } from './FollowButton';
 import { NoteList } from './NoteList';
 import { PickButton } from './PickButton';
 import { DRAG_TYPE } from './drag';
@@ -203,6 +204,14 @@ export function RecommendationCard({
         <div className="mt-2 flex flex-wrap items-start gap-3">
           {/* Offered to every reader: the API answers an anonymous report with a 401, and
               FlagButton turns that into "sign in to report" — more useful than no control. */}
+          {canUpvote ? (
+            <FollowButton
+              slug={slug}
+              recommendationId={recommendation.id}
+              title={recommendation.customTitle}
+              following={recommendation.following ?? false}
+            />
+          ) : null}
           <FlagButton
             slug={slug}
             recommendationId={recommendation.id}

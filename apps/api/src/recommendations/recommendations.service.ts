@@ -223,7 +223,16 @@ export class RecommendationsService {
         // Whether *this* viewer upvoted. Without it a client cannot render the control's state
         // truthfully, and an optimistic toggle guesses the direction wrong.
         ...(viewerUserId
-          ? { upvotes: { where: { userId: viewerUserId }, select: { id: true }, take: 1 } }
+          ? {
+              upvotes: { where: { userId: viewerUserId }, select: { id: true }, take: 1 },
+              // Whether *this* viewer asked to hear about this entry. Without it the control
+              // forgets on every reload and the feature looks broken rather than unset.
+              followers: {
+                where: { userId: viewerUserId },
+                select: { userId: true },
+                take: 1,
+              },
+            }
           : {}),
       },
     })) as Array<{
@@ -243,6 +252,7 @@ export class RecommendationsService {
         isPreferred: boolean;
       }>;
       upvotes?: Array<{ id: string }>;
+      followers?: Array<{ userId: string }>;
       creatorNotes?: unknown[];
     }>;
 
@@ -277,9 +287,10 @@ export class RecommendationsService {
       : new Map<string, ReactionCount[]>();
 
     return {
-      items: page.map(({ upvotes, titleId, groupHeadId, ...item }) => ({
+      items: page.map(({ upvotes, followers, titleId, groupHeadId, ...item }) => ({
         ...present(item),
         hasUpvoted: (upvotes ?? []).length > 0,
+        following: (followers ?? []).length > 0,
         // Null for an external link, which has no canonical identity to look up.
         availability: (titleId && availability.get(titleId)) || null,
         // Nesting is a *per-board* projection, not a stored fact: whether an entry has a parent
