@@ -19,6 +19,7 @@ const COLUMNS: Array<[string, string]> = [
 
 interface Preferences {
   statuses: string[];
+  emailDigest: boolean;
   themeIds: string[];
   isDefault: boolean;
   canCustomise: boolean;
@@ -76,6 +77,19 @@ export function NotificationSettings() {
   if (!prefs) return <p className="p-4">Loading…</p>;
 
   const { statuses, themeIds, isDefault, canCustomise } = prefs;
+
+  async function saveDigest(next: boolean) {
+    const previous = prefs as Preferences;
+    setPrefs({ ...previous, emailDigest: next });
+    setBusy(true);
+    try {
+      await api.put('/me/email-digest', { enabled: next });
+    } catch {
+      setPrefs(previous);
+    } finally {
+      setBusy(false);
+    }
+  }
   const toggleTheme = (id: string) =>
     save(statuses, themeIds.includes(id) ? themeIds.filter((t) => t !== id) : [...themeIds, id]);
 
@@ -147,6 +161,24 @@ export function NotificationSettings() {
           </ul>
         </>
       ) : null}
+
+      <h2 className="mt-5 text-sm font-medium">By email</h2>
+      <label className="mt-1 flex items-start gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={prefs.emailDigest}
+          disabled={busy}
+          onChange={() => saveDigest(!prefs.emailDigest)}
+          className="mt-1"
+        />
+        <span>
+          Send me one email a day with what moved.{' '}
+          <span className="text-slate-500 dark:text-slate-400">
+            Off unless you ask — your address came from Patreon so you could sign in, not so we
+            could write to you. Every email has a link to stop them.
+          </span>
+        </span>
+      </label>
 
       <button
         type="button"

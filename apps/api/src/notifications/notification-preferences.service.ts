@@ -24,7 +24,7 @@ export class NotificationPreferencesService {
       }),
       this.prisma.user.findUniqueOrThrow({
         where: { id: userId },
-        select: { premiumUntil: true },
+        select: { premiumUntil: true, emailDigest: true },
       }),
     ]);
 
@@ -33,6 +33,9 @@ export class NotificationPreferencesService {
       themeIds: preference?.themeIds ?? [],
       isDefault: preference === null,
       canCustomise: isPremium(user.premiumUntil),
+      // Read here so the settings page needs one request rather than two. Written elsewhere: the
+      // digest covers every board, so it is not a per-board preference.
+      emailDigest: user.emailDigest,
     };
   }
 

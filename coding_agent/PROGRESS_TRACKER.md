@@ -8,7 +8,7 @@ being built in sequence. Every sequenced step has shipped, including the
 link/candidate model (design §4), which was split out of grouping rather than
 dropped.
 
-The verification baseline at the time of writing: **1022 API + 325 web + 42 e2e
+The verification baseline at the time of writing: **1036 API + 329 web + 42 e2e
 tests passing**, typecheck clean across every package.
 
 ## Milestones

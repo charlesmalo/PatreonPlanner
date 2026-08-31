@@ -32,6 +32,7 @@ describe('NotificationSettings', () => {
     themeIds: [],
     isDefault: true,
     canCustomise: true,
+    emailDigest: false,
   };
   const THEMES = 'GET /api/v1/creators/ada-writes/themes';
   const themes = [
@@ -172,5 +173,79 @@ describe('NotificationSettings', () => {
     renderPage();
 
     expect(await screen.findByRole('checkbox', { name: /anime/i })).toBeDisabled();
+  });
+
+  it('says why the daily email is off unless asked for', async () => {
+    // The address came from Patreon so they could sign in. Saying so is the difference between a
+    // setting and a surprise.
+    global.fetch = fakeApi(routes(premium));
+    renderPage();
+
+    expect(await screen.findByText(/came from Patreon so you could sign in/i)).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: /one email a day/i })).not.toBeChecked();
+  });
+
+  it('puts a column back when the server refuses that change too', async () => {
+    // The same optimistic-then-reconciled rule as the digest switch, and it had no test: a
+    // mutation removing this rollback broke nothing, which is how it was found.
+    global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if ((init?.method ?? 'GET') === 'PUT') {
+        return { ok: false, status: 402, json: async () => ({}) } as Response;
+      }
+      const path = new URL(String(input), 'http://localhost').pathname;
+      if (path.endsWith('/notification-preferences')) {
+        return { ok: true, status: 200, json: async () => premium } as Response;
+      }
+      return { ok: true, status: 200, json: async () => creator } as Response;
+    });
+    renderPage();
+
+    await userEvent.click(await screen.findByRole('checkbox', { name: /accepted/i }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('checkbox', { name: /accepted/i })).not.toBeChecked(),
+    );
+  });
+
+  it('turns the daily email on', async () => {
+    const calls: Array<{ path: string; body: unknown }> = [];
+    global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = new URL(String(input), 'http://localhost').pathname;
+      if ((init?.method ?? 'GET') === 'PUT') {
+        calls.push({ path, body: JSON.parse(String(init?.body)) });
+        return { ok: true, status: 200, json: async () => ({}) } as Response;
+      }
+      if (path.endsWith('/notification-preferences')) {
+        return { ok: true, status: 200, json: async () => premium } as Response;
+      }
+      return { ok: true, status: 200, json: async () => creator } as Response;
+    });
+    renderPage();
+
+    await userEvent.click(await screen.findByRole('checkbox', { name: /one email a day/i }));
+
+    await waitFor(() =>
+      expect(calls).toEqual([{ path: '/api/v1/me/email-digest', body: { enabled: true } }]),
+    );
+  });
+
+  it('puts the switch back if the server refuses', async () => {
+    global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if ((init?.method ?? 'GET') === 'PUT') {
+        return { ok: false, status: 500, json: async () => ({}) } as Response;
+      }
+      const path = new URL(String(input), 'http://localhost').pathname;
+      if (path.endsWith('/notification-preferences')) {
+        return { ok: true, status: 200, json: async () => premium } as Response;
+      }
+      return { ok: true, status: 200, json: async () => creator } as Response;
+    });
+    renderPage();
+
+    await userEvent.click(await screen.findByRole('checkbox', { name: /one email a day/i }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('checkbox', { name: /one email a day/i })).not.toBeChecked(),
+    );
   });
 });

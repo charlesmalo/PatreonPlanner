@@ -17,6 +17,13 @@ export const configSchema = z.object({
   LEMONSQUEEZY_API_KEY: z.string().min(1).optional(),
   LEMONSQUEEZY_API_BASE_URL: z.string().url().default('https://api.lemonsqueezy.com'),
 
+  // Digests. Optional as a set: no key means no email, and the app runs exactly as it does now.
+  RESEND_API_KEY: z.string().min(1).optional(),
+  RESEND_API_BASE_URL: z.string().url().default('https://api.resend.com'),
+  // Must be an address on a domain with SPF and DKIM pointing at the provider, or the mail lands
+  // in spam and the free tier is spent on messages nobody sees.
+  DIGEST_FROM: z.string().min(1).default('PatreonPlanner <noreply@localhost>'),
+
   PATREON_CLIENT_ID: z.string().min(1),
   PATREON_CLIENT_SECRET: z.string().min(1),
   PATREON_REDIRECT_URI: z.string().url(),
