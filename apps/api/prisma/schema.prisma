@@ -790,6 +790,15 @@ model Subscription {
   provider               String
   providerSubscriptionId String             @unique
   providerCustomerId     String
+  // The order this subscription was created by.
+  //
+  // Stored because a refund arrives as an *order* event and the order payload carries no
+  // subscription id — subscriptions have an `order_id`, not the other way round. Without this
+  // there is no way back from "this order was refunded" to "revoke that entitlement".
+  //
+  // Nullable: rows written before this existed have no order recorded, and a refund of one of
+  // those cannot be matched. They are reconciled instead, when their period runs out.
+  providerOrderId        String?
   status                 SubscriptionStatus
   // What has been paid for. Entitlement runs to here, plus a grace window when a payment failed.
   currentPeriodEnd       DateTime
@@ -801,6 +810,8 @@ model Subscription {
 
   // The reconciliation job reads the ones whose period has run out without a renewal.
   @@index([status, currentPeriodEnd])
+  // A refund arrives naming the order, and this is the only way back to the subscription.
+  @@index([providerOrderId])
 }
 
 // One row per webhook the provider has already delivered.

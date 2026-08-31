@@ -26,6 +26,58 @@ export class BillingService {
   }
 
   /**
+   * A refunded order: find what it paid for and take the entitlement back.
+   *
+   * Matched on the order id because that is all a refund names — the order payload carries no
+   * subscription id. A subscription written before the order id was stored cannot be matched, and
+   * is left to reconciliation when its period runs out.
+   *
+   * No match is not a failure: most refunded orders in a store that sells more than one thing are
+   * nothing to do with a subscription.
+   */
+  async applyRefund(
+    provider: string,
+    idempotencyKey: string,
+    event: { eventType: string; providerOrderId: string },
+  ): Promise<boolean> {
+    const subscription = await this.prisma.subscription.findFirst({
+      where: { providerOrderId: event.providerOrderId },
+      select: { id: true, userId: true, currentPeriodEnd: true, cancelAtPeriodEnd: true },
+    });
+    if (!subscription) return false;
+
+    const seen = await this.prisma.processedWebhookEvent.findUnique({
+      where: { id: idempotencyKey },
+      select: { id: true },
+    });
+    if (seen) return false;
+
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.processedWebhookEvent.create({
+          data: { id: idempotencyKey, provider, eventType: event.eventType },
+        });
+        await tx.subscription.update({
+          where: { id: subscription.id },
+          data: { status: 'REFUNDED' },
+        });
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) return false;
+      throw error;
+    }
+
+    // The rule this makes reachable at last: a refund revokes immediately and gets no grace,
+    // because a grace window on a refund is a window for buying premium and taking it back.
+    await this.entitlement.applyTo(subscription.userId, {
+      status: 'REFUNDED',
+      currentPeriodEnd: subscription.currentPeriodEnd,
+      cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+    });
+    return true;
+  }
+
+  /**
    * Records a delivery and applies it, or does nothing because we have seen it before.
    *
    * The record and the effect share one transaction. Recording first and applying after would
@@ -78,6 +130,7 @@ export class BillingService {
             provider,
             providerSubscriptionId: event.providerSubscriptionId,
             providerCustomerId: event.providerCustomerId,
+            providerOrderId: event.providerOrderId,
             status: event.status,
             currentPeriodEnd: event.currentPeriodEnd,
             cancelAtPeriodEnd: event.cancelAtPeriodEnd,
@@ -86,6 +139,9 @@ export class BillingService {
             status: event.status,
             currentPeriodEnd: event.currentPeriodEnd,
             cancelAtPeriodEnd: event.cancelAtPeriodEnd,
+            // Backfilled on any later event for a subscription created before this was stored,
+            // which is how those rows become refundable without a migration that invents data.
+            ...(event.providerOrderId ? { providerOrderId: event.providerOrderId } : {}),
           },
         });
       });
