@@ -23,6 +23,7 @@ import { ReactionsModule } from './reactions/reactions.module';
 import { TicketsModule } from './tickets/tickets.module';
 import { PatreonModule } from './patreon/patreon.module';
 import { BillingModule } from './billing/billing.module';
+import { EmailModule } from './email/email.module';
 import { BoardSettingsModule } from './board-settings/board-settings.module';
 import { CarryOverModule } from './carry-over/carry-over.module';
 import { RecommendationsModule } from './recommendations/recommendations.module';
@@ -63,6 +64,7 @@ import { HealthModule } from './health/health.module';
     CarryOverModule,
     BoardSettingsModule,
     BillingModule,
+    EmailModule,
     WebhooksModule,
     HealthModule,
   ],

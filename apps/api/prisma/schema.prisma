@@ -131,6 +131,13 @@ model User {
   // closed on purpose — the column costs nothing now, and adding it later would mean taking
   // granularity away from people who already had it.
   premiumUntil           DateTime?
+  // Off for everybody, including accounts that already exist. The address came from Patreon's
+  // OAuth for signing in, and sending a digest to it is a different purpose from the one it was
+  // handed over for — not something a default should settle.
+  emailDigest            Boolean   @default(false)
+  // The watermark. Moves only when a provider accepted the message, so a failed send leaves
+  // today's news in tomorrow's digest rather than losing it.
+  lastDigestAt           DateTime?
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
