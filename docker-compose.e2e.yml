@@ -81,6 +81,15 @@ services:
       TRUSTED_PROXY_HOPS: '1'
       SUBMIT_LIMIT_PER_HOUR: '20'
       SUBMIT_LIMIT_PER_HOUR_GLOBAL: '50'
+      # The provider that takes no money, so the purchase leg can run against a real browser
+      # without a merchant account. It exercises the same webhook path a real payment does.
+      #
+      # The second key is required because the runtime image runs NODE_ENV=production. Needing it
+      # here is the guard doing its job — this stack really is a place where premium is given
+      # away, and it has to say so out loud.
+      BILLING_PROVIDER: fake
+      ALLOW_FAKE_BILLING_IN_PRODUCTION: 'true'
+      API_PUBLIC_URL: http://localhost:8080
     healthcheck:
       # node rather than curl: the runtime image ships production dependencies only.
       test:

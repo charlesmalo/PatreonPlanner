@@ -66,6 +66,14 @@ export class BillingController {
       // Asked of the provider rather than of config: which environment variable makes an instance
       // able to sell is the provider's business, and a second answer to it here would drift.
       available: this.provider.checkoutUrlFor(user.id) !== null,
+      // Whether this instance is running the provider that takes no money. The page uses it to
+      // label itself honestly and to offer the outcomes a real provider would never let anybody
+      // choose — refunding your own subscription, failing your own renewal.
+      //
+      // Sent rather than inferred from the checkout URL: what that URL looks like is the
+      // provider's business, and a client matching on it would be a second, drifting answer to
+      // "is this real money".
+      sandbox: this.provider.provider === 'fake',
       subscription,
     };
   }

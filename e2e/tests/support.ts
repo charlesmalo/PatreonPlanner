@@ -134,10 +134,23 @@ export function seedSecondBoard(): void {
  * is the worst shape of failure, because the first thing anybody does is re-run it.
  */
 export function clearPremium(): void {
-  seed(`UPDATE "User" SET "premiumUntil" = NULL;`);
+  // The projection *and* everything that would rebuild it. Nulling premiumUntil alone leaves the
+  // Subscription row from the previous run, so the purchase journey would open /premium already
+  // subscribed and pass without buying anything — green on a fresh database, green ever after,
+  // and testing nothing.
+  seed(`
+    UPDATE "User" SET "premiumUntil" = NULL;
+    DELETE FROM "PaymentReceipt";
+    DELETE FROM "ProcessedWebhookEvent";
+    DELETE FROM "Subscription";
+  `);
 }
 
-/** Carry-over is premium. Nothing sets this in the app yet, so the journey sets it directly. */
+/**
+ * Grants premium directly, for the journeys that are about what premium *does* rather than about
+ * buying it. Buying it is now a journey of its own — see the purchase test — and this shortcut
+ * stays so the other tests do not each pay for a subscription first.
+ */
 export function makePremium(patreonUserId: string): void {
   seed(`
     UPDATE "User" SET "premiumUntil" = now() + interval '1 year'

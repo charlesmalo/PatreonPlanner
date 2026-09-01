@@ -1010,3 +1010,46 @@ test('a misspelling surfaces the existing entry, and upvoting it avoids a duplic
   // And no second entry was created.
   await expect(page.getByRole('heading', { name: 'Spirited Away' })).toHaveCount(1);
 });
+
+test('a reader buys premium, sees the receipt, and a refund takes it straight back', async ({
+  page,
+}) => {
+  // The whole billing path against a real browser. The checkout stand-in signs a payload and
+  // posts it at the same webhook route a real provider would, so this covers signature
+  // verification, the idempotency key, the subscription upsert and the entitlement projection.
+  // No merchant account exists and no money moves.
+  await signIn(page, 500);
+
+  await page.goto('/premium');
+  await expect(page.getByRole('button', { name: /^subscribe$/i })).toBeVisible();
+
+  await page.getByRole('button', { name: /^subscribe$/i }).click();
+  // The provider's stand-in, deliberately not styled like a real payment form.
+  await expect(page.getByText(/not a real checkout/i)).toBeVisible();
+  await page.getByRole('button', { name: /pay .*succeeds/i }).click();
+
+  // Back on the app, entitled, with the payment in their history.
+  await page.waitForURL((url) => url.pathname === '/premium');
+  await expect(page.getByText('Active')).toBeVisible();
+  await expect(page.getByRole('table', { name: /your payments/i })).toContainText('$5.00');
+
+  // Entitlement, not merely a page saying so. This control reads premiumUntil — the projection
+  // the webhook wrote — rather than the subscription row the page above renders, so it is the
+  // assertion that the whole chain ran and not just the last step of it.
+  await page.goto(`/c/${CREATOR.slug}/notifications`);
+  await expect(page.getByRole('checkbox', { name: /now playing/i })).toBeEnabled();
+
+  // A refund revokes immediately and gets no grace window — otherwise a refund is a way to buy
+  // premium and keep both it and the money.
+  await page.goto('/premium');
+  await page.getByRole('button', { name: /open the demo checkout/i }).click();
+  await page.getByRole('button', { name: /refund/i }).click();
+
+  await page.waitForURL((url) => url.pathname === '/premium');
+  await expect(page.getByText(/refunded/i)).toBeVisible();
+
+  // And the control locks again, which is the projection being rewritten rather than a cache
+  // expiring: a refund gets no grace window at all.
+  await page.goto(`/c/${CREATOR.slug}/notifications`);
+  await expect(page.getByRole('checkbox', { name: /now playing/i })).toBeDisabled();
+});

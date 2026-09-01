@@ -208,4 +208,40 @@ describe('Premium', () => {
       expect(await screen.findByText(/Renews on/)).toBeInTheDocument();
     });
   });
+
+  describe('the demo payment controls', () => {
+    it('are absent on an instance connected to a real provider', async () => {
+      renderPage(state({ available: true, sandbox: false, subscription: null }));
+
+      await screen.findByRole('button', { name: /subscribe/i });
+      expect(screen.queryByText(/demo payment controls/i)).not.toBeInTheDocument();
+    });
+
+    it('appear, and say plainly that nothing is charged, when the provider is fake', async () => {
+      renderPage(state({ available: true, sandbox: true, subscription: null }));
+
+      expect(await screen.findByText(/demo payment controls/i)).toBeInTheDocument();
+      expect(screen.getByText(/nothing here charges anybody/i)).toBeInTheDocument();
+    });
+
+    it('stay reachable once subscribed, which is the only way back to a refund', async () => {
+      // Subscribing replaces the Subscribe button with a status panel. Without this the demo has
+      // no route to the outcomes that matter most — a failed renewal, a refund.
+      renderPage(
+        state({
+          available: true,
+          sandbox: true,
+          subscription: {
+            status: 'ACTIVE',
+            currentPeriodEnd: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+            cancelAtPeriodEnd: false,
+          },
+        }),
+      );
+
+      expect(
+        await screen.findByRole('button', { name: /open the demo checkout/i }),
+      ).toBeInTheDocument();
+    });
+  });
 });

@@ -11,6 +11,9 @@ login path as everything else rather than a shortcut around it.
 The background tick runs every **15 seconds** here rather than the deployed fifteen minutes, so
 queued work resolves while you are watching it.
 
+**Premium is buyable here**, with no merchant account and no card. The stack runs a payment
+provider that takes no money — see *Buying premium* below.
+
 ## Who you can be
 
 | | |
@@ -67,3 +70,28 @@ docker compose -p patreonplanner-demo -f docker-compose.demo.yml down -v
 
 The volume is kept between runs otherwise, so a playtester who restarts finds their board where
 they left it. The seed is idempotent — running it twice changes nothing.
+
+## Buying premium
+
+Go to **/premium** and press **Subscribe**. That lands on a deliberately ugly stand-in for the
+payment provider's own page, with a button for each thing a subscription can do:
+
+| | |
+| --- | --- |
+| **Pay $5.00** | Entitled immediately, with the payment listed under *Payments* on the premium page. |
+| **Card declined** | Nothing recorded at all — a declined card never reaches the merchant's webhook, so there is no subscription and no receipt. |
+| **Pay, then let the renewal fail** | `PAST_DUE`. Access continues through a five-day grace window, because a failed card is usually a card that needs updating rather than somebody leaving. |
+| **Pay, then cancel** | Access runs to the end of the period they paid for. Cancelling is not a refund. |
+| **Refund the last order** | Revoked immediately, with **no** grace window — otherwise a refund would be a way to keep both the premium and the money. |
+
+Once subscribed, the premium page keeps a **Demo payment controls** panel so the later outcomes
+stay reachable; a real provider never shows it.
+
+None of this is a shortcut. Each button signs a payload and posts it at the same webhook route a
+real provider posts to, so the demo exercises signature verification, the idempotency key, the
+parse, the subscription upsert and the entitlement projection. To see that it is real entitlement
+rather than a page saying so, open any board's **notification settings** afterwards: the
+per-status checkboxes are premium-only and read the projection the webhook wrote.
+
+Everything the fake writes is stamped `provider = 'fake'`, so it stays distinguishable from real
+money if this database ever outlives the demo.

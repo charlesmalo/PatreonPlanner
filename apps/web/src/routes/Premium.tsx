@@ -36,6 +36,7 @@ const STATUS_LABELS: Record<string, string> = {
  */
 export function Premium() {
   const [available, setAvailable] = useState(false);
+  const [sandbox, setSandbox] = useState(false);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,10 +46,13 @@ export function Premium() {
   useEffect(() => {
     let cancelled = false;
     api
-      .get<{ available: boolean; subscription: Subscription | null }>('/billing/subscription')
+      .get<{ available: boolean; sandbox: boolean; subscription: Subscription | null }>(
+        '/billing/subscription',
+      )
       .then((state) => {
         if (cancelled) return;
         setAvailable(state.available);
+        setSandbox(state.sandbox);
         setSubscription(state.subscription);
       })
       .catch(() => {
@@ -124,6 +128,25 @@ export function Premium() {
           Subscriptions are not available on this instance.
         </p>
       )}
+      {sandbox && (
+        <div className="mt-6 rounded border-2 border-dashed border-amber-600 p-3 text-sm">
+          <h2 className="font-medium">Demo payment controls</h2>
+          <p className="mt-1 text-slate-600 dark:text-slate-300">
+            This instance is not connected to a payment provider. Nothing here charges anybody, and
+            no card is ever asked for. Use these to walk through what a subscription does — paying,
+            a failed renewal, cancelling, a refund.
+          </p>
+          <button
+            type="button"
+            onClick={subscribe}
+            disabled={busy}
+            className="mt-2 rounded border border-slate-400 px-3 py-1.5 font-medium disabled:opacity-50 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:hover:bg-slate-800"
+          >
+            Open the demo checkout
+          </button>
+        </div>
+      )}
+
       {receipts.length > 0 && (
         <div className="mt-6">
           <h2 className="text-sm font-medium">Payments</h2>
