@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EntitlementService } from './entitlement.service';
-import type { SubscriptionEvent } from './lemon-squeezy.adapter';
+import type { SubscriptionEvent } from './payment-provider';
 
 @Injectable()
 export class BillingService {

@@ -4,23 +4,22 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Inject,
   Post,
   Req,
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import { ConfigService } from '../config/config.module';
 import { CurrentUser, CurrentUserPayload, SessionGuard } from '../session/session.guard';
 import { BillingService } from './billing.service';
-import { LemonSqueezyAdapter } from './lemon-squeezy.adapter';
+import { PAYMENT_PROVIDER, type PaymentProvider } from './payment-provider';
 
 @Controller('billing')
 export class BillingController {
   constructor(
-    private readonly config: ConfigService,
     private readonly billing: BillingService,
-    private readonly adapter: LemonSqueezyAdapter,
+    @Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider,
   ) {}
 
   /**
@@ -33,7 +32,7 @@ export class BillingController {
   @Post('webhook')
   @HttpCode(HttpStatus.OK)
   async webhook(@Req() request: Request & { rawBody?: Buffer }) {
-    const secret = this.config.get('LEMONSQUEEZY_WEBHOOK_SECRET');
+    const secret = this.provider.signingSecret();
     // No secret means no way to tell a real delivery from anybody's POST. Refusing is the only
     // safe answer; an instance that does not sell anything has no webhooks to receive.
     if (!secret) throw new UnauthorizedException();
@@ -42,30 +41,30 @@ export class BillingController {
     if (!rawBody) throw new BadRequestException();
 
     const signature = header(request, 'x-signature');
-    if (!this.adapter.verify(rawBody, signature, secret)) {
+    if (!this.provider.verify(rawBody, signature, secret)) {
       throw new UnauthorizedException();
     }
 
     // Refunds first: they are an order event, and the subscription parse would reject one anyway.
-    const refund = this.adapter.parseRefund(request.body);
+    const refund = this.provider.parseRefund(request.body);
     if (refund) {
       const applied = await this.billing.applyRefund(
-        this.adapter.provider,
-        this.adapter.idempotencyKey(rawBody),
+        this.provider.provider,
+        this.provider.idempotencyKey(rawBody),
         refund,
       );
       return { ok: true, handled: applied };
     }
 
-    const event = this.adapter.parse(request.body);
+    const event = this.provider.parse(request.body);
     // Something we do not act on, or a shape we do not recognise. Answered 2xx deliberately: a
     // 4xx makes the provider retry it forever and eventually disable the endpoint, and neither
     // outcome is improved by us insisting.
     if (!event) return { ok: true, handled: false };
 
     const applied = await this.billing.applyEvent(
-      this.adapter.provider,
-      this.adapter.idempotencyKey(rawBody),
+      this.provider.provider,
+      this.provider.idempotencyKey(rawBody),
       event,
     );
     return { ok: true, handled: applied };
@@ -82,27 +81,20 @@ export class BillingController {
   async subscription(@CurrentUser() user: CurrentUserPayload) {
     const subscription = await this.billing.forUser(user.id);
     return {
-      available: this.config.get('LEMONSQUEEZY_CHECKOUT_URL') !== undefined,
+      // Asked of the provider rather than of config: which environment variable makes an instance
+      // able to sell is the provider's business, and a second answer to it here would drift.
+      available: this.provider.checkoutUrlFor(user.id) !== null,
       subscription,
     };
   }
 
-  /**
-   * Where to send somebody who wants to subscribe.
-   *
-   * Their user id rides along as the provider's custom data, which is what the webhook reads back
-   * — never an email address. Matching a payment to an account by email is how one person's
-   * money ends up entitling somebody else's account.
-   */
+  /** Where to send somebody who wants to subscribe. The provider decides what that URL is. */
   @Post('checkout')
   @UseGuards(SessionGuard)
   checkout(@CurrentUser() user: CurrentUserPayload) {
-    const base = this.config.get('LEMONSQUEEZY_CHECKOUT_URL');
-    if (!base) throw new BadRequestException('Subscriptions are not available here');
-
-    const url = new URL(base);
-    url.searchParams.set('checkout[custom][user_id]', user.id);
-    return { url: url.toString() };
+    const url = this.provider.checkoutUrlFor(user.id);
+    if (!url) throw new BadRequestException('Subscriptions are not available here');
+    return { url };
   }
 }
 

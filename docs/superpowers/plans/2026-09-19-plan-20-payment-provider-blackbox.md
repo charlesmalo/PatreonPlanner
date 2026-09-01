@@ -125,7 +125,7 @@ Returning a reason rather than throwing: the stand-in in Task 4 needs to render 
 
 **Files:**
 - Create: `apps/api/src/billing/fake/fake-payment-provider.ts`
-- Test: `apps/api/test/fake-payment-provider.spec.ts`
+- Test: `apps/api/test/fake-payment-provider.e2e-spec.ts`
 
 Its dialect, chosen to share nothing with Lemon Squeezy's:
 
@@ -218,7 +218,7 @@ with the merchant of record.
 ### Task 6: Selection, and the guard
 
 **Files:** `config/config.schema.ts`, `billing/billing.module.ts`
-**Test:** `apps/api/test/billing-provider-selection.spec.ts`
+**Test:** `apps/api/test/billing-provider-selection.e2e-spec.ts`
 
 ```ts
 BILLING_PROVIDER: z.enum(['none', 'fake', 'lemonsqueezy']).default('none'),
@@ -233,7 +233,7 @@ FAKE_BILLING_SECRET: z.string().min(1).default('fake-billing-secret'),
 
 ### Task 7: The conformance suite
 
-**Files:** `apps/api/test/payment-provider-conformance.spec.ts`
+**Files:** `apps/api/test/payment-provider-conformance.e2e-spec.ts`
 
 The point of the whole plan: one `describe.each` over both implementations, asserting the contract
 every provider owes regardless of dialect — a valid payload round-trips, an unmapped status is null,

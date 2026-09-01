@@ -1,7 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EntitlementService } from './entitlement.service';
-import { LemonSqueezyAdapter } from './lemon-squeezy.adapter';
+import { PAYMENT_PROVIDER, type PaymentProvider } from './payment-provider';
 
 /** Small: each one is a request to the provider, and the tick is shared with six other jobs. */
 export const RECONCILE_BATCH = 20;
@@ -22,7 +22,7 @@ export class BillingReconcileJob {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly adapter: LemonSqueezyAdapter,
+    @Inject(PAYMENT_PROVIDER) private readonly adapter: PaymentProvider,
     private readonly entitlement: EntitlementService,
   ) {}
 
