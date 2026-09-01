@@ -35,14 +35,24 @@ tests passing**, typecheck clean across every package.
 
 ## Active Task
 
-Nothing in flight. The Phase 2 sequence is complete and nothing in §1–§11 of the
-design is left unbuilt; **Amendment A** adds two premium features that are
-designed but not planned — carrying a list across boards, and following what
-moves. Its A.5 gives the order.
+Nothing in flight, and nothing designed but unbuilt.
 
-Nothing else is outstanding,
-and every recorded debt item has been cleared or has its reason recorded in
-place. Open questions below are the engineer's to answer.
+The Phase 2 sequence is complete, and so is **Amendment A** — every step of its
+A.5, including the two features it added (carrying a list across boards, and
+following what moves) and the email digests that were blocked on a provider
+decision until it was made.
+
+What remains needs access this repository does not have, and each has a document:
+
+|                                  |                                             |
+| -------------------------------- | ------------------------------------------- |
+| A Lemon Squeezy sandbox purchase | `docs/billing-sandbox-runbook.md`           |
+| SPF and DKIM on a sending domain | `docs/email-setup.md`                       |
+| `VITE_DONATION_URL`              | the donation page is built and switched off |
+
+The first is the most consequential: billing fails **closed but silent**, so a
+payload that does not match means a subscriber pays and gets nothing, with
+nothing in the logs to say so.
 
 ## Open Questions Blocking Work
 
@@ -54,13 +64,18 @@ place. Open questions below are the engineer's to answer.
 
 ## Known Debt
 
-- **Web coverage is not wired.** The API gate is live (`cd apps/api && pnpm
-coverage`); vitest needs `@vitest/coverage-v8`, a new dependency and so the
-  engineer's call.
+- **Web coverage is not wired.** The API gate is live
+  (`cd apps/api && pnpm coverage`); vitest needs `@vitest/coverage-v8`, a new
+  dependency and so the engineer's call.
 - ~~`recommendations.service.ts` past the 300-line limit~~ — split into seven
   modules (plan 11); `hooks.ts` split into three. Two files remain over:
   `SubmitForm.tsx` (378) and `ReviewQueue.tsx` (345), each a deliberate stop
   with its reasoning recorded in `04_CODE_STANDARDS.md` §1.
+- **Bounce and complaint handling is not built.** Providers suspend senders who
+  ignore them. Not urgent: the free tier caps volume at 100 emails a day, and it
+  needs Resend's webhook contract — the same unverified-shape problem billing
+  had, where reading their documentation first found eight bugs across three
+  attempts. Worth doing that before writing any of it.
 - **Two migrations are not rolling-deploy safe** — `ThemeSource` (backfill then
   `DROP COLUMN`) and `link_candidates` (backfill then `SET NOT NULL`), each in
   one step. Harmless with nothing deployed, and deliberately _not_ fixed in
@@ -78,4 +93,5 @@ coverage`); vitest needs `@vitest/coverage-v8`, a new dependency and so the
 | 2026-08-27 | Amendment A agreed; following-what-moves shipped (plans 12, 13)                 |
 | 2026-08-27 | Carry-over shipped (plan 14); Amendment A.5 steps 1-3 complete                  |
 | 2026-08-27 | Settings sync shipped (plan 15); A.5 step 4 is all that remains, and is blocked |
+| 2026-09-01 | Amendment A complete: digests, order refunds, interest tagging, follows, demo   |
 | 2026-08-27 | Cosmetics shipped (plan 16); every unblocked item in Amendment A is built       |
