@@ -1,0 +1,26 @@
+# Runs the demo stack against a real Lemon Squeezy **test-mode** store instead of the provider
+# that takes no money.
+#
+#   docker compose -p patreonplanner-demo \
+#     -f docker-compose.demo.yml -f docker-compose.lemonsqueezy.yml up -d
+#
+# The three secrets come from a `.env` file beside this one, which is gitignored. Nothing in this
+# file is a secret, so it is safe to commit — that split is the point of it existing.
+#
+# See docs/billing-sandbox-runbook.md.
+services:
+  api:
+    environment:
+      # Back to the real adapter. The fake one is refused explicitly rather than left to the
+      # base file's value, so reading this override tells you which provider is running without
+      # having to diff it against the other file.
+      BILLING_PROVIDER: lemonsqueezy
+      ALLOW_FAKE_BILLING_IN_PRODUCTION: 'false'
+
+      LEMONSQUEEZY_WEBHOOK_SECRET: ${LEMONSQUEEZY_WEBHOOK_SECRET:?set it in .env}
+      LEMONSQUEEZY_CHECKOUT_URL: ${LEMONSQUEEZY_CHECKOUT_URL:?set it in .env}
+      LEMONSQUEEZY_API_KEY: ${LEMONSQUEEZY_API_KEY:?set it in .env}
+      # Note what is *not* here. WEB_ORIGIN and API_PUBLIC_URL stay on localhost: you still browse
+      # the app locally, and the tunnel exists only so Lemon Squeezy can reach the webhook route
+      # from outside. API_PUBLIC_URL is read solely by the fake provider's checkout stand-in,
+      # which this file switches off.

@@ -59,11 +59,24 @@ they stay attributable rather than being mistaken for real money afterwards.
 
 ## 2. Configure the API
 
+Put the three secrets in `.env` at the repo root, which is gitignored:
+
 ```
 LEMONSQUEEZY_WEBHOOK_SECRET=<the signing secret you chose>
 LEMONSQUEEZY_CHECKOUT_URL=<the product's checkout URL>
 LEMONSQUEEZY_API_KEY=<the test-mode API key>
 ```
+
+Then bring the demo stack up with the override that reads them:
+
+```bash
+docker compose -p patreonplanner-demo \
+  -f docker-compose.demo.yml -f docker-compose.lemonsqueezy.yml up -d
+```
+
+That file switches `BILLING_PROVIDER` back to `lemonsqueezy` and holds no secrets itself, so it is
+committed while `.env` is not. Compose **refuses to start** if any of the three is missing rather
+than booting an instance that silently cannot sell.
 
 All three are optional as a set. Without them the app runs exactly as it does now — nobody is
 premium, every gate stays closed, and the webhook refuses because it has no secret to verify
@@ -71,8 +84,19 @@ against.
 
 ## 3. Reaching a local API
 
-Lemon Squeezy has to be able to POST to you. If the API is on your machine, put a tunnel in front
-of it and use the tunnel's URL as the webhook endpoint.
+Lemon Squeezy has to be able to POST to you, so the webhook route needs a public address:
+
+```bash
+cloudflared tunnel --url http://localhost:8081
+```
+
+Use the printed `https://….trycloudflare.com` as the webhook endpoint's host. It lasts as long as
+that command runs.
+
+**Only the webhook needs it.** You still browse the app at `localhost:8081`, and `WEB_ORIGIN` and
+`PATREON_REDIRECT_URI` stay as they are — pointing them at the tunnel would break the OAuth
+redirect for no gain. `API_PUBLIC_URL` is read solely by the fake provider's checkout stand-in,
+which this configuration switches off, so it is irrelevant here.
 
 ## 4. Buy it
 
