@@ -14,6 +14,7 @@ import type { Request } from 'express';
 import { CurrentUser, CurrentUserPayload, SessionGuard } from '../session/session.guard';
 import { BillingService } from './billing.service';
 import { PAYMENT_PROVIDER, type PaymentProvider } from './payment-provider';
+import { ReceiptService } from './receipt.service';
 import { WebhookIngestService } from './webhook-ingest.service';
 
 @Controller('billing')
@@ -21,6 +22,7 @@ export class BillingController {
   constructor(
     private readonly billing: BillingService,
     private readonly ingest: WebhookIngestService,
+    private readonly receipts: ReceiptService,
     @Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider,
   ) {}
 
@@ -66,6 +68,18 @@ export class BillingController {
       available: this.provider.checkoutUrlFor(user.id) !== null,
       subscription,
     };
+  }
+
+  /**
+   * This reader's payment history.
+   *
+   * Their own only, scoped by the session rather than by anything the caller sends — a receipts
+   * endpoint that takes a user id is a receipts endpoint that reads somebody else's.
+   */
+  @Get('receipts')
+  @UseGuards(SessionGuard)
+  async receiptsFor(@CurrentUser() user: CurrentUserPayload) {
+    return { receipts: await this.receipts.forUser(user.id) };
   }
 
   /** Where to send somebody who wants to subscribe. The provider decides what that URL is. */

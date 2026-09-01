@@ -8,6 +8,7 @@ import { FakeCheckoutController } from './fake/fake-checkout.controller';
 import { FakePaymentProvider } from './fake/fake-payment-provider';
 import { LemonSqueezyAdapter } from './lemon-squeezy.adapter';
 import { PAYMENT_PROVIDER } from './payment-provider';
+import { ReceiptService } from './receipt.service';
 import { selectPaymentProvider } from './select-payment-provider';
 import { WebhookIngestService } from './webhook-ingest.service';
 
@@ -22,6 +23,7 @@ import { WebhookIngestService } from './webhook-ingest.service';
     BillingService,
     BillingReconcileJob,
     WebhookIngestService,
+    ReceiptService,
     LemonSqueezyAdapter,
     FakePaymentProvider,
     {

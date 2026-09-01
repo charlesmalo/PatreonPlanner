@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EntitlementService } from './entitlement.service';
+import { ReceiptService } from './receipt.service';
 import type { SubscriptionEvent } from './payment-provider';
 
 @Injectable()
@@ -10,6 +11,7 @@ export class BillingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly entitlement: EntitlementService,
+    private readonly receipts: ReceiptService,
   ) {}
 
   /**
@@ -144,6 +146,21 @@ export class BillingService {
             ...(event.providerOrderId ? { providerOrderId: event.providerOrderId } : {}),
           },
         });
+        // In the same transaction as the subscription write. A receipt for a change that was
+        // rolled back is a charge in somebody's history that never happened.
+        //
+        // Only when the event actually carried one: a cancellation and a reconciliation read move
+        // a subscription without taking money, and minting a receipt for either would invent a
+        // payment.
+        if (event.payment) {
+          await this.receipts.record(
+            tx,
+            provider,
+            event.userId,
+            event.providerOrderId,
+            event.payment,
+          );
+        }
       });
     } catch (error) {
       // Two deliveries of the same event racing each other: one inserted the record, the other
