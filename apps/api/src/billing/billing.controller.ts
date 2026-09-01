@@ -14,11 +14,13 @@ import type { Request } from 'express';
 import { CurrentUser, CurrentUserPayload, SessionGuard } from '../session/session.guard';
 import { BillingService } from './billing.service';
 import { PAYMENT_PROVIDER, type PaymentProvider } from './payment-provider';
+import { WebhookIngestService } from './webhook-ingest.service';
 
 @Controller('billing')
 export class BillingController {
   constructor(
     private readonly billing: BillingService,
+    private readonly ingest: WebhookIngestService,
     @Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider,
   ) {}
 
@@ -28,46 +30,24 @@ export class BillingController {
    * Unauthenticated by design — the provider has no session — and therefore authorised entirely
    * by the signature over the raw bytes. Everything downstream trusts this endpoint, so it is the
    * one place in the application where getting verification wrong hands out entitlement.
+   *
+   * The work is in `WebhookIngestService`, shared with the fake provider's checkout stand-in. All
+   * this does is turn its reasons back into HTTP.
    */
   @Post('webhook')
   @HttpCode(HttpStatus.OK)
   async webhook(@Req() request: Request & { rawBody?: Buffer }) {
-    const secret = this.provider.signingSecret();
-    // No secret means no way to tell a real delivery from anybody's POST. Refusing is the only
-    // safe answer; an instance that does not sell anything has no webhooks to receive.
-    if (!secret) throw new UnauthorizedException();
+    const result = await this.ingest.ingest(
+      request.rawBody,
+      header(request, 'x-signature'),
+      request.body,
+    );
 
-    const rawBody = request.rawBody;
-    if (!rawBody) throw new BadRequestException();
-
-    const signature = header(request, 'x-signature');
-    if (!this.provider.verify(rawBody, signature, secret)) {
+    if (!result.ok) {
+      if (result.reason === 'no-body') throw new BadRequestException();
       throw new UnauthorizedException();
     }
-
-    // Refunds first: they are an order event, and the subscription parse would reject one anyway.
-    const refund = this.provider.parseRefund(request.body);
-    if (refund) {
-      const applied = await this.billing.applyRefund(
-        this.provider.provider,
-        this.provider.idempotencyKey(rawBody),
-        refund,
-      );
-      return { ok: true, handled: applied };
-    }
-
-    const event = this.provider.parse(request.body);
-    // Something we do not act on, or a shape we do not recognise. Answered 2xx deliberately: a
-    // 4xx makes the provider retry it forever and eventually disable the endpoint, and neither
-    // outcome is improved by us insisting.
-    if (!event) return { ok: true, handled: false };
-
-    const applied = await this.billing.applyEvent(
-      this.provider.provider,
-      this.provider.idempotencyKey(rawBody),
-      event,
-    );
-    return { ok: true, handled: applied };
+    return { ok: true, handled: result.handled };
   }
 
   /**

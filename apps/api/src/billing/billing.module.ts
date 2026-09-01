@@ -5,6 +5,7 @@ import { BillingService } from './billing.service';
 import { EntitlementService } from './entitlement.service';
 import { LemonSqueezyAdapter } from './lemon-squeezy.adapter';
 import { PAYMENT_PROVIDER } from './payment-provider';
+import { WebhookIngestService } from './webhook-ingest.service';
 
 @Module({
   controllers: [BillingController],
@@ -12,6 +13,7 @@ import { PAYMENT_PROVIDER } from './payment-provider';
     EntitlementService,
     BillingService,
     BillingReconcileJob,
+    WebhookIngestService,
     LemonSqueezyAdapter,
     // useExisting rather than useClass: one instance answers both, so a test that resolves the
     // concrete adapter and stubs a method is stubbing the same object the controller holds.
