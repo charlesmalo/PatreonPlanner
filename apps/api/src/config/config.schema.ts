@@ -17,6 +17,21 @@ export const configSchema = z.object({
   LEMONSQUEEZY_API_KEY: z.string().min(1).optional(),
   LEMONSQUEEZY_API_BASE_URL: z.string().url().default('https://api.lemonsqueezy.com'),
 
+  /**
+   * Where this API is reachable from a browser. Only the fake provider's checkout stand-in needs
+   * it, because it is the one checkout URL this application serves itself — a real provider hosts
+   * its own and tells us the address.
+   */
+  API_PUBLIC_URL: z.string().url().default('http://localhost:3000'),
+  /**
+   * What the fake provider signs its payloads with.
+   *
+   * It has a default because it protects nothing: there is no money behind it, and both the signer
+   * and the verifier are this process. The code path it drives is the real one, which is the point
+   * — a fake purchase goes through genuine HMAC verification rather than around it.
+   */
+  FAKE_BILLING_SECRET: z.string().min(1).default('fake-billing-secret'),
+
   // Digests. Optional as a set: no key means no email, and the app runs exactly as it does now.
   // How often the background tick fires. Fifteen minutes suits a deployment; the demo stack sets
   // it to seconds, because a playtester who queues something and watches nothing happen for a
