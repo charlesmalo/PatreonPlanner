@@ -374,4 +374,29 @@ describe('Billing webhook (integration)', () => {
       expect(await isPremium()).toBe(false);
     });
   });
+
+  /**
+   * The fake provider's stand-in must not be reachable here. This suite boots with the real
+   * provider, which is the only context that can prove it — the fake-checkout suite runs with
+   * BILLING_PROVIDER=fake and cannot see this at all.
+   */
+  describe('the fake checkout route on a real-provider instance', () => {
+    it('does not exist', async () => {
+      await request(ctx.app.getHttpServer())
+        .get('/api/v1/billing/fake-checkout')
+        .query({ user_id: userId })
+        .expect(404);
+    });
+
+    it('cannot be posted to either, so no premium is grantable through it', async () => {
+      // Exactly 404, not merely "refused": the CSRF exemption is conditional on the fake provider
+      // being active, so on this instance the middleware answers 403 first if the route is
+      // reachable at all. A 403 here would mean the route exists and CSRF is the only thing
+      // stopping it, which is a much weaker guarantee than the one being claimed.
+      await request(ctx.app.getHttpServer())
+        .post('/api/v1/billing/fake-checkout')
+        .send({ user_id: userId, outcome: 'paid' })
+        .expect(403);
+    });
+  });
 });

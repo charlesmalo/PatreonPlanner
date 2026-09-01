@@ -18,6 +18,19 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 // else. A prefix here would have quietly exempted it.
 const CSRF_EXEMPT_PREFIXES = ['/webhooks/patreon/'];
 const CSRF_EXEMPT_PATHS = ['/api/v1/billing/webhook'];
+/**
+ * The fake provider's checkout stand-in, exempt *only* on an instance actually running it.
+ *
+ * It breaks the rule above — the stand-in's form post is a plain browser form, so nothing has
+ * verified a signature by the time it arrives — and it is listed separately to keep that visible
+ * rather than buried in the set beside the honest entries.
+ *
+ * What makes it acceptable is what the fake provider already is. An instance running it grants
+ * premium to anyone who asks, by design and with two config keys saying so; CSRF on this route
+ * would protect something that is being given away on the next line. On every other instance the
+ * exemption does not exist and the route answers 404.
+ */
+const FAKE_CHECKOUT_PATH = '/api/v1/billing/fake-checkout';
 
 /**
  * Double-submit CSRF over signed, session-bound tokens. The token sits in a cookie the SPA can
@@ -36,7 +49,8 @@ export class CsrfMiddleware implements NestMiddleware {
     const path = req.originalUrl.split('?')[0];
     if (
       CSRF_EXEMPT_PREFIXES.some((prefix) => req.originalUrl.startsWith(prefix)) ||
-      CSRF_EXEMPT_PATHS.includes(path)
+      CSRF_EXEMPT_PATHS.includes(path) ||
+      (path === FAKE_CHECKOUT_PATH && this.config.get('BILLING_PROVIDER') === 'fake')
     ) {
       return next();
     }

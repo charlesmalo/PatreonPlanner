@@ -22,6 +22,25 @@ export const configSchema = z.object({
    * it, because it is the one checkout URL this application serves itself — a real provider hosts
    * its own and tells us the address.
    */
+  /**
+   * Which payment provider this instance runs.
+   *
+   * Defaults to the real one. An unconfigured `lemonsqueezy` sells nothing and refuses every
+   * webhook, which is the correct state for development, for CI, and for anybody self-hosting who
+   * does not want to sell anything — so there is no separate "none".
+   */
+  BILLING_PROVIDER: z.enum(['lemonsqueezy', 'fake']).default('lemonsqueezy'),
+  /**
+   * Permission for the one combination that is otherwise refused at boot.
+   *
+   * The fake provider grants premium to anyone who asks. Selecting it under NODE_ENV=production
+   * aborts the boot unless this is *also* set — two keys rather than one, because one is a typo
+   * away from giving the product away, and a hosted demo is a legitimate reason to want it.
+   */
+  ALLOW_FAKE_BILLING_IN_PRODUCTION: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
   API_PUBLIC_URL: z.string().url().default('http://localhost:3000'),
   /**
    * What the fake provider signs its payloads with.
