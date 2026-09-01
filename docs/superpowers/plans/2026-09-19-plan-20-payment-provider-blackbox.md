@@ -89,14 +89,14 @@ export interface PaymentProvider {
 `LEMONSQUEEZY_WEBHOOK_SECRET` itself, which is the one remaining place outside the adapter that
 names a provider.
 
-- [ ] **Step 1:** Write `payment-provider-port.e2e-spec.ts` asserting `LemonSqueezyAdapter` satisfies every
+- [x] **Step 1:** Write `payment-provider-port.e2e-spec.ts` asserting `LemonSqueezyAdapter` satisfies every
       member of the port, and that `checkoutUrlFor` appends `checkout[custom][user_id]`.
-- [ ] **Step 2:** Run it. Expect FAIL — `checkoutUrlFor` does not exist.
-- [ ] **Step 3:** Add `checkoutUrlFor` and `signingSecret` to the adapter, moving the body of
+- [x] **Step 2:** Run it. Expect FAIL — `checkoutUrlFor` does not exist.
+- [x] **Step 3:** Add `checkoutUrlFor` and `signingSecret` to the adapter, moving the body of
       `BillingController.checkout` and the secret read verbatim.
-- [ ] **Step 4:** Point the controller and reconcile job at `@Inject(PAYMENT_PROVIDER)`.
-- [ ] **Step 5:** Run `pnpm --filter api test` and `pnpm -r typecheck`. Both green.
-- [ ] **Step 6:** Commit `refactor(billing): a port the provider sits behind`.
+- [x] **Step 4:** Point the controller and reconcile job at `@Inject(PAYMENT_PROVIDER)`.
+- [x] **Step 5:** Run `pnpm --filter api test` and `pnpm -r typecheck`. Both green.
+- [x] **Step 6:** Commit `refactor(billing): a port the provider sits behind`.
 
 ### Task 2: One ingest path
 
@@ -115,11 +115,11 @@ async ingest(rawBody: Buffer, signature: string | undefined): Promise<IngestResu
 Returning a reason rather than throwing: the stand-in in Task 4 needs to render a decline, and an
 `UnauthorizedException` thrown three layers down is not a thing a page can render.
 
-- [ ] **Step 1:** Move the body of `BillingController.webhook` into `ingest`, translating each throw
+- [x] **Step 1:** Move the body of `BillingController.webhook` into `ingest`, translating each throw
       into a reason. The controller re-throws so its HTTP contract is byte-for-byte unchanged.
-- [ ] **Step 2:** Run the existing webhook suite. It must pass **without edits** — if it needs
+- [x] **Step 2:** Run the existing webhook suite. It must pass **without edits** — if it needs
       changing, behaviour moved, which this step is not allowed to do.
-- [ ] **Step 3:** Commit `refactor(billing): one path from payload to entitlement`.
+- [x] **Step 3:** Commit `refactor(billing): one path from payload to entitlement`.
 
 ### Task 3: The fake provider
 
@@ -146,13 +146,13 @@ Its dialect, chosen to share nothing with Lemon Squeezy's:
 `clawed_back → REFUNDED`. Anything else returns null, for the same reason the real one does: an
 unmapped status must never become ACTIVE.
 
-- [ ] **Step 1:** Tests first — one per row of that map, plus: unknown state → null, missing
+- [x] **Step 1:** Tests first — one per row of that map, plus: unknown state → null, missing
       `period_ends` → null, non-object body → null, `null` body → null, wrong signature → false,
       and `idempotencyKey` stable across two identical buffers and different across differing ones.
-- [ ] **Step 2:** Run. Expect FAIL — the file does not exist.
-- [ ] **Step 3:** Implement. `verify` and `idempotencyKey` are the same HMAC/SHA-256 shape as the
+- [x] **Step 2:** Run. Expect FAIL — the file does not exist.
+- [x] **Step 3:** Implement. `verify` and `idempotencyKey` are the same HMAC/SHA-256 shape as the
       real one; everything else is its own.
-- [ ] **Step 4:** Green. Commit `feat(billing): a payment provider that takes no money`.
+- [x] **Step 4:** Green. Commit `feat(billing): a payment provider that takes no money`.
 
 ### Task 4: The checkout stand-in
 
@@ -172,13 +172,13 @@ signs it with the fake's secret, and hands it to `WebhookIngestService.ingest`, 
 | Renewal fails | `PAST_DUE`, and the five-day grace window |
 | Refund | Immediate revocation with no grace |
 
-- [ ] **Step 1:** Integration tests: pay → `premiumUntil` in the future and one `Subscription` row;
+- [x] **Step 1:** Integration tests: pay → `premiumUntil` in the future and one `Subscription` row;
       pay twice with the same payload → still exactly one `ProcessedWebhookEvent`; decline → no
       subscription row and `premiumUntil` still null; refund after pay → `premiumUntil` null.
-- [ ] **Step 2:** Run. Expect FAIL — route not found.
-- [ ] **Step 3:** Implement. The `user_id` comes from the query string and is **never** trusted for
+- [x] **Step 2:** Run. Expect FAIL — route not found.
+- [x] **Step 3:** Implement. The `user_id` comes from the query string and is **never** trusted for
       anything but building the payload — the same webhook path re-checks that the user exists.
-- [ ] **Step 4:** Green. Commit `feat(billing): a checkout page that charges nobody`.
+- [x] **Step 4:** Green. Commit `feat(billing): a checkout page that charges nobody`.
 
 ### Task 5: Receipts
 
@@ -210,10 +210,10 @@ There is deliberately no name, email, address, card brand or last four on this m
 answers "what did this account pay, and where do I go to see the real one" — everything else stays
 with the merchant of record.
 
-- [ ] **Step 1:** Test that paying writes exactly one receipt, that replaying the same payment writes
+- [x] **Step 1:** Test that paying writes exactly one receipt, that replaying the same payment writes
       no second one, and that `GET /billing/receipts` returns only the caller's own.
-- [ ] **Step 2:** Run. FAIL. **Step 3:** Migrate and implement. **Step 4:** Green.
-- [ ] **Step 5:** Premium page lists them. Commit `feat(billing): receipts, without the person on them`.
+- [x] **Step 2:** Run. FAIL. **Step 3:** Migrate and implement. **Step 4:** Green.
+- [x] **Step 5:** Premium page lists them. Commit `feat(billing): receipts, without the person on them`.
 
 ### Task 6: Selection, and the guard
 
@@ -226,10 +226,10 @@ ALLOW_FAKE_BILLING_IN_PRODUCTION: z.enum(['true','false']).default('false').tran
 FAKE_BILLING_SECRET: z.string().min(1).default('fake-billing-secret'),
 ```
 
-- [ ] **Step 1:** Test that `fake` + `production` + flag unset **throws at module construction**, that
+- [x] **Step 1:** Test that `fake` + `production` + flag unset **throws at module construction**, that
       the same with the flag set constructs, and that `none` leaves checkout unavailable.
-- [ ] **Step 2:** FAIL. **Step 3:** Implement as a factory provider that throws. **Step 4:** Green.
-- [ ] **Step 5:** Commit `feat(billing): two keys to fake a payment in production`.
+- [x] **Step 2:** FAIL. **Step 3:** Implement as a factory provider that throws. **Step 4:** Green.
+- [x] **Step 5:** Commit `feat(billing): two keys to fake a payment in production`.
 
 ### Task 7: The conformance suite
 
@@ -241,14 +241,61 @@ a `null` body is null, a tampered byte fails `verify`, the same bytes give the s
 and a cancelled subscription reports the date access *ends* rather than the renewal that will not
 happen. When Lemon Squeezy is wired for real, or replaced, this is the gate.
 
-- [ ] **Step 1:** Write it. **Step 2:** Both implementations pass, or the one that does not is wrong.
-- [ ] **Step 3:** Commit `test(billing): the contract both providers owe`.
+- [x] **Step 1:** Write it. **Step 2:** Both implementations pass, or the one that does not is wrong.
+- [x] **Step 3:** Commit `test(billing): the contract both providers owe`.
 
 ### Task 8: Demo wiring and docs
 
 **Files:** `docker-compose.demo.yml`, `e2e/tests/journey.spec.ts`, `docs/billing-sandbox-runbook.md`, `docs/demo-walkthrough.md`, `coding_agent/PROGRESS_TRACKER.md`
 
-- [ ] **Step 1:** Demo stack sets `BILLING_PROVIDER=fake`. An e2e leg buys premium and sees a
+- [x] **Step 1:** Demo stack sets `BILLING_PROVIDER=fake`. An e2e leg buys premium and sees a
       premium-only control unlock.
-- [ ] **Step 2:** Runbook gains a section on switching back to the real provider.
-- [ ] **Step 3:** Commit `feat(demo): premium you can actually buy in the demo`.
+- [x] **Step 2:** Runbook gains a section on switching back to the real provider.
+- [x] **Step 3:** Commit `feat(demo): premium you can actually buy in the demo`.
+
+---
+
+## What it found
+
+Every one of these came from mutation testing or from running the thing, not from review.
+
+**The guard fired on its own author.** Wiring the demo, I wrote a comment asserting `NODE_ENV` was
+not production in that image. It is — a production image sets it, correctly — and the API refused
+to boot with the message it was written to give. The escape hatch exists for exactly this case, and
+needing it in both stacks is the design working rather than a nuisance.
+
+**`checkoutUrlFor` threw on an unparseable base URL**, and it runs inside `GET /billing/subscription`
+— so a malformed environment variable would have answered 500 on the one page whose job is to
+report whether subscribing is possible. It now fails closed to null.
+
+**Empty strings passed every guard that only checked for absence.** Three survivors of the same
+shape in the fake provider. The worst was an empty subscription id: it is the unique key on the
+row, so two events carrying `''` would upsert over each other and one reader's subscription would
+quietly become another's.
+
+**Nothing tested that the stand-in 404s on a real-provider instance.** Removing the guard entirely
+changed no result, because the suite that would notice boots with the fake provider and cannot see
+it. That test now lives in the real-provider suite, where it can fail.
+
+**`skipDuplicates` was doing nothing observable.** The case it guards — two different events
+carrying one charge — is unreachable through the stand-in, because two identical payloads are
+already dropped upstream by the idempotency key. The test that kills the mutant drives the service
+directly.
+
+**`clearPremium` gave back less than it granted.** It nulled `premiumUntil` and left the
+`Subscription` row, so the purchase journey would have opened `/premium` already subscribed and
+passed without buying anything — green on a fresh database and green ever after.
+
+**Four mutations were invalid rather than survived**, and each would have read as coverage: two
+did not compile after a narrowing check was deleted, one changed both sides of the refund match so
+they still agreed, and one was `return 'ACTIVE' && null`, which still returns null. The harness
+itself reported "SUITE DID NOT RUN" for every mutation on its first outing, because jest's ANSI
+codes meant the output never matched `^Tests:`.
+
+## What is deliberately not here
+
+The stand-in's CSRF exemption is real and conditional. `csrf.middleware.ts` states an invariant —
+an exemption must never be wider than the signature-verified set — and a browser form post verifies
+no signature, so this genuinely breaks it. It is listed apart from the honest entries with that
+reasoning written down, and it exists only where `BILLING_PROVIDER=fake`. What makes it acceptable
+is that such an instance already grants premium to anyone who asks.
