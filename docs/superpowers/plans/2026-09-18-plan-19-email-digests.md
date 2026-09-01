@@ -57,23 +57,35 @@ So:
 
 ### Task 1: Who gets a digest, and what is in it
 
-- [ ] **Failing tests:** a reader who opted in with unread news gets one; a reader who did not opt in gets nothing however much news there is; an empty digest is not sent; news already read is not repeated; news since the last digest is included; the watermark does not move when the send fails; a reader with no address is skipped.
-- [ ] Schema, migration, `digest.service.ts`.
-- [ ] **Mutation-check:** sending to somebody who never opted in; sending an empty digest; advancing the watermark on failure.
-- [ ] Commit.
+- [x] **Failing tests:** a reader who opted in with unread news gets one; a reader who did not opt in gets nothing however much news there is; an empty digest is not sent; news already read is not repeated; news since the last digest is included; the watermark does not move when the send fails; a reader with no address is skipped.
+- [x] Schema, migration, `digest.service.ts`.
+- [x] **Mutation-check:** sending to somebody who never opted in; sending an empty digest; advancing the watermark on failure.
+- [x] Commit.
 
 ### Task 2: Actually sending it
 
-- [ ] **Failing tests:** the sender is called with the reader's address and a body naming what moved; no key configured means nothing is sent and nothing fails; a provider error is logged and does not stop the batch.
-- [ ] `email-sender.ts`, `resend.sender.ts`, `digest.job.ts` on the tick.
-- [ ] **Mutation-check:** a failing provider stopping the batch.
-- [ ] Commit.
+- [x] **Failing tests:** the sender is called with the reader's address and a body naming what moved; no key configured means nothing is sent and nothing fails; a provider error is logged and does not stop the batch.
+- [x] `email-sender.ts`, `resend.sender.ts`, `digest.job.ts` on the tick.
+- [x] **Mutation-check:** a failing provider stopping the batch.
+- [x] Commit.
 
 ### Task 3: Asking for it, and stopping it
 
-- [ ] **Failing tests:** the token verifies for its own user and no other; a tampered token is refused; unsubscribing turns the flag off; it works with no session; the opt-in control reflects and changes the setting.
-- [ ] **Mutation-check:** accepting an unsigned id; accepting another user's token.
-- [ ] Commit.
+- [x] **Failing tests:** the token verifies for its own user and no other; a tampered token is refused; unsubscribing turns the flag off; it works with no session; the opt-in control reflects and changes the setting.
+- [x] **Mutation-check:** accepting an unsigned id; accepting another user's token.
+- [x] Commit.
+
+## What it found
+
+**A surviving mutation pointed at the wrong thing.** The patch removed a different optimistic
+rollback than the one under test, which is how it emerged that the column-preference rollback had
+never been tested at all. Both are covered now, each with its own mutation.
+
+**The domain-separation comment overstated its case.** A CSRF token is a random value signed
+against a session and an unsubscribe token is a MAC over a user id: neither could be mistaken for
+the other even sharing a key. The separation stays — it costs nothing and keeps being true when a
+third use appears — but the comment says what is actually true, and says the practice is
+deliberately untested because there is no confusion to demonstrate.
 
 ## Known risks
 
