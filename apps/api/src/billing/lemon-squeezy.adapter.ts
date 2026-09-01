@@ -2,31 +2,15 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '../config/config.module';
 import { SubscriptionStatus } from '@prisma/client';
+import type { PaymentProvider, RefundEvent, SubscriptionEvent } from './payment-provider';
 
 /**
- * The only file that knows which payment provider this is.
+ * The only file that knows this provider is Lemon Squeezy.
  *
- * Everything else in `billing/` speaks in subscriptions and entitlement. Moving to Paddle should
- * be this file and a config block, not a search across the codebase.
+ * Everything else in `billing/` speaks in subscriptions and entitlement, through
+ * `PaymentProvider`. Moving to Paddle should be a sibling of this file and a config value, not a
+ * search across the codebase.
  */
-
-export interface SubscriptionEvent {
-  eventType: string;
-  userId: string;
-  providerSubscriptionId: string;
-  providerCustomerId: string;
-  /** The order that created it — the only way back here from a refund. Absent on older rows. */
-  providerOrderId: string | null;
-  status: SubscriptionStatus;
-  currentPeriodEnd: Date;
-  cancelAtPeriodEnd: boolean;
-}
-
-/** A refund. Separate from a subscription event because it names an order and nothing else. */
-export interface RefundEvent {
-  eventType: string;
-  providerOrderId: string;
-}
 
 /**
  * Their vocabulary to ours.
@@ -58,10 +42,35 @@ const STATUS: Record<string, SubscriptionStatus> = {
 const ENDED: SubscriptionStatus[] = ['CANCELLED', 'EXPIRED'];
 
 @Injectable()
-export class LemonSqueezyAdapter {
+export class LemonSqueezyAdapter implements PaymentProvider {
   readonly provider = 'lemonsqueezy';
 
   constructor(private readonly config: ConfigService) {}
+
+  /**
+   * Where to send somebody who wants to subscribe.
+   *
+   * Their user id rides along as the provider's custom data, which is what the webhook reads back
+   * — never an email address. Matching a payment to an account by email is how one person's money
+   * ends up entitling somebody else's account.
+   *
+   * Built by mutating the configured URL rather than composing a new one, so a store URL that
+   * already carries a query string keeps it. Rebuilding would drop a `?discount=` and charge the
+   * reader a different price than the link promised.
+   */
+  checkoutUrlFor(userId: string): string | null {
+    const base = this.config.get('LEMONSQUEEZY_CHECKOUT_URL');
+    if (!base) return null;
+
+    const url = new URL(base);
+    url.searchParams.set('checkout[custom][user_id]', userId);
+    return url.toString();
+  }
+
+  /** Undefined means this instance cannot verify a delivery, and so must refuse every one. */
+  signingSecret(): string | undefined {
+    return this.config.get('LEMONSQUEEZY_WEBHOOK_SECRET');
+  }
 
   /**
    * Asks the provider what a subscription is actually doing.

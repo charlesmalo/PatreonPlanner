@@ -1,6 +1,16 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 
+interface Receipt {
+  id: string;
+  providerReceiptId: string;
+  amountCents: number;
+  currency: string;
+  paidAt: string;
+  /** Provider-hosted. Null for a provider that hosts none — the fake one never does. */
+  url: string | null;
+}
+
 interface Subscription {
   status: 'ACTIVE' | 'PAST_DUE' | 'CANCELLED' | 'EXPIRED' | 'REFUNDED';
   currentPeriodEnd: string;
@@ -26,7 +36,9 @@ const STATUS_LABELS: Record<string, string> = {
  */
 export function Premium() {
   const [available, setAvailable] = useState(false);
+  const [sandbox, setSandbox] = useState(false);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -34,10 +46,13 @@ export function Premium() {
   useEffect(() => {
     let cancelled = false;
     api
-      .get<{ available: boolean; subscription: Subscription | null }>('/billing/subscription')
+      .get<{ available: boolean; sandbox: boolean; subscription: Subscription | null }>(
+        '/billing/subscription',
+      )
       .then((state) => {
         if (cancelled) return;
         setAvailable(state.available);
+        setSandbox(state.sandbox);
         setSubscription(state.subscription);
       })
       .catch(() => {
@@ -46,6 +61,18 @@ export function Premium() {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
+    // A separate read, and deliberately not part of the one above: payment history is the least
+    // important thing on this page, and a failure to load it must not take the renewal date with
+    // it. It fails silently to an empty list.
+    api
+      .get<{ receipts: Receipt[] }>('/billing/receipts')
+      .then((body) => {
+        if (!cancelled) setReceipts(body.receipts);
+      })
+      .catch(() => {
+        /* No history shown. The subscription above is what this page is actually for. */
+      });
+
     return () => {
       cancelled = true;
     };
@@ -101,6 +128,85 @@ export function Premium() {
           Subscriptions are not available on this instance.
         </p>
       )}
+      {sandbox && (
+        <div className="mt-6 rounded border-2 border-dashed border-amber-600 p-3 text-sm">
+          <h2 className="font-medium">Demo payment controls</h2>
+          <p className="mt-1 text-slate-600 dark:text-slate-300">
+            This instance is not connected to a payment provider. Nothing here charges anybody, and
+            no card is ever asked for. Use these to walk through what a subscription does — paying,
+            a failed renewal, cancelling, a refund.
+          </p>
+          <button
+            type="button"
+            onClick={subscribe}
+            disabled={busy}
+            className="mt-2 rounded border border-slate-400 px-3 py-1.5 font-medium disabled:opacity-50 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:hover:bg-slate-800"
+          >
+            Open the demo checkout
+          </button>
+        </div>
+      )}
+
+      {receipts.length > 0 && (
+        <div className="mt-6">
+          <h2 className="text-sm font-medium">Payments</h2>
+          <table className="mt-2 w-full text-sm">
+            <caption className="sr-only">Your payments</caption>
+            <thead>
+              <tr className="text-left text-slate-600 dark:text-slate-300">
+                <th scope="col" className="font-normal">
+                  Date
+                </th>
+                <th scope="col" className="font-normal">
+                  Amount
+                </th>
+                <th scope="col" className="font-normal">
+                  <span className="sr-only">Receipt</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {receipts.map((receipt) => (
+                <tr key={receipt.id} className="border-t border-slate-200 dark:border-slate-800">
+                  <td className="py-1">{new Date(receipt.paidAt).toLocaleDateString()}</td>
+                  <td className="py-1">{formatAmount(receipt.amountCents, receipt.currency)}</td>
+                  <td className="py-1 text-right">
+                    {receipt.url ? (
+                      <a
+                        href={receipt.url}
+                        // Opening someone's billing record in a new tab, without handing the
+                        // provider a referrer or a window handle back into this one.
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="underline focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                      >
+                        Receipt
+                      </a>
+                    ) : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </section>
   );
+}
+
+/**
+ * Minor units to the reader's locale. Intl rather than dividing by a hundred and appending a
+ * symbol: not every currency has two decimal places, and the ones that do not would be shown
+ * off by a factor of a hundred.
+ */
+function formatAmount(amountCents: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(
+      amountCents / 100,
+    );
+  } catch {
+    // An unknown currency code throws rather than falling back, and a payments table is not
+    // worth a blank page.
+    return `${(amountCents / 100).toFixed(2)} ${currency}`;
+  }
 }

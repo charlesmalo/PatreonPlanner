@@ -4,23 +4,26 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Inject,
   Post,
   Req,
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import { ConfigService } from '../config/config.module';
 import { CurrentUser, CurrentUserPayload, SessionGuard } from '../session/session.guard';
 import { BillingService } from './billing.service';
-import { LemonSqueezyAdapter } from './lemon-squeezy.adapter';
+import { PAYMENT_PROVIDER, type PaymentProvider } from './payment-provider';
+import { ReceiptService } from './receipt.service';
+import { WebhookIngestService } from './webhook-ingest.service';
 
 @Controller('billing')
 export class BillingController {
   constructor(
-    private readonly config: ConfigService,
     private readonly billing: BillingService,
-    private readonly adapter: LemonSqueezyAdapter,
+    private readonly ingest: WebhookIngestService,
+    private readonly receipts: ReceiptService,
+    @Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider,
   ) {}
 
   /**
@@ -29,46 +32,24 @@ export class BillingController {
    * Unauthenticated by design — the provider has no session — and therefore authorised entirely
    * by the signature over the raw bytes. Everything downstream trusts this endpoint, so it is the
    * one place in the application where getting verification wrong hands out entitlement.
+   *
+   * The work is in `WebhookIngestService`, shared with the fake provider's checkout stand-in. All
+   * this does is turn its reasons back into HTTP.
    */
   @Post('webhook')
   @HttpCode(HttpStatus.OK)
   async webhook(@Req() request: Request & { rawBody?: Buffer }) {
-    const secret = this.config.get('LEMONSQUEEZY_WEBHOOK_SECRET');
-    // No secret means no way to tell a real delivery from anybody's POST. Refusing is the only
-    // safe answer; an instance that does not sell anything has no webhooks to receive.
-    if (!secret) throw new UnauthorizedException();
+    const result = await this.ingest.ingest(
+      request.rawBody,
+      header(request, 'x-signature'),
+      request.body,
+    );
 
-    const rawBody = request.rawBody;
-    if (!rawBody) throw new BadRequestException();
-
-    const signature = header(request, 'x-signature');
-    if (!this.adapter.verify(rawBody, signature, secret)) {
+    if (!result.ok) {
+      if (result.reason === 'no-body') throw new BadRequestException();
       throw new UnauthorizedException();
     }
-
-    // Refunds first: they are an order event, and the subscription parse would reject one anyway.
-    const refund = this.adapter.parseRefund(request.body);
-    if (refund) {
-      const applied = await this.billing.applyRefund(
-        this.adapter.provider,
-        this.adapter.idempotencyKey(rawBody),
-        refund,
-      );
-      return { ok: true, handled: applied };
-    }
-
-    const event = this.adapter.parse(request.body);
-    // Something we do not act on, or a shape we do not recognise. Answered 2xx deliberately: a
-    // 4xx makes the provider retry it forever and eventually disable the endpoint, and neither
-    // outcome is improved by us insisting.
-    if (!event) return { ok: true, handled: false };
-
-    const applied = await this.billing.applyEvent(
-      this.adapter.provider,
-      this.adapter.idempotencyKey(rawBody),
-      event,
-    );
-    return { ok: true, handled: applied };
+    return { ok: true, handled: result.handled };
   }
 
   /**
@@ -82,27 +63,40 @@ export class BillingController {
   async subscription(@CurrentUser() user: CurrentUserPayload) {
     const subscription = await this.billing.forUser(user.id);
     return {
-      available: this.config.get('LEMONSQUEEZY_CHECKOUT_URL') !== undefined,
+      // Asked of the provider rather than of config: which environment variable makes an instance
+      // able to sell is the provider's business, and a second answer to it here would drift.
+      available: this.provider.checkoutUrlFor(user.id) !== null,
+      // Whether this instance is running the provider that takes no money. The page uses it to
+      // label itself honestly and to offer the outcomes a real provider would never let anybody
+      // choose — refunding your own subscription, failing your own renewal.
+      //
+      // Sent rather than inferred from the checkout URL: what that URL looks like is the
+      // provider's business, and a client matching on it would be a second, drifting answer to
+      // "is this real money".
+      sandbox: this.provider.provider === 'fake',
       subscription,
     };
   }
 
   /**
-   * Where to send somebody who wants to subscribe.
+   * This reader's payment history.
    *
-   * Their user id rides along as the provider's custom data, which is what the webhook reads back
-   * — never an email address. Matching a payment to an account by email is how one person's
-   * money ends up entitling somebody else's account.
+   * Their own only, scoped by the session rather than by anything the caller sends — a receipts
+   * endpoint that takes a user id is a receipts endpoint that reads somebody else's.
    */
+  @Get('receipts')
+  @UseGuards(SessionGuard)
+  async receiptsFor(@CurrentUser() user: CurrentUserPayload) {
+    return { receipts: await this.receipts.forUser(user.id) };
+  }
+
+  /** Where to send somebody who wants to subscribe. The provider decides what that URL is. */
   @Post('checkout')
   @UseGuards(SessionGuard)
   checkout(@CurrentUser() user: CurrentUserPayload) {
-    const base = this.config.get('LEMONSQUEEZY_CHECKOUT_URL');
-    if (!base) throw new BadRequestException('Subscriptions are not available here');
-
-    const url = new URL(base);
-    url.searchParams.set('checkout[custom][user_id]', user.id);
-    return { url: url.toString() };
+    const url = this.provider.checkoutUrlFor(user.id);
+    if (!url) throw new BadRequestException('Subscriptions are not available here');
+    return { url };
   }
 }
 

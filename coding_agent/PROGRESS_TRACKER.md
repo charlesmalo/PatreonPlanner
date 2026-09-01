@@ -42,6 +42,12 @@ A.5, including the two features it added (carrying a list across boards, and
 following what moves) and the email digests that were blocked on a provider
 decision until it was made.
 
+**Plan 20** then put every payment provider behind one `PaymentProvider` port
+and added a second implementation that takes no money, so the whole product —
+including buying premium — can be demonstrated end to end before anybody has a
+merchant account. Both implementations pass one conformance suite, which is the
+gate any future provider walks through.
+
 What remains needs access this repository does not have, and each has a document:
 
 |                                  |                                             |
@@ -50,9 +56,13 @@ What remains needs access this repository does not have, and each has a document
 | SPF and DKIM on a sending domain | `docs/email-setup.md`                       |
 | `VITE_DONATION_URL`              | the donation page is built and switched off |
 
-The first is the most consequential: billing fails **closed but silent**, so a
-payload that does not match means a subscriber pays and gets nothing, with
-nothing in the logs to say so.
+The first is still the most consequential, and plan 20 does **not** replace it.
+The fake provider proves this codebase's own plumbing works; it says nothing
+about whether Lemon Squeezy's real payload matches what the adapter expects.
+Billing fails **closed but silent**, so a mismatch means a subscriber pays and
+gets nothing, with nothing in the logs to say so. What has changed is that
+nothing else is waiting on it — premium is demonstrable today, and switching to
+the real provider is a config value with no code, migration or data change.
 
 ## Open Questions Blocking Work
 
@@ -95,3 +105,4 @@ nothing in the logs to say so.
 | 2026-08-27 | Settings sync shipped (plan 15); A.5 step 4 is all that remains, and is blocked |
 | 2026-09-01 | Amendment A complete: digests, order refunds, interest tagging, follows, demo   |
 | 2026-08-27 | Cosmetics shipped (plan 16); every unblocked item in Amendment A is built       |
+| 2026-09-01 | Payment provider behind a port; a fake one makes premium demonstrable (plan 20) |

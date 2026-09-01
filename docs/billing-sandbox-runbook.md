@@ -7,6 +7,47 @@ One sandbox purchase settles that, and it is the only step nobody has done.
 If the shape differs, the adapter **fails closed** — `parse` returns null, no entitlement is
 granted — but it does so silently. That is the reason this is not optional.
 
+> **You do not need any of this to see premium work.** Set `BILLING_PROVIDER=fake` and the whole
+> journey is reachable with no merchant account: subscribe, get entitled, see the receipt, fail a
+> renewal, get refunded, lose it. See *The provider that takes no money* below. What that cannot
+> tell you is whether Lemon Squeezy's real payload matches what the adapter expects — which is
+> the one question this page exists for.
+
+## The provider that takes no money
+
+`BILLING_PROVIDER` selects the implementation. Both satisfy the same `PaymentProvider` port and
+both pass `test/payment-provider-conformance.e2e-spec.ts`, which is the gate any future provider
+walks through.
+
+| | |
+| --- | --- |
+| `lemonsqueezy` | The default. Unconfigured, it sells nothing and refuses every webhook — which is the right state for development and for anybody self-hosting who does not want to sell anything. |
+| `fake` | Serves its own checkout stand-in at `/api/v1/billing/fake-checkout`. Pressing a button there signs a payload and posts it at the **real** webhook route, so a fake purchase runs signature verification, the idempotency key, the parse, the subscription upsert and the entitlement projection. |
+
+It takes two keys to run the fake anywhere `NODE_ENV=production`, and the boot **aborts** with an
+explanation if only the first is set:
+
+```
+BILLING_PROVIDER=fake
+ALLOW_FAKE_BILLING_IN_PRODUCTION=true
+```
+
+Two rather than one because a single variable is a typo away from giving the product away. Both
+container stacks in this repo need both, because a production image sets `NODE_ENV=production` as
+it should — the first attempt at wiring the demo refused to boot for exactly this reason, which is
+the guard working rather than a nuisance.
+
+`API_PUBLIC_URL` must be the address a **browser** can reach the API on, since the stand-in is a
+page somebody navigates to. In both compose stacks that is the web origin, because nginx serves
+the SPA and proxies `/api/` from the same host.
+
+## Switching back to the real provider
+
+Delete `BILLING_PROVIDER` (or set it to `lemonsqueezy`) and `ALLOW_FAKE_BILLING_IN_PRODUCTION`,
+then configure the three Lemon Squeezy variables below. Nothing else changes: no code, no
+migration, no data. Subscriptions and receipts written by the fake keep `provider = 'fake'`, so
+they stay attributable rather than being mistaken for real money afterwards.
+
 ## 1. In Lemon Squeezy
 
 - Create a store, and a **subscription** product with a monthly variant.

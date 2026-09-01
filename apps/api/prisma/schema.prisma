@@ -141,31 +141,32 @@ model User {
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
-  ownedCreators      Creator[]            @relation("CreatorOwner")
-  memberships        Membership[]
+  ownedCreators           Creator[]                     @relation("CreatorOwner")
+  memberships             Membership[]
   notificationPreferences BoardNotificationPreference[]
   carryOverDeliveries     CarryOverDelivery[]
   boardViewPreferences    BoardViewPreference[]
   entryFollows            EntryFollow[]
   subscription            Subscription?
-  staffRoles         CreatorStaff[]       @relation("StaffMember")
-  staffAssigned      CreatorStaff[]       @relation("StaffAssigner")
-  recommendations    Recommendation[]
-  upvotes            Upvote[]
-  abuseRecord        AbuseRecord?
-  notesWritten       CreatorNote[]        @relation("NoteAuthor")
-  invitesSent        StaffInvite[]        @relation("InviteAuthor")
-  invitesAccepted    StaffInvite[]        @relation("InviteAcceptor")
-  notifications      Notification[]
-  moderationResults  ModerationResult[]
-  favorites          CreatorFavorite[]
-  ticketsRaised      Ticket[]             @relation("TicketAuthor")
-  ticketsResolved    Ticket[]             @relation("TicketResolver")
-  flagsRaised        Flag[]               @relation("FlagAuthor")
-  flagsResolved      Flag[]               @relation("FlagResolver")
-  moderationActs     ModerationAction[]   @relation("ModerationActor")
-  Reaction           Reaction[]
-  RecommendationLink RecommendationLink[]
+  paymentReceipts         PaymentReceipt[]
+  staffRoles              CreatorStaff[]                @relation("StaffMember")
+  staffAssigned           CreatorStaff[]                @relation("StaffAssigner")
+  recommendations         Recommendation[]
+  upvotes                 Upvote[]
+  abuseRecord             AbuseRecord?
+  notesWritten            CreatorNote[]                 @relation("NoteAuthor")
+  invitesSent             StaffInvite[]                 @relation("InviteAuthor")
+  invitesAccepted         StaffInvite[]                 @relation("InviteAcceptor")
+  notifications           Notification[]
+  moderationResults       ModerationResult[]
+  favorites               CreatorFavorite[]
+  ticketsRaised           Ticket[]                      @relation("TicketAuthor")
+  ticketsResolved         Ticket[]                      @relation("TicketResolver")
+  flagsRaised             Flag[]                        @relation("FlagAuthor")
+  flagsResolved           Flag[]                        @relation("FlagResolver")
+  moderationActs          ModerationAction[]            @relation("ModerationActor")
+  Reaction                Reaction[]
+  RecommendationLink      RecommendationLink[]
 }
 
 model AbuseRecord {
@@ -205,23 +206,23 @@ model Creator {
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
-  owner             User               @relation("CreatorOwner", fields: [ownerUserId], references: [id])
-  tiers             Tier[]
-  memberships       Membership[]
-  staff             CreatorStaff[]
-  policy            CreatorPolicy?
-  recommendations   Recommendation[]
-  themes            Theme[]
-  themeSources      ThemeSource[]
-  notifications     Notification[]
-  moderationResults ModerationResult[]
-  blockwords        CreatorBlockword[]
-  tickets           Ticket[]
-  favoritedBy       CreatorFavorite[]
-  notificationPrefs BoardNotificationPreference[]
+  owner               User                          @relation("CreatorOwner", fields: [ownerUserId], references: [id])
+  tiers               Tier[]
+  memberships         Membership[]
+  staff               CreatorStaff[]
+  policy              CreatorPolicy?
+  recommendations     Recommendation[]
+  themes              Theme[]
+  themeSources        ThemeSource[]
+  notifications       Notification[]
+  moderationResults   ModerationResult[]
+  blockwords          CreatorBlockword[]
+  tickets             Ticket[]
+  favoritedBy         CreatorFavorite[]
+  notificationPrefs   BoardNotificationPreference[]
   carryOverDeliveries CarryOverDelivery[]
   boardViewPrefs      BoardViewPreference[]
-  staffInvites      StaffInvite[]
+  staffInvites        StaffInvite[]
 
   // Postgres does not index foreign keys automatically, and the cascade from Creator scans them.
   @@index([ownerUserId])
@@ -819,6 +820,38 @@ model Subscription {
 // Providers retry on any non-2xx and on a timeout, so the same event arrives more than once as a
 // matter of course rather than as a fault. Without this, a retry after a slow response extends a
 // subscription a second time — and the slower we are, the more likely it is.
+// What an account paid, and nothing about who they are.
+//
+// A merchant of record holds the name, the email address, the billing address and the card. This
+// row holds the provider's own references and the amount, which is everything needed to show
+// somebody their payment history and to send them to the real receipt — and nothing that would
+// turn a demo database into somebody's billing record.
+//
+// Deliberately absent: name, email, postal address, card brand, last four, payment processor.
+model PaymentReceipt {
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @db.Uuid
+  provider          String
+  // The provider's reference for the charge. Unique with the provider, which is what makes
+  // writing one idempotent under webhook redelivery.
+  providerReceiptId String
+  // The order it belongs to, so a refund can be shown against the payment it reverses.
+  providerOrderId   String?
+  amountCents       Int
+  // ISO-4217.
+  currency          String   @db.VarChar(3)
+  paidAt            DateTime
+  // Where the provider hosts the real one. Null for a provider that hosts none.
+  url               String?
+  createdAt         DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerReceiptId])
+  // The reader's own history, newest first. Total order: two receipts can share a paidAt.
+  @@index([userId, paidAt, id])
+}
+
 model ProcessedWebhookEvent {
   // The provider's own event id, so the uniqueness is theirs rather than something we derive.
   id         String   @id
@@ -1013,23 +1046,23 @@ enum NotificationType {
 // Design §3: in-app only — §12 puts email and push out of Phase 1, and every provider worth
 // using costs money.
 model Notification {
-  id        String           @id @default(uuid()) @db.Uuid
-  userId    String           @db.Uuid
+  id         String           @id @default(uuid()) @db.Uuid
+  userId     String           @db.Uuid
   // Kept so a board's notifications go when the board does, and so the SPA can link back.
-  creatorId String           @db.Uuid
-  type      NotificationType
+  creatorId  String           @db.Uuid
+  type       NotificationType
   // A snapshot, not a join: the message has to keep being true after the entry it describes is
   // deleted, retitled by a moderator, or moved somewhere this reader can no longer see.
-  payload   Json
+  payload    Json
   // Ranked at write time rather than derived from the payload on every sort: a report about
   // harassment wants working before one about a duplicate, and ordering on a column is something
   // an index can serve. Zero for anything that is news rather than a problem.
-  severity  Int              @default(0)
+  severity   Int              @default(0)
   // How many events this row now stands for. A creator tidying eight entries into Now Playing is
   // one act, not eight pieces of news — see `emitCoalesced`. One means exactly what it says.
-  groupCount Int             @default(1)
-  readAt    DateTime?
-  createdAt DateTime         @default(now())
+  groupCount Int              @default(1)
+  readAt     DateTime?
+  createdAt  DateTime         @default(now())
 
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   creator Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
