@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { SubscriptionStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EntitlementService } from './entitlement.service';
 import { ReceiptService } from './receipt.service';
@@ -120,13 +121,43 @@ export class BillingService {
     });
     if (seen) return false;
 
+    // Whether the transaction below actually changed the subscription. A delivery can be recorded
+    // as handled while changing nothing — see the superseded case — and the entitlement recompute
+    // afterwards must not run for one of those.
+    let changed = false;
     try {
       await this.prisma.$transaction(async (tx) => {
         await tx.processedWebhookEvent.create({
           data: { id: idempotencyKey, provider, eventType: event.eventType },
         });
+
+        // Keyed on the reader, not on the provider's subscription id, because the reader is what
+        // this table holds one of. `userId` is unique here by design — two rows would make "are
+        // they premium" a question with two answers.
+        //
+        // Keying on `providerSubscriptionId` instead had a silent failure with real money behind
+        // it: somebody whose subscription ended and who then subscribed again is issued a *new*
+        // id by the provider, so the upsert found nothing, tried to create, collided on the unique
+        // `userId`, raised P2002 — and P2002 is caught below and read as "already handled". They
+        // paid, nothing was recorded, nothing was granted, and the provider was told 200.
+        const existing = await tx.subscription.findUnique({
+          where: { userId: event.userId },
+          select: { providerSubscriptionId: true, status: true, currentPeriodEnd: true },
+        });
+
+        if (existing && !replaces(existing, event)) {
+          // An event from a subscription they have already left behind — a final cancellation, or
+          // a retry that crossed the gap. Writing it would take premium from somebody who has just
+          // paid again. Recorded as seen so the provider stops retrying, and nothing else.
+          this.logger.warn(
+            `Ignoring ${event.eventType} for superseded subscription ${event.providerSubscriptionId}; ` +
+              `${existing.providerSubscriptionId} is the current one`,
+          );
+          return;
+        }
+
         await tx.subscription.upsert({
-          where: { providerSubscriptionId: event.providerSubscriptionId },
+          where: { userId: event.userId },
           create: {
             userId: event.userId,
             provider,
@@ -138,6 +169,11 @@ export class BillingService {
             cancelAtPeriodEnd: event.cancelAtPeriodEnd,
           },
           update: {
+            // Carried on the update too, so a resubscribe repoints the row at the subscription
+            // that is actually live rather than leaving it naming a dead one.
+            provider,
+            providerSubscriptionId: event.providerSubscriptionId,
+            providerCustomerId: event.providerCustomerId,
             status: event.status,
             currentPeriodEnd: event.currentPeriodEnd,
             cancelAtPeriodEnd: event.cancelAtPeriodEnd,
@@ -161,6 +197,7 @@ export class BillingService {
             event.payment,
           );
         }
+        changed = true;
       });
     } catch (error) {
       // Two deliveries of the same event racing each other: one inserted the record, the other
@@ -170,12 +207,39 @@ export class BillingService {
       throw error;
     }
 
+    // Nothing was written, so there is nothing to recompute from — and recomputing against this
+    // event would apply the superseded subscription's dates.
+    if (!changed) return false;
+
     // Outside the transaction on purpose: the projection is derived, so recomputing it is always
     // safe, and holding the subscription write open across it buys nothing.
     await this.entitlement.applyTo(event.userId, event);
     return true;
   }
 }
+
+/**
+ * Whether an event about one subscription should overwrite the row currently held for that reader.
+ *
+ * Always yes when it is the same subscription. When it is a different one, the reader has
+ * resubscribed — which is ordinary — and the question is which of the two is current:
+ *
+ * - the stored one has already ended, so anything new supersedes it; or
+ * - the incoming one runs longer, which a genuine resubscribe does and a stale retry does not.
+ *
+ * Anything else is an event from a subscription that has been left behind.
+ */
+function replaces(
+  existing: { providerSubscriptionId: string; status: SubscriptionStatus; currentPeriodEnd: Date },
+  event: SubscriptionEvent,
+): boolean {
+  if (existing.providerSubscriptionId === event.providerSubscriptionId) return true;
+  if (ENDED.includes(existing.status)) return true;
+  return event.currentPeriodEnd > existing.currentPeriodEnd;
+}
+
+/** Statuses that mean the stored subscription is over, so a new one cannot be a stale retry. */
+const ENDED: SubscriptionStatus[] = ['CANCELLED', 'EXPIRED', 'REFUNDED'];
 
 function isUniqueViolation(error: unknown): boolean {
   return (error as { code?: string })?.code === 'P2002';

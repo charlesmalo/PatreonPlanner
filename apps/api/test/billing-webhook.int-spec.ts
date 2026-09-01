@@ -380,6 +380,108 @@ describe('Billing webhook (integration)', () => {
    * provider, which is the only context that can prove it — the fake-checkout suite runs with
    * BILLING_PROVIDER=fake and cannot see this at all.
    */
+  /**
+   * Coming back after an earlier subscription ended.
+   *
+   * `Subscription.userId` is unique — one row per reader, deliberately, so "are they premium" has
+   * one answer. Keying the upsert on `providerSubscriptionId` instead meant a reader who
+   * resubscribed, and was therefore issued a *new* id by the provider, matched nothing, tried to
+   * create, collided on `userId`, raised P2002 — and P2002 is caught and read as "already
+   * handled". They paid. Nothing was recorded, nothing granted, and the provider was told 200.
+   */
+  describe('resubscribing after an earlier subscription ended', () => {
+    const subscribe = (subscriptionId: string, renewsAt: Date) => ({
+      meta: { event_name: 'subscription_created', custom_data: { user_id: userId } },
+      data: {
+        id: subscriptionId,
+        attributes: {
+          status: 'active',
+          renews_at: renewsAt.toISOString(),
+          customer_id: 4242,
+          order_id: 77,
+          cancelled: false,
+        },
+      },
+    });
+
+    /** Their first subscription, which then runs out. */
+    const alreadyLapsed = async (endedAfterDays = 5) => {
+      await send(subscribe('sub_first', new Date(Date.now() + endedAfterDays * 86_400_000))).expect(
+        200,
+      );
+      await ctx.prisma.subscription.updateMany({ data: { status: 'EXPIRED' } });
+    };
+
+    it('records the new subscription rather than dropping the payment', async () => {
+      await alreadyLapsed();
+
+      await send(subscribe('sub_second', new Date(Date.now() + 30 * 86_400_000))).expect(200);
+
+      const subscription = await ctx.prisma.subscription.findFirstOrThrow();
+      expect(subscription.providerSubscriptionId).toBe('sub_second');
+      expect(subscription.status).toBe('ACTIVE');
+      expect(await isPremium()).toBe(true);
+    });
+
+    it('still keeps exactly one subscription for the reader', async () => {
+      await alreadyLapsed();
+
+      await send(subscribe('sub_second', new Date(Date.now() + 30 * 86_400_000))).expect(200);
+
+      expect(await ctx.prisma.subscription.count()).toBe(1);
+    });
+
+    it('ignores a late event from the subscription they left behind', async () => {
+      // The old one can still emit — a final cancellation, or a retry that crossed the gap.
+      await alreadyLapsed();
+      await send(subscribe('sub_second', new Date(Date.now() + 30 * 86_400_000))).expect(200);
+
+      await send({
+        meta: { event_name: 'subscription_cancelled', custom_data: { user_id: userId } },
+        data: {
+          id: 'sub_first',
+          attributes: {
+            status: 'cancelled',
+            renews_at: null,
+            ends_at: new Date(Date.now() - 86_400_000).toISOString(),
+            customer_id: 4242,
+            cancelled: true,
+          },
+        },
+      }).expect(200);
+
+      const subscription = await ctx.prisma.subscription.findFirstOrThrow();
+      expect(subscription.providerSubscriptionId).toBe('sub_second');
+      expect(subscription.status).toBe('ACTIVE');
+      expect(await isPremium()).toBe(true);
+    });
+
+    it('does not let a refund of the old subscription revoke the new one', async () => {
+      // The one superseded event that could actually do damage. Entitlement refuses to *shorten*
+      // itself on a stale event — except for a refund, which is allowed to revoke immediately and
+      // therefore walks straight past that protection.
+      await alreadyLapsed();
+      await send(subscribe('sub_second', new Date(Date.now() + 30 * 86_400_000))).expect(200);
+      expect(await isPremium()).toBe(true);
+
+      await send({
+        meta: { event_name: 'subscription_updated', custom_data: { user_id: userId } },
+        data: {
+          id: 'sub_first',
+          attributes: {
+            status: 'refunded',
+            renews_at: new Date(Date.now() + 5 * 86_400_000).toISOString(),
+            customer_id: 4242,
+            cancelled: false,
+          },
+        },
+      }).expect(200);
+
+      expect((await ctx.prisma.subscription.findFirstOrThrow()).status).toBe('ACTIVE');
+      expect(await isPremium()).toBe(true);
+    });
+  });
+
   describe('the fake checkout route on a real-provider instance', () => {
     it('does not exist', async () => {
       await request(ctx.app.getHttpServer())
