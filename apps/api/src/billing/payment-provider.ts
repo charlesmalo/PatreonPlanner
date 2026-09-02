@@ -52,6 +52,17 @@ export interface PaymentDetails {
 export interface RefundEvent {
   eventType: string;
   providerOrderId: string;
+  /**
+   * Whether the whole order came back, rather than part of it.
+   *
+   * Entitlement is all-or-nothing here — there is no half a month of premium — so only a full
+   * refund revokes. A partial one is recorded as seen and changes nothing.
+   *
+   * The provider must establish this positively. When it cannot tell, this is **false**: wrongly
+   * keeping premium costs a month, while wrongly removing it punishes somebody who paid and holds
+   * a subscription they are still being charged for.
+   */
+  isFull: boolean;
 }
 
 export interface PaymentProvider {

@@ -44,8 +44,28 @@ describe('Billing webhook (integration)', () => {
     ...overrides,
   });
 
-  /** An order refund, which is what a real refund arrives as — never a subscription status. */
-  const refund = (orderId: number) => ({
+  /**
+   * An order refund, which is what a real refund arrives as — never a subscription status.
+   *
+   * Carries the amounts, because whether entitlement is revoked is decided by how much came back
+   * against what was charged rather than by the `refunded` flag. Their documentation does not say
+   * what that flag does on a partial refund, so it is not trusted alone.
+   */
+  const refund = (orderId: number, refundedAmount = 500, total = 500) => ({
+    meta: { event_name: 'order_refunded', custom_data: { user_id: userId } },
+    data: {
+      id: String(orderId),
+      attributes: {
+        refunded: true,
+        refunded_at: new Date().toISOString(),
+        total,
+        refunded_amount: refundedAmount,
+      },
+    },
+  });
+
+  /** The shape their older payloads had: refunded, with no amounts to compare. */
+  const refundWithoutAmounts = (orderId: number) => ({
     meta: { event_name: 'order_refunded', custom_data: { user_id: userId } },
     data: {
       id: String(orderId),
@@ -330,6 +350,30 @@ describe('Billing webhook (integration)', () => {
 
       expect(await isPremium()).toBe(false);
       expect((await ctx.prisma.subscription.findFirstOrThrow()).status).toBe('REFUNDED');
+    });
+
+    it('leaves a partly refunded subscriber alone', async () => {
+      // $1 back on a $5 order. They are still subscribed and still being charged, so taking the
+      // whole thing away would punish somebody who has done nothing wrong — and do it silently.
+      await send(body({ attributes: { order_id: 5150 } })).expect(200);
+      expect(await isPremium()).toBe(true);
+
+      await send(refund(5150, 100)).expect(200);
+
+      expect(await isPremium()).toBe(true);
+      expect((await ctx.prisma.subscription.findFirstOrThrow()).status).toBe('ACTIVE');
+    });
+
+    it('will not revoke on a refund it cannot measure', async () => {
+      // No amounts to compare. Wrongly keeping premium costs a month; wrongly removing it takes
+      // something from a person who paid. When the payload will not say, the safe direction is
+      // to leave them alone and let reconciliation settle it at the period end.
+      await send(body({ attributes: { order_id: 5150 } })).expect(200);
+
+      await send(refundWithoutAmounts(5150)).expect(200);
+
+      expect(await isPremium()).toBe(true);
+      expect((await ctx.prisma.subscription.findFirstOrThrow()).status).toBe('ACTIVE');
     });
 
     it('ignores a refunded order that paid for nothing here', async () => {

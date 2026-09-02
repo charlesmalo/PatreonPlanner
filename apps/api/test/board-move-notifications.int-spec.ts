@@ -183,13 +183,23 @@ describe('Following what moves (integration)', () => {
       where: { userId: follower, type: 'ENTRY_MOVED' },
     });
 
+    // Back-dated deliberately. Both writes otherwise land within the same millisecond on a fast
+    // machine — `now()` has microsecond resolution in Postgres but a JS Date does not — so the
+    // original assertion failed or passed on how quick the database happened to be, which is not
+    // what this test is about. An hour of separation makes the comparison mean what it says.
+    const anHourAgo = new Date(Date.now() - 3_600_000);
+    await ctx.prisma.notification.update({
+      where: { id: first.id },
+      data: { createdAt: anHourAgo },
+    });
+
     await actions.changeStatus(creatorId, recId, moderator, 'COMPLETED');
 
     const folded = await ctx.prisma.notification.findFirstOrThrow({
       where: { userId: follower, type: 'ENTRY_MOVED' },
     });
     expect(folded.id).toBe(first.id);
-    expect(folded.createdAt.getTime()).toBeGreaterThan(first.createdAt.getTime());
+    expect(folded.createdAt.getTime()).toBeGreaterThan(anHourAgo.getTime());
   });
 
   it('starts a fresh notification once the last one has been read', async () => {

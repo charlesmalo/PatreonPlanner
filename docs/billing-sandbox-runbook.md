@@ -133,11 +133,19 @@ signature will not match, which is the check working rather than failing.
 ## What is still not covered after this
 
 - **`order_refunded` is handled**, matched on the order id — a refund names an order and nothing
-  else, since subscriptions carry an `order_id` and not the reverse. Two limits stand: a
+  else, since subscriptions carry an `order_id` and not the reverse. One limit stands: a
   subscription created before the order id was recorded cannot be matched until some later event
-  backfills it, and **a partial refund may set the same `refunded` flag as a full one**, in which
-  case entitlement would be revoked outright. Worth checking against a real partial refund before
-  it matters.
+  backfills it.
+
+  **Partial refunds no longer revoke.** Their order object carries `refunded_amount` and `total`
+  alongside the `refunded` flag, and their documentation does not say what that flag does on a
+  partial refund. So the flag is not trusted on its own: entitlement is revoked only when the
+  amount refunded covers the order, which is arithmetic rather than an assumption. A refund whose
+  amounts are missing counts as partial and changes nothing — wrongly keeping premium costs a
+  month, while wrongly removing it takes something from a reader who paid and is still subscribed.
+
+  Still worth issuing a real partial refund in test mode to confirm the amounts arrive as
+  documented. It should leave the subscription `ACTIVE`.
 - **Cancelling happens on Lemon Squeezy's side**, from the link in their receipt email. There is
   no cancel button in this application, which is normal for a merchant-of-record setup and keeps
   this app out of the payment flow entirely.

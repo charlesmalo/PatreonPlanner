@@ -151,7 +151,8 @@ payment provider's own page, with a button for each thing a subscription can do.
 | **Card declined** | Nothing recorded at all — a declined card never reaches the merchant's webhook, so there is no subscription and no receipt. |
 | **Pay, then let the renewal fail** | `PAST_DUE`. Access continues through a five-day grace window, because a failed card is usually a card that needs updating rather than somebody leaving. |
 | **Pay, then cancel** | Access runs to the end of the period they paid for. Cancelling is not a refund. |
-| **Refund the last order** | Revoked immediately, with **no** grace window — otherwise a refund would be a way to keep both the premium and the money. |
+| **Refund the last order in full** | Revoked immediately, with **no** grace window — otherwise a refund would be a way to keep both the premium and the money. |
+| **Refund $1 of it** | Nothing changes. They are still subscribed and still being charged, so taking premium away would punish somebody who has done nothing wrong. |
 
 Once subscribed, the page keeps a **Demo payment controls** panel so the later outcomes stay
 reachable. A real provider never shows it.
