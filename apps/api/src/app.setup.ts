@@ -39,6 +39,9 @@ export function configureApp(app: INestApplication): void {
       // Design §8 places webhooks at the root; the URL is registered with Patreon. The creator
       // id is in the path so the right secret can be selected before the body is trusted.
       'webhooks/patreon/:creatorId',
+      // Same reasoning: the URL is registered in Resend's dashboard, so it must not move when
+      // the API version does.
+      'webhooks/resend',
     ],
   });
 }

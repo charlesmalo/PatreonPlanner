@@ -16,7 +16,7 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 // The billing entry is the exact path rather than the `/billing/` namespace for that reason:
 // `/billing/checkout` sits beside it, is session-authenticated, and needs the token like anything
 // else. A prefix here would have quietly exempted it.
-const CSRF_EXEMPT_PREFIXES = ['/webhooks/patreon/'];
+const CSRF_EXEMPT_PREFIXES = ['/webhooks/patreon/', '/webhooks/resend'];
 const CSRF_EXEMPT_PATHS = ['/api/v1/billing/webhook'];
 /**
  * The fake provider's checkout stand-in, exempt *only* on an instance actually running it.

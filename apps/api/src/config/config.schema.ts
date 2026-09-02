@@ -63,6 +63,14 @@ export const configSchema = z.object({
 
   RESEND_API_KEY: z.string().min(1).optional(),
   RESEND_API_BASE_URL: z.string().url().default('https://api.resend.com'),
+  /**
+   * Verifies bounce and complaint deliveries. Svix format — `whsec_` and then base64.
+   *
+   * Separate from the API key because it is a different secret with a different blast radius: the
+   * key sends mail, this one only proves an inbound request is real. Absent means the endpoint
+   * refuses everything, which is correct for an instance that sends no mail.
+   */
+  RESEND_WEBHOOK_SECRET: z.string().min(1).optional(),
   // Must be an address on a domain with SPF and DKIM pointing at the provider, or the mail lands
   // in spam and the free tier is spent on messages nobody sees.
   DIGEST_FROM: z.string().min(1).default('PatreonPlanner <noreply@localhost>'),

@@ -852,6 +852,35 @@ model PaymentReceipt {
   @@index([userId, paidAt, id])
 }
 
+// An address this application must stop writing to.
+//
+// Mailbox providers judge a sender on whether it keeps mailing people who bounced or complained,
+// and suspend the ones that do. The list is therefore about the sending domain's standing rather
+// than about any one reader — which is why it is enforced in the sender rather than in the digest,
+// so every future email path inherits it without having to remember.
+//
+// Keyed on the address, lowercased, because that is all a bounce names. Deliberately not a
+// relation to User: an address can bounce before anybody owns it, and can outlive the account.
+model EmailSuppression {
+  // Lowercased on the way in. Addresses are case-insensitive in the part that routes them, and a
+  // list that misses "Ada@example.com" because it stored "ada@example.com" protects nothing.
+  address   String            @id
+  reason    SuppressionReason
+  // The provider's own explanation, kept for when somebody asks why they stopped receiving mail.
+  detail    String?
+  createdAt DateTime          @default(now())
+
+  @@index([createdAt])
+}
+
+enum SuppressionReason {
+  // The receiving server rejected it permanently. A temporary bounce is not this — a full mailbox
+  // is not a wrong address, and suppressing on one loses a reader who did nothing.
+  BOUNCED
+  // They marked it as spam. The most expensive signal there is; never mail them again.
+  COMPLAINED
+}
+
 model ProcessedWebhookEvent {
   // The provider's own event id, so the uniqueness is theirs rather than something we derive.
   id         String   @id
