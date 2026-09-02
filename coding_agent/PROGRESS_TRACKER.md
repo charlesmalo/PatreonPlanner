@@ -80,10 +80,11 @@ the real provider is a config value with no code, migration or data change.
   a ratchet rather than a number to chase. `@vitest/coverage-v8` was approved
   and pinned to vitest's own version; the floating install pulled v4 against
   vitest 2.1.2.
-- ~~`recommendations.service.ts` past the 300-line limit~~ — split into seven
-  modules (plan 11); `hooks.ts` split into three. Two files remain over:
-  `SubmitForm.tsx` (378) and `ReviewQueue.tsx` (345), each a deliberate stop
-  with its reasoning recorded in `04_CODE_STANDARDS.md` §1.
+- ~~Files past the 300-line limit~~ — none remain. `recommendations.service.ts`
+  split into seven modules (plan 11), `hooks.ts` into three, and the last two
+  went with them: `SubmitForm.tsx` 378 → 249 and `ReviewQueue.tsx` 345 → 200.
+  Both proven by their existing tests passing unedited. See
+  `04_CODE_STANDARDS.md` §1 for which half of the old reasoning held up.
 - **Bounce and complaint handling is not built.** Providers suspend senders who
   ignore them. Not urgent: the free tier caps volume at 100 emails a day, and it
   needs Resend's webhook contract — the same unverified-shape problem billing
