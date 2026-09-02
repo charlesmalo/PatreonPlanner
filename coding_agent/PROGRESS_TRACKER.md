@@ -74,9 +74,12 @@ the real provider is a config value with no code, migration or data change.
 
 ## Known Debt
 
-- **Web coverage is not wired.** The API gate is live
-  (`cd apps/api && pnpm coverage`); vitest needs `@vitest/coverage-v8`, a new
-  dependency and so the engineer's call.
+- ~~**Web coverage is not wired.**~~ Both gates are live and **enforced in CI**,
+  which `pnpm -r test` never did — each existed as a command nobody ran. Web
+  sits at 90.2% lines / 85.8% branches with thresholds set just under, so it is
+  a ratchet rather than a number to chase. `@vitest/coverage-v8` was approved
+  and pinned to vitest's own version; the floating install pulled v4 against
+  vitest 2.1.2.
 - ~~`recommendations.service.ts` past the 300-line limit~~ — split into seven
   modules (plan 11); `hooks.ts` split into three. Two files remain over:
   `SubmitForm.tsx` (378) and `ReviewQueue.tsx` (345), each a deliberate stop
