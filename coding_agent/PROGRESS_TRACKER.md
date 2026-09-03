@@ -66,11 +66,13 @@ the real provider is a config value with no code, migration or data change.
 
 ## Open Questions Blocking Work
 
-| Question                                         | Blocks | Why it matters                                                              |
-| ------------------------------------------------ | ------ | --------------------------------------------------------------------------- |
-| Does email get a paid provider?                  | A.4    | The first collision with the free-tier-only constraint; blocks digests      |
-| Should a reader be able to follow one entry?     | —      | Themes are categories; the original request was title-level (Amendment A.4) |
-| Which permissions stay bundled under `MODERATE`? | —      | The five that exist cover today's endpoints                                 |
+**None.** All three that stood here were answered and built:
+
+| Question                                         | Answer                                                      |
+| ------------------------------------------------ | ----------------------------------------------------------- |
+| Does email get a paid provider?                  | No. Resend's free tier, 100/day — digests shipped (plan 19) |
+| Should a reader be able to follow one entry?     | Yes, and a follow beats theme narrowing (plan 18)           |
+| Which permissions stay bundled under `MODERATE`? | The five that exist; nothing since has needed a sixth       |
 
 ## Known Debt
 
@@ -99,6 +101,35 @@ the real provider is a config value with no code, migration or data change.
   accepting a forged one — so the failure mode is bounces going unrecorded, not
   a stranger suppressing addresses. Confirm with one real webhook when the
   domain is set up. `docs/email-setup.md`.
+
+- **Login does not survive a Patreon hiccup**, and the users it would strand are
+  the ones supporting the most creators. `completeLogin` calls `fetchIdentity`
+  with no fallback, so any failure throws and the sign-in fails outright.
+
+  Patreon's identity endpoint is reported by other developers to answer **504
+  for users with many memberships**, server-side at around ten seconds, and not
+  helped by reducing `page[count]` or the field selection. If that is right, the
+  affected users cannot sign in at all rather than intermittently.
+
+  The background refresh job already handles this correctly — its `try` wraps the
+  fetch, so a failure leaves memberships stale rather than revoking them. Only
+  login is exposed.
+
+  A fix means fetching the identity _without_ `include=memberships` as a
+  fallback, signing them in on that, and **not** calling `applyIdentity` on that
+  path — an empty list there would deactivate every membership they have. That
+  is an interface change across three client implementations, so it is written
+  down rather than started.
+
+  Reported rather than reproduced. Worth confirming against a real account with
+  many memberships before building for it.
+
+- ~~An empty membership response silently revoking everything~~ — checked and not
+  reachable. `deactivateAbsent` would indeed deactivate every membership if
+  Patreon returned zero, and Patreon does return a reduced set when the
+  `identity.memberships` scope is absent — but that scope is requested in
+  `http-patreon.client.ts`, so producing it would take a change to our own code
+  rather than anything external.
 
 - **Two migrations are not rolling-deploy safe** — `ThemeSource` (backfill then
   `DROP COLUMN`) and `link_candidates` (backfill then `SET NOT NULL`), each in
