@@ -127,6 +127,17 @@ model User {
   // When the staleness job last *attempted* this user, success or not. Ordering on it stops a
   // permanently failing user from occupying the batch forever and starving everyone else.
   membershipsRefreshedAt DateTime?
+  // We owe this reader a membership sync, and no stale Membership row will remind us.
+  //
+  // Set when login could not read their memberships — Patreon's identity endpoint times out for
+  // readers with many of them. For somebody who has signed in before that is harmless, because
+  // their existing rows go stale and the refresh job finds them anyway. For somebody whose
+  // *first* login failed it is the only trace: they have no memberships at all, so a job that
+  // selects on a stale one would never look at them again.
+  //
+  // A column rather than widening that selector to "everyone with no memberships", which is most
+  // people and would have the job re-asking Patreon about them forever.
+  membershipsSyncPending Boolean   @default(false)
   // Amendment A.2: premium buys granularity, never notification itself. Added unset and gated
   // closed on purpose — the column costs nothing now, and adding it later would mean taking
   // granularity away from people who already had it.

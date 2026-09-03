@@ -58,6 +58,17 @@ export class MembershipSyncService {
     }
 
     await this.deactivateAbsent(userId, syncedCreatorIds, options);
+
+    // Whatever was owed is settled — but only by a sync that saw everything. A webhook speaks
+    // for one campaign, so clearing on that would call the debt paid on the strength of a
+    // partial view and strand a first-time reader with whatever that one campaign happened to
+    // say. Same distinction `deactivateAbsent` draws just above, for the same reason.
+    if (!options.onlyCampaignIds) {
+      await this.prisma.user.updateMany({
+        where: { id: userId, membershipsSyncPending: true },
+        data: { membershipsSyncPending: false },
+      });
+    }
   }
 
   /**

@@ -315,6 +315,32 @@ describe('Patreon auth flow (integration)', () => {
       expect(user.membershipsRefreshedAt).toBeNull();
     });
 
+    it('marks a first-time reader as owing a sync', async () => {
+      // The case the refresh stamp alone cannot cover. They have no memberships at all, so a job
+      // that selects on a stale one would never look at them again — this flag is the only trace
+      // that anything is owed.
+      ctx.patreon.identityShouldFail = true;
+      const { state, cookie } = await startLogin();
+
+      await callback(state, cookie).expect(302);
+
+      const user = await ctx.prisma.user.findUniqueOrThrow({ where: { patreonUserId: READER } });
+      expect(user.membershipsSyncPending).toBe(true);
+    });
+
+    it('clears the mark once a login does read them', async () => {
+      ctx.patreon.identityShouldFail = true;
+      const { state: s1, cookie: c1 } = await startLogin();
+      await callback(s1, c1).expect(302);
+
+      ctx.patreon.identityShouldFail = false;
+      const { state: s2, cookie: c2 } = await startLogin();
+      await callback(s2, c2).expect(302);
+
+      const user = await ctx.prisma.user.findUniqueOrThrow({ where: { patreonUserId: READER } });
+      expect(user.membershipsSyncPending).toBe(false);
+    });
+
     it('refuses the login when it cannot identify them either', async () => {
       // The fallback is about degrading, not about guessing. With no id there is no reader to
       // sign in, and inventing one would be worse than refusing.

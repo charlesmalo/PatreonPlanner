@@ -39,8 +39,21 @@ export class MembershipRefreshJob {
     // attempt stamp instead means a user who keeps failing rotates to the back of the queue.
     const stale = await this.prisma.user.findMany({
       where: {
-        memberships: { some: { lastSyncedAt: { lt: cutoff } } },
-        OR: [{ membershipsRefreshedAt: null }, { membershipsRefreshedAt: { lt: retryCutoff } }],
+        // Two ways to need a refresh, and the second exists because the first cannot see it: a
+        // reader whose first login could not read their memberships has none, so nothing of
+        // theirs is ever stale. Composed with AND so the back-off below still applies to both —
+        // a reader Patreon cannot answer for must not fill every batch forever.
+        AND: [
+          {
+            OR: [
+              { memberships: { some: { lastSyncedAt: { lt: cutoff } } } },
+              { membershipsSyncPending: true },
+            ],
+          },
+          {
+            OR: [{ membershipsRefreshedAt: null }, { membershipsRefreshedAt: { lt: retryCutoff } }],
+          },
+        ],
       },
       orderBy: { membershipsRefreshedAt: { sort: 'asc', nulls: 'first' } },
       select: { id: true },

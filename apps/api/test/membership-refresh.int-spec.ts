@@ -134,4 +134,108 @@ describe('MembershipRefreshJob (integration)', () => {
     const after = await ctx.prisma.user.findUniqueOrThrow({ where: { id: brokenId } });
     expect(after.membershipsRefreshedAt?.getTime()).toBe(before.getTime());
   });
+
+  /**
+   * The reader a stale Membership row cannot speak for.
+   *
+   * Somebody whose first login could not read their memberships has none at all, so the ordinary
+   * selector — "has a membership older than the ttl" — never sees them. Without the flag they
+   * would sign in once and never be given access to anything they pay for.
+   */
+  describe('a reader who owes a sync but has no memberships yet', () => {
+    /**
+     * Signed in for real, then marked as owing a sync — which is exactly how they arise. Created
+     * directly they would have no stored tokens, so the job would skip them at `getAccessToken`
+     * and every assertion below would pass or fail for that reason instead of its own.
+     */
+    const newcomer = async () => {
+      const patreonUserId = `pending-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const id = await loginAs(patreonUserId);
+      return ctx.prisma.user.update({
+        where: { id },
+        // The refresh stamp goes back to null too, as the login fallback leaves it — otherwise
+        // the back-off would hold them out of this very batch.
+        data: { membershipsSyncPending: true, membershipsRefreshedAt: null },
+      });
+    };
+
+    it('is picked up even though nothing of theirs is stale', async () => {
+      const user = await newcomer();
+      ctx.patreon.identity = {
+        ...ctx.patreon.identity,
+        patreonUserId: user.patreonUserId,
+        memberships: [
+          {
+            campaignId: 'refresh-campaign',
+            patreonTierIds: ['r-tier'],
+            amountCents: 1000,
+            isActivePatron: true,
+          },
+        ],
+      };
+
+      await job.runOnce();
+
+      const membership = await ctx.prisma.membership.findFirst({ where: { userId: user.id } });
+      expect(membership?.isActivePatron).toBe(true);
+    });
+
+    it('stops owing one once it succeeds', async () => {
+      const user = await newcomer();
+      ctx.patreon.identity = {
+        ...ctx.patreon.identity,
+        patreonUserId: user.patreonUserId,
+        memberships: [],
+      };
+
+      await job.runOnce();
+
+      const after = await ctx.prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+      expect(after.membershipsSyncPending).toBe(false);
+    });
+
+    it('keeps owing one when Patreon still will not answer', async () => {
+      // Otherwise a single failed attempt would clear the debt and strand them for good.
+      const user = await newcomer();
+      ctx.patreon.identityShouldFail = true;
+
+      await job.runOnce();
+
+      const after = await ctx.prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+      expect(after.membershipsSyncPending).toBe(true);
+      ctx.patreon.identityShouldFail = false;
+    });
+
+    it('is not re-asked about immediately after an attempt', async () => {
+      // The flag must not defeat the back-off. A reader Patreon cannot answer for would
+      // otherwise fill every batch forever and starve everybody behind them.
+      const user = await newcomer();
+      ctx.patreon.identityShouldFail = true;
+      await job.runOnce();
+
+      // Patreon recovers, but it is too soon to ask again. Asserted through what the second run
+      // *does* rather than by comparing stamps: two runs land within the same millisecond, so a
+      // timestamp comparison passes whether the back-off holds or not.
+      ctx.patreon.identityShouldFail = false;
+      ctx.patreon.identity = {
+        ...ctx.patreon.identity,
+        patreonUserId: user.patreonUserId,
+        memberships: [
+          {
+            campaignId: 'refresh-campaign',
+            patreonTierIds: ['r-tier'],
+            amountCents: 1000,
+            isActivePatron: true,
+          },
+        ],
+      };
+
+      await job.runOnce();
+
+      // Nothing applied, because they were never in the batch.
+      expect(await ctx.prisma.membership.count({ where: { userId: user.id } })).toBe(0);
+      const after = await ctx.prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+      expect(after.membershipsSyncPending).toBe(true);
+    });
+  });
 });
