@@ -1039,11 +1039,29 @@ test('a reader buys premium, sees the receipt, and a refund takes it straight ba
   await page.goto(`/c/${CREATOR.slug}/notifications`);
   await expect(page.getByRole('checkbox', { name: /now playing/i })).toBeEnabled();
 
-  // A refund revokes immediately and gets no grace window — otherwise a refund is a way to buy
-  // premium and keep both it and the money.
+  // Part of the money back leaves them subscribed and entitled. They are still being charged, so
+  // taking premium away would punish somebody who has done nothing wrong — and do it silently.
   await page.goto('/premium');
   await page.getByRole('button', { name: /open the demo checkout/i }).click();
-  await page.getByRole('button', { name: /refund/i }).click();
+  await page.getByRole('button', { name: /refund \$1 of it/i }).click();
+  await page.waitForURL((url) => url.pathname === '/premium');
+
+  // Both halves, because either alone can pass for the wrong reason. "Active" is read from the
+  // subscription row, which a wrongful revocation would have set to REFUNDED; the checkbox is
+  // read from the entitlement projection, which is written separately. A test that only checked
+  // the projection would also pass if the partial refund had never been applied at all.
+  await expect(page.getByText('Active')).toBeVisible();
+  await page.goto(`/c/${CREATOR.slug}/notifications`);
+  await expect(page.getByRole('checkbox', { name: /now playing/i })).toBeEnabled();
+
+  // All of it back does revoke, immediately and with no grace window — otherwise a refund is a
+  // way to buy premium and keep both it and the money.
+  //
+  // Named exactly rather than by /refund/i: there are two refund buttons now, and a loose match
+  // resolves to both. That is the assertion failing for its own reason rather than a flake.
+  await page.goto('/premium');
+  await page.getByRole('button', { name: /open the demo checkout/i }).click();
+  await page.getByRole('button', { name: /refund the last order in full/i }).click();
 
   await page.waitForURL((url) => url.pathname === '/premium');
   await expect(page.getByText(/refunded/i)).toBeVisible();

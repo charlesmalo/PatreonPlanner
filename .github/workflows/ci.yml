@@ -53,7 +53,10 @@ jobs:
       - run: pnpm --filter @app/api prisma:generate
       - run: pnpm -r typecheck
       - run: pnpm format:check
-      - run: pnpm -r test
+      # `coverage` rather than `test`: the same suites, with each package's thresholds enforced.
+      # Running `test` here meant both gates existed as commands nobody executed, so a component
+      # could lose every one of its tests without anything noticing.
+      - run: pnpm -r coverage
       - run: pnpm --filter @app/web build
       - run: pnpm --filter @app/api build
       # The Dockerfiles are intricate enough that three separate defects were found by hand;

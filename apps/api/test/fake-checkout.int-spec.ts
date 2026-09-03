@@ -152,6 +152,31 @@ describe('Fake checkout (integration)', () => {
       expect((await premiumUntil())!.getTime()).toBeGreaterThan(Date.now());
     });
 
+    it('leaves premium alone when only part of the order comes back', async () => {
+      // The failure this guards is silent and lands on somebody who has done nothing wrong: they
+      // paid, they are still subscribed, and a $1 goodwill refund on a $5 order took the whole
+      // thing away. Lemon Squeezy's own docs do not say whether their `refunded` flag is set on a
+      // partial refund, which is exactly why the flag is not what decides this.
+      await act('paid').expect(302);
+      await act('partly_refunded').expect(302);
+
+      const subscription = await ctx.prisma.subscription.findFirstOrThrow();
+      expect(subscription.status).toBe('ACTIVE');
+      const until = await premiumUntil();
+      expect(until).not.toBeNull();
+      expect(until!.getTime()).toBeGreaterThan(Date.now());
+    });
+
+    it('still revokes when the whole order comes back', async () => {
+      // The other half of the same rule: being careful about partial refunds must not make a
+      // full one stop working.
+      await act('paid').expect(302);
+      await act('refunded').expect(302);
+
+      expect((await ctx.prisma.subscription.findFirstOrThrow()).status).toBe('REFUNDED');
+      expect(await premiumUntil()).toBeNull();
+    });
+
     it('refuses an outcome it does not know rather than guessing one', async () => {
       await act('free_premium_please').expect(400);
 

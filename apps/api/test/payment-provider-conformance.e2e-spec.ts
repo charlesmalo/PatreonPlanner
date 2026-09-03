@@ -29,6 +29,10 @@ interface Dialect {
   unknownStatus(userId: string): unknown;
   /** Shaped right, but with no period end at all. */
   withoutPeriodEnd(userId: string): unknown;
+  /** A refund of the whole order. */
+  fullRefund(orderId: string): unknown;
+  /** A refund of part of it — the reader is still subscribed and still paying. */
+  partialRefund(orderId: string): unknown;
 }
 
 const USER = '00000000-0000-4000-8000-0000000000aa';
@@ -86,6 +90,25 @@ const lemonSqueezy: Dialect = {
       attributes: { status: 'active', renews_at: null, ends_at: null, customer_id: 1 },
     },
   }),
+  fullRefund: (orderId) => ({
+    meta: { event_name: 'order_refunded' },
+    data: {
+      id: orderId,
+      attributes: {
+        refunded: true,
+        refunded_at: '2026-09-01T00:00:00Z',
+        total: 500,
+        refunded_amount: 500,
+      },
+    },
+  }),
+  partialRefund: (orderId) => ({
+    meta: { event_name: 'order_refunded' },
+    data: {
+      id: orderId,
+      attributes: { refunded: true, refunded_at: null, total: 500, refunded_amount: 100 },
+    },
+  }),
 };
 
 const fake: Dialect = {
@@ -125,6 +148,18 @@ const fake: Dialect = {
     sub: 'fake_sub_1',
     buyer: userId,
     state: 'live',
+  }),
+  fullRefund: (orderId) => ({
+    kind: 'order.refunded',
+    order: orderId,
+    total_cents: 500,
+    refunded_cents: 500,
+  }),
+  partialRefund: (orderId) => ({
+    kind: 'order.refunded',
+    order: orderId,
+    total_cents: 500,
+    refunded_cents: 100,
   }),
 };
 
@@ -197,6 +232,25 @@ describe.each([lemonSqueezy, fake])('$name satisfies the payment provider contra
       expect(provider.parse(body)).toBeNull();
       expect(() => provider.parseRefund(body)).not.toThrow();
       expect(provider.parseRefund(body)).toBeNull();
+    });
+  });
+
+  describe('refunds', () => {
+    it('reads a full refund as one that revokes', () => {
+      const event = provider.parseRefund(dialect.fullRefund('ord_1'));
+
+      expect(event).not.toBeNull();
+      expect(event!.providerOrderId).toBe('ord_1');
+      expect(event!.isFull).toBe(true);
+    });
+
+    it('reads a partial refund as one that does not', () => {
+      // Entitlement is all-or-nothing, so a provider that cannot tell these apart will take
+      // premium from somebody who is still subscribed and still paying for it.
+      const event = provider.parseRefund(dialect.partialRefund('ord_1'));
+
+      expect(event).not.toBeNull();
+      expect(event!.isFull).toBe(false);
     });
   });
 

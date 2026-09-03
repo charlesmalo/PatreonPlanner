@@ -41,8 +41,22 @@ export class BillingService {
   async applyRefund(
     provider: string,
     idempotencyKey: string,
-    event: { eventType: string; providerOrderId: string },
+    event: { eventType: string; providerOrderId: string; isFull: boolean },
   ): Promise<boolean> {
+    // Entitlement is all-or-nothing — there is no half a month of premium — so only a refund
+    // that covers the whole order revokes. A partial one leaves a reader who is still
+    // subscribed, still being charged, and still entitled to what they are paying for.
+    //
+    // Refusing here rather than filtering in the adapter, so a partial refund appears in the log
+    // as a thing that happened and was deliberately not acted on, instead of being
+    // indistinguishable from an event we do not recognise.
+    if (!event.isFull) {
+      this.logger.log(
+        `Order ${event.providerOrderId} was partially refunded; entitlement is unchanged`,
+      );
+      return false;
+    }
+
     const subscription = await this.prisma.subscription.findFirst({
       where: { providerOrderId: event.providerOrderId },
       select: { id: true, userId: true, currentPeriodEnd: true, cancelAtPeriodEnd: true },

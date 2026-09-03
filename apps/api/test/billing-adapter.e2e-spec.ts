@@ -116,4 +116,81 @@ describe('LemonSqueezyAdapter shapes', () => {
     expect(adapter.parse({})).toBeNull();
     expect(adapter.parse(null)).toBeNull();
   });
+
+  /**
+   * Refunds, and the difference between some of the money and all of it.
+   *
+   * Their order object carries `refunded` (a boolean), `refunded_at`, `refunded_amount` in cents,
+   * and `total`. What their documentation does *not* say is what `refunded` does on a **partial**
+   * refund — and the first version of this revoked entitlement on that flag alone.
+   *
+   * If the flag is shared, a $1 goodwill refund on a $5 order took somebody's premium away
+   * outright. That fails in the direction nobody reports: they paid, they still hold a
+   * subscription, and the thing they paid for is gone.
+   *
+   * So the flag is no longer trusted on its own. A refund revokes only when the amount refunded
+   * covers the order, which is arithmetic rather than an assumption about a field.
+   */
+  describe('refunds', () => {
+    const order = (attributes: Record<string, unknown>) => ({
+      meta: { event_name: 'order_refunded' },
+      data: {
+        type: 'orders',
+        id: '9',
+        attributes: {
+          refunded: true,
+          refunded_at: '2026-09-01T00:00:00.000000Z',
+          total: 500,
+          refunded_amount: 500,
+          // The PII their real payload carries, none of which may be read.
+          user_name: 'Ada Lovelace',
+          user_email: 'ada@example.com',
+          ...attributes,
+        },
+      },
+    });
+
+    it('reads a full refund as one that revokes', () => {
+      expect(adapter.parseRefund(order({}))).toMatchObject({
+        providerOrderId: '9',
+        isFull: true,
+      });
+    });
+
+    it('reads a partial refund as one that does not', () => {
+      // $1 back on a $5 order. They still have a subscription and still paid for it.
+      expect(adapter.parseRefund(order({ refunded_amount: 100, refunded_at: null }))).toMatchObject(
+        { isFull: false },
+      );
+    });
+
+    it('does not treat a partial refund as full merely because the flag is set', () => {
+      // The exact shape the old code got wrong: `refunded` true, but not all of the money.
+      const event = adapter.parseRefund(order({ refunded: true, refunded_amount: 100 }));
+
+      expect(event).not.toBeNull();
+      expect(event!.isFull).toBe(false);
+    });
+
+    it('treats an over-refund as full rather than as neither', () => {
+      // Currency rounding and goodwill top-ups can put the refunded amount above the total.
+      expect(adapter.parseRefund(order({ refunded_amount: 501 }))!.isFull).toBe(true);
+    });
+
+    it('will not revoke when it cannot tell how much came back', () => {
+      // No amount to compare. Refusing to revoke is the safe direction: wrongly keeping premium
+      // costs a month, wrongly removing it punishes somebody who paid.
+      expect(adapter.parseRefund(order({ refunded_amount: undefined }))!.isFull).toBe(false);
+    });
+
+    it('ignores an order_refunded that says it was not refunded', () => {
+      expect(adapter.parseRefund(order({ refunded: false }))).toBeNull();
+    });
+
+    it('reads none of the person off the order', () => {
+      const event = adapter.parseRefund(order({}));
+
+      expect(JSON.stringify(event)).not.toMatch(/Ada|ada@example/);
+    });
+  });
 });

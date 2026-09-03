@@ -160,13 +160,36 @@ export class LemonSqueezyAdapter implements PaymentProvider {
     if (body === null || typeof body !== 'object') return null;
     const payload = body as {
       meta?: { event_name?: string };
-      data?: { id?: string; attributes?: { refunded?: boolean } };
+      data?: {
+        id?: string;
+        attributes?: {
+          refunded?: boolean;
+          refunded_amount?: number;
+          total?: number;
+        };
+      };
     };
     if (payload.meta?.event_name !== 'order_refunded') return null;
-    if (payload.data?.attributes?.refunded !== true) return null;
-    if (!payload.data.id) return null;
+    const attributes = payload.data?.attributes;
+    if (attributes?.refunded !== true) return null;
+    if (!payload.data?.id) return null;
 
-    return { eventType: 'order_refunded', providerOrderId: String(payload.data.id) };
+    return {
+      eventType: 'order_refunded',
+      providerOrderId: String(payload.data.id),
+      // Arithmetic rather than a flag. Their documentation gives `refunded`, `refunded_at` and
+      // `refunded_amount`, and says nothing about what `refunded` does on a *partial* refund —
+      // so trusting it alone, as the first version did, meant a $1 goodwill refund on a $5 order
+      // revoked somebody's premium outright.
+      //
+      // Greater-than-or-equal rather than equality: currency rounding and goodwill top-ups can
+      // put the refunded amount above the total, and treating that as "neither full nor partial"
+      // would leave a genuinely refunded order entitled forever.
+      isFull:
+        typeof attributes.refunded_amount === 'number' &&
+        typeof attributes.total === 'number' &&
+        attributes.refunded_amount >= attributes.total,
+    };
   }
 
   parse(body: unknown): SubscriptionEvent | null {

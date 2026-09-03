@@ -19,17 +19,35 @@ about and edit reliably.
 because the behaviour has forty cases, not because the file does too much.
 Split one when its cases stop sharing a subject, not when it crosses a number.
 
-**Known breaches**, all in `apps/web/src`, and each a deliberate stop rather
-than an oversight:
+**No file is over the limit.** The two that were are worth recording, because
+the reasoning that kept them stood for one of them and not the other.
 
-| File                        | Lines | Why it stands                                                                                                                                                                                                                                                                                           |
-| --------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `components/SubmitForm.tsx` | 378   | One form with one submit path. The two genuinely separable parts have already left — `WatchOrderEditor` and `useCatalogSearch`. What is left is fourteen pieces of state that are all the same state; splitting it would mean lifting them into a parent, which moves the size rather than removing it. |
-| `routes/ReviewQueue.tsx`    | 345   | One page, one queue. Same reasoning.                                                                                                                                                                                                                                                                    |
+| File                        | Was | Now | What actually separated                                                                                             |
+| --------------------------- | --- | --- | ------------------------------------------------------------------------------------------------------------------- |
+| `components/SubmitForm.tsx` | 378 | 249 | The rules and the markup, not the state: `submit-payload.ts`, `submit-error-message.ts`, `CatalogueSearchField.tsx` |
+| `routes/ReviewQueue.tsx`    | 345 | 200 | Two components that were already independent: `FlagActions.tsx`, `RedactForm.tsx`                                   |
+
+The old note said splitting `SubmitForm` would lift fourteen pieces of state
+into a parent and move the size rather than remove it. That was **right about
+splitting it by mode** — `customTitle` is shared between the two, so a mode
+split duplicates a field or lifts it — and **wrong that no split existed**. What
+left was the part with rules in it (which payload, what counts as a valid watch
+order) and one block of markup. No state moved anywhere.
+
+The note also said `ReviewQueue` stood for "the same reasoning", and that was
+simply not so: it already held four components sharing nothing but props, and
+two of them lifted out untouched.
+
+The lesson is the one in the rule above — split where the subject changes. The
+mistake was reading "this file resists the obvious split" as "this file resists
+splitting".
+
+Both refactors are proven by their tests passing **unedited**: 22 for
+`SubmitForm`, all of `ReviewQueue`'s. The one test added afterwards covers a bug
+the extraction exposed rather than the extraction itself.
 
 `apps/api/src/recommendations/recommendations.service.ts` was the standing
-breach at 1061 lines and is now 298 — see plan 11. Nothing in `apps/api/src`
-is over the limit.
+breach at 1061 lines and is now 298 — see plan 11.
 
 ## 2. Single Responsibility
 

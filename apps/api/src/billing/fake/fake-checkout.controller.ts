@@ -18,7 +18,14 @@ import { PAYMENT_PROVIDER, type PaymentProvider } from '../payment-provider';
 import { WebhookIngestService } from '../webhook-ingest.service';
 
 /** What the demo can make happen. Each is a state a real subscription genuinely reaches. */
-const OUTCOMES = ['paid', 'declined', 'past_due', 'cancelled', 'refunded'] as const;
+const OUTCOMES = [
+  'paid',
+  'declined',
+  'past_due',
+  'cancelled',
+  'refunded',
+  'partly_refunded',
+] as const;
 type Outcome = (typeof OUTCOMES)[number];
 
 export class FakeCheckoutDto {
@@ -105,7 +112,14 @@ function payloadFor(
   outcome: Exclude<Outcome, 'declined'>,
 ): Record<string, unknown> {
   const order = `fake_ord_${userId}`;
-  if (outcome === 'refunded') return { kind: 'order.refunded', order };
+  // Both refunds carry the amounts, because the difference between them is arithmetic rather
+  // than a flag — a partial refund must not revoke premium somebody is still paying for.
+  if (outcome === 'refunded') {
+    return { kind: 'order.refunded', order, total_cents: 500, refunded_cents: 500 };
+  }
+  if (outcome === 'partly_refunded') {
+    return { kind: 'order.refunded', order, total_cents: 500, refunded_cents: 100 };
+  }
 
   const seconds = Math.floor(Date.now() / 1000);
   const base = {
@@ -178,7 +192,8 @@ const LABELS: Record<Outcome, string> = {
   declined: 'Card declined',
   past_due: 'Pay, then let the renewal fail',
   cancelled: 'Pay, then cancel',
-  refunded: 'Refund the last order',
+  refunded: 'Refund the last order in full',
+  partly_refunded: 'Refund $1 of it (premium should survive)',
 };
 
 /** The id is echoed into the markup, and it arrives from the query string. */

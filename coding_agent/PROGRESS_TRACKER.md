@@ -74,18 +74,32 @@ the real provider is a config value with no code, migration or data change.
 
 ## Known Debt
 
-- **Web coverage is not wired.** The API gate is live
-  (`cd apps/api && pnpm coverage`); vitest needs `@vitest/coverage-v8`, a new
-  dependency and so the engineer's call.
-- ~~`recommendations.service.ts` past the 300-line limit~~ — split into seven
-  modules (plan 11); `hooks.ts` split into three. Two files remain over:
-  `SubmitForm.tsx` (378) and `ReviewQueue.tsx` (345), each a deliberate stop
-  with its reasoning recorded in `04_CODE_STANDARDS.md` §1.
-- **Bounce and complaint handling is not built.** Providers suspend senders who
-  ignore them. Not urgent: the free tier caps volume at 100 emails a day, and it
-  needs Resend's webhook contract — the same unverified-shape problem billing
-  had, where reading their documentation first found eight bugs across three
-  attempts. Worth doing that before writing any of it.
+- ~~**Web coverage is not wired.**~~ Both gates are live and **enforced in CI**,
+  which `pnpm -r test` never did — each existed as a command nobody ran. Web
+  sits at 90.2% lines / 85.8% branches with thresholds set just under, so it is
+  a ratchet rather than a number to chase. `@vitest/coverage-v8` was approved
+  and pinned to vitest's own version; the floating install pulled v4 against
+  vitest 2.1.2.
+- ~~Files past the 300-line limit~~ — none remain. `recommendations.service.ts`
+  split into seven modules (plan 11), `hooks.ts` into three, and the last two
+  went with them: `SubmitForm.tsx` 378 → 249 and `ReviewQueue.tsx` 345 → 200.
+  Both proven by their existing tests passing unedited. See
+  `04_CODE_STANDARDS.md` §1 for which half of the old reasoning held up.
+- ~~**Bounce and complaint handling is not built.**~~ Built, and the
+  documentation-first habit paid again: `data.to` is an **array** even for one
+  recipient, and a bounce carries a `type` separating a permanent rejection from
+  a temporary one. Suppressing on a temporary bounce would lose a reader whose
+  mailbox was briefly full — the same silent, user-harming shape as revoking
+  premium on a partial refund. Enforced in the sender rather than the digest, so
+  every future email path inherits it.
+
+  **One thing is still unverified**, and deliberately so: Svix's signing scheme
+  is implemented from their published description, and no real delivery has been
+  seen. It fails **closed** — a mismatch rejects every delivery rather than
+  accepting a forged one — so the failure mode is bounces going unrecorded, not
+  a stranger suppressing addresses. Confirm with one real webhook when the
+  domain is set up. `docs/email-setup.md`.
+
 - **Two migrations are not rolling-deploy safe** — `ThemeSource` (backfill then
   `DROP COLUMN`) and `link_candidates` (backfill then `SET NOT NULL`), each in
   one step. Harmless with nothing deployed, and deliberately _not_ fixed in

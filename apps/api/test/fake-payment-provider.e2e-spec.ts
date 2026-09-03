@@ -157,15 +157,40 @@ describe('FakePaymentProvider', () => {
 
   describe('parseRefund', () => {
     it('reads a refund as the order it names', () => {
-      expect(provider.parseRefund({ kind: 'order.refunded', order: 'fake_ord_01' })).toEqual({
+      expect(
+        provider.parseRefund({
+          kind: 'order.refunded',
+          order: 'fake_ord_01',
+          total_cents: 500,
+          refunded_cents: 500,
+        }),
+      ).toEqual({
         eventType: 'order.refunded',
         providerOrderId: 'fake_ord_01',
+        isFull: true,
       });
     });
 
     it('is null for anything that is not a refund', () => {
       expect(provider.parseRefund(payload())).toBeNull();
       expect(provider.parseRefund(null)).toBeNull();
+    });
+
+    it('marks a partial refund as one that must not revoke', () => {
+      const event = provider.parseRefund({
+        kind: 'order.refunded',
+        order: 'fake_ord_01',
+        total_cents: 500,
+        refunded_cents: 100,
+      });
+
+      expect(event?.isFull).toBe(false);
+    });
+
+    it('will not claim a refund is full when it carries no amounts', () => {
+      expect(provider.parseRefund({ kind: 'order.refunded', order: 'fake_ord_01' })?.isFull).toBe(
+        false,
+      );
     });
 
     it('is null for a refund naming no order, since there is nothing to match', () => {

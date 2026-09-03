@@ -125,7 +125,14 @@ export class FakePaymentProvider implements PaymentProvider {
     if (payload.kind !== 'order.refunded') return null;
     if (typeof payload.order !== 'string' || !payload.order) return null;
 
-    return { eventType: 'order.refunded', providerOrderId: payload.order };
+    // Its own dialect for the same distinction: how much came back, against what was charged.
+    const back = payload.refunded_cents;
+    const charged = payload.total_cents;
+    return {
+      eventType: 'order.refunded',
+      providerOrderId: payload.order,
+      isFull: typeof back === 'number' && typeof charged === 'number' && back >= charged,
+    };
   }
 
   /**

@@ -262,6 +262,34 @@ describe('SubmitForm content classes', () => {
     expect(fetchMock.mock.calls.filter(([, i]) => i?.method === 'POST')).toHaveLength(0);
   });
 
+  it('does not announce a watch-order success as an alert after an earlier failure', async () => {
+    // The success path used to set the message directly rather than through the helper that also
+    // clears the error flag, so a success following a refusal kept role="alert" and interrupted a
+    // screen reader to say the thing had worked. Confirmations are a status; refusals are alerts.
+    const fetchMock = fakeApi({
+      'POST /api/v1/creators/ada-writes/recommendations': {
+        duplicate: false,
+        recommendation: recommendation(),
+      },
+    });
+    global.fetch = fetchMock;
+    renderForm();
+    await userEvent.click(screen.getByRole('radio', { name: /watch order/i }));
+
+    // First, a refusal — no steps.
+    await userEvent.type(screen.getByLabelText(/what to call it/i), 'Order');
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/at least one step/i);
+
+    // Then a real one.
+    await userEvent.click(screen.getByRole('button', { name: /add a step/i }));
+    await userEvent.type(screen.getAllByLabelText(/step/i)[0], 'First');
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent(/pending review/i);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('drops a blank step rather than sending it', async () => {
     const fetchMock = fakeApi({
       'POST /api/v1/creators/ada-writes/recommendations': {

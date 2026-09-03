@@ -51,3 +51,39 @@ The shape of a send request is read from Resend's documentation, not from a resp
 seen — exactly the position billing was in before its sandbox run. A mismatch throws, the watermark
 stays where it is, and tomorrow's digest still carries today's news. It fails loudly here rather
 than silently, which is the one advantage this has over the billing case.
+
+## Bounces and complaints
+
+Mailbox providers judge a sender on whether it keeps mailing people who bounced or complained, and
+suspend the ones that do. Resend reports both.
+
+In the dashboard: **Webhooks → add an endpoint** at `https://<your-host>/webhooks/resend`,
+subscribed to `email.bounced` and `email.complained`. Copy the signing secret it gives you:
+
+```
+RESEND_WEBHOOK_SECRET=whsec_...
+```
+
+Without it the endpoint refuses every delivery — which is correct for an instance that sends no
+mail, since this endpoint can stop mail reaching a reader and an unverified one would be a denial
+of service with a `curl`.
+
+A suppressed address is refused **in the sender**, not in the digest, so anything this application
+ever sends inherits the check rather than each caller having to remember it.
+
+### What suppresses, and what does not
+
+| | |
+| --- | --- |
+| `email.complained` | Always. Being marked as spam is the most expensive signal a sender gets, and there is no temporary version of it. |
+| `email.bounced` with `bounce.type: "Permanent"` | Yes — the address is wrong. |
+| `email.bounced` with a temporary type | **No.** A full mailbox or a greylisting server is not a wrong address, and suppressing on one loses a reader who did nothing. |
+| A bounce type nobody has seen before | **No.** Guessing towards suppression costs a reader silently and permanently; guessing away from it costs one more bounce, which the next delivery reports again. |
+
+### The one unverified part
+
+The signature check implements Svix's scheme — Resend signs `id.timestamp.body` with the base64
+secret after the `whsec_` prefix — from their published description rather than against a real
+delivery. It **fails closed**, so a mismatch means bounces go unrecorded, never that a stranger can
+suppress an address. Send one test webhook from the dashboard and confirm it answers `200` before
+relying on it.
