@@ -197,4 +197,146 @@ describe('Patreon auth flow (integration)', () => {
     expect(after?.isActivePatron).toBe(false);
     expect(after?.currentTierId).toBeNull();
   });
+
+  /**
+   * Patreon's identity endpoint is reported to time out for readers with many memberships —
+   * server-side, at around ten seconds, and not helped by paging or trimming fields. Since
+   * `completeLogin` needed it to succeed, the people supporting the most creators could not sign
+   * in at all rather than now and then.
+   */
+  describe('when Patreon cannot answer what they support', () => {
+    const READER = 'fallback-reader';
+    let restore: typeof ctx.patreon.identity;
+
+    beforeEach(() => {
+      // Its own reader, installed here rather than relying on whatever the previous test left
+      // behind. An earlier test in this file rewrites `patreonUserId` to 'patron-1' and never
+      // puts it back, so these passed alone and failed in sequence — reading a user the login
+      // was no longer touching.
+      restore = ctx.patreon.identity;
+      ctx.patreon.identity = { ...ctx.patreon.identity, patreonUserId: READER, memberships: [] };
+    });
+
+    afterEach(() => {
+      ctx.patreon.identity = restore;
+      ctx.patreon.identityShouldFail = false;
+      ctx.patreon.profileShouldFail = false;
+    });
+
+    it('still signs them in', async () => {
+      ctx.patreon.identityShouldFail = true;
+      const { state, cookie } = await startLogin();
+
+      const res = await callback(state, cookie).expect(302);
+
+      expect(pickCookie(res, 'pp_session')).toContain('pp_session=');
+    });
+
+    it('still records who they are', async () => {
+      ctx.patreon.identityShouldFail = true;
+      const { state, cookie } = await startLogin();
+
+      await callback(state, cookie).expect(302);
+
+      const user = await ctx.prisma.user.findUniqueOrThrow({
+        where: { patreonUserId: READER },
+      });
+      expect(user.fullName).toBe('Ada Lovelace');
+    });
+
+    it('leaves the memberships they already had exactly alone', async () => {
+      // The reason the fallback returns a type with no memberships field. Treating "we did not
+      // ask" as "they support nobody" would revoke every board they pay for, silently, at the
+      // moment they signed in.
+      const { state: s1, cookie: c1 } = await startLogin();
+      await callback(s1, c1).expect(302);
+      const user = await ctx.prisma.user.findUniqueOrThrow({
+        where: { patreonUserId: READER },
+      });
+      const suffix = Date.now();
+      const owner = await ctx.prisma.user.create({
+        data: { patreonUserId: `fallback-owner-${suffix}` },
+      });
+      const creator = await ctx.prisma.creator.create({
+        data: {
+          slug: `fallback-${suffix}`,
+          displayName: 'Fallback Board',
+          patreonCampaignId: `campaign-fallback-${suffix}`,
+          ownerUserId: owner.id,
+        },
+      });
+      await ctx.prisma.membership.create({
+        data: {
+          userId: user.id,
+          creatorId: creator.id,
+          amountCents: 500,
+          isActivePatron: true,
+          lastSyncedAt: new Date(),
+        },
+      });
+
+      ctx.patreon.identityShouldFail = true;
+      const { state: s2, cookie: c2 } = await startLogin();
+      await callback(s2, c2).expect(302);
+
+      const membership = await ctx.prisma.membership.findFirstOrThrow({
+        where: { userId: user.id, creatorId: creator.id },
+      });
+      expect(membership.isActivePatron).toBe(true);
+      expect(membership.amountCents).toBe(500);
+    });
+
+    /**
+     * Stamped first, deliberately. Nothing on the ordinary login path sets this — only the
+     * background job does — so on a fresh user it is null either way, and asserting null after a
+     * failed login would pass whether or not the code did anything at all.
+     */
+    const stampRefreshedAt = async () => {
+      const { state, cookie } = await startLogin();
+      await callback(state, cookie).expect(302);
+      return ctx.prisma.user.update({
+        where: { patreonUserId: READER },
+        data: { membershipsRefreshedAt: new Date('2026-01-01T00:00:00Z') },
+      });
+    };
+
+    it('puts them at the front of the refresh queue', async () => {
+      // Nothing was learned about what they support, so the background job has to go and find
+      // out. It orders by this stamp with nulls first.
+      await stampRefreshedAt();
+
+      ctx.patreon.identityShouldFail = true;
+      const { state, cookie } = await startLogin();
+      await callback(state, cookie).expect(302);
+
+      const user = await ctx.prisma.user.findUniqueOrThrow({
+        where: { patreonUserId: READER },
+      });
+      expect(user.membershipsRefreshedAt).toBeNull();
+    });
+
+    it('refuses the login when it cannot identify them either', async () => {
+      // The fallback is about degrading, not about guessing. With no id there is no reader to
+      // sign in, and inventing one would be worse than refusing.
+      ctx.patreon.identityShouldFail = true;
+      ctx.patreon.profileShouldFail = true;
+      const { state, cookie } = await startLogin();
+
+      await callback(state, cookie).expect(500);
+    });
+
+    it('leaves the refresh stamp alone when the full fetch works', async () => {
+      // The ordinary path must be untouched. Clearing the stamp here would claim nothing had
+      // been learned, and send the job chasing a reader whose memberships were just applied.
+      const stamped = await stampRefreshedAt();
+
+      const { state, cookie } = await startLogin();
+      await callback(state, cookie).expect(302);
+
+      const user = await ctx.prisma.user.findUniqueOrThrow({
+        where: { patreonUserId: READER },
+      });
+      expect(user.membershipsRefreshedAt).toEqual(stamped.membershipsRefreshedAt);
+    });
+  });
 });

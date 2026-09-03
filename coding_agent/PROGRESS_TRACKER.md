@@ -102,27 +102,27 @@ the real provider is a config value with no code, migration or data change.
   a stranger suppressing addresses. Confirm with one real webhook when the
   domain is set up. `docs/email-setup.md`.
 
-- **Login does not survive a Patreon hiccup**, and the users it would strand are
-  the ones supporting the most creators. `completeLogin` calls `fetchIdentity`
-  with no fallback, so any failure throws and the sign-in fails outright.
+- ~~**Login does not survive a Patreon hiccup**~~ — built. `completeLogin` now
+  falls back to `fetchProfile`, which asks the same endpoint **without** the
+  `include=memberships` that is reported to make it time out. The reader signs
+  in, and their memberships are left exactly as they were.
 
-  Patreon's identity endpoint is reported by other developers to answer **504
-  for users with many memberships**, server-side at around ten seconds, and not
-  helped by reducing `page[count]` or the field selection. If that is right, the
-  affected users cannot sign in at all rather than intermittently.
+  The safety is in the type rather than in remembering: `fetchProfile` returns a
+  `PatreonProfile`, which has **no memberships field at all**, so handing it to
+  `applyIdentity` — which deactivates everything absent from what it is given —
+  does not compile. Mutation testing confirms it: replacing the guard with
+  `identity?.memberships ?? []` fails the test that says an existing membership
+  survives.
 
-  The background refresh job already handles this correctly — its `try` wraps the
-  fetch, so a failure leaves memberships stale rather than revoking them. Only
-  login is exposed.
+  On the fallback the refresh stamp is cleared so the background job picks them
+  up first; on the ordinary path it is left alone. Both directions are tested,
+  and both mutants die.
 
-  A fix means fetching the identity _without_ `include=memberships` as a
-  fallback, signing them in on that, and **not** calling `applyIdentity` on that
-  path — an empty list there would deactivate every membership they have. That
-  is an interface change across three client implementations, so it is written
-  down rather than started.
-
-  Reported rather than reproduced. Worth confirming against a real account with
-  many memberships before building for it.
+  **One case remains and cannot be fixed here.** A reader whose _first ever_
+  login hits the timeout signs in with no memberships, and the refresh job will
+  not find them — it selects on having a stale membership, and they have none.
+  They can read public boards and a later successful login fixes it. If Patreon
+  can never return their memberships, no arrangement of this code invents them.
 
 - ~~An empty membership response silently revoking everything~~ — checked and not
   reachable. `deactivateAbsent` would indeed deactivate every membership if

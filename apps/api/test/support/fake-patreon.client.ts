@@ -1,5 +1,10 @@
 import { PatreonClient } from '../../src/patreon/patreon.client';
-import { PatreonCampaign, PatreonIdentity, PatreonTokens } from '../../src/patreon/patreon.types';
+import {
+  PatreonCampaign,
+  PatreonIdentity,
+  PatreonProfile,
+  PatreonTokens,
+} from '../../src/patreon/patreon.types';
 
 /**
  * Records what it was called with so tests can assert the PKCE verifier actually reached the
@@ -20,6 +25,10 @@ export class FakePatreonClient implements PatreonClient {
   public refreshShouldFail = false;
   public campaigns: PatreonCampaign[] = [];
   public campaignsShouldFail = false;
+  /** Simulates the timeout Patreon is reported to return for readers with many memberships. */
+  public identityShouldFail = false;
+  /** The fallback failing too, which must still refuse the login rather than invent a reader. */
+  public profileShouldFail = false;
 
   buildAuthorizationUrl({
     state,
@@ -48,7 +57,20 @@ export class FakePatreonClient implements PatreonClient {
   }
 
   async fetchIdentity(): Promise<PatreonIdentity> {
+    if (this.identityShouldFail) throw new Error('Patreon identity fetch failed');
     return this.identity;
+  }
+
+  async fetchProfile(): Promise<PatreonProfile> {
+    if (this.profileShouldFail) throw new Error('Patreon profile fetch failed');
+    // Deliberately built field by field rather than spreading `identity`: spreading would carry
+    // `memberships` through, and the whole point of the fallback type is that it cannot.
+    return {
+      patreonUserId: this.identity.patreonUserId,
+      fullName: this.identity.fullName,
+      email: this.identity.email,
+      avatarUrl: this.identity.avatarUrl,
+    };
   }
 
   async fetchOwnedCampaigns(): Promise<PatreonCampaign[]> {

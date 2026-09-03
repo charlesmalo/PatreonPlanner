@@ -5,6 +5,7 @@ import {
   PatreonCampaign,
   PatreonIdentity,
   PatreonMembership,
+  PatreonProfile,
   PatreonTokens,
 } from './patreon.types';
 
@@ -146,6 +147,35 @@ export class HttpPatreonClient implements PatreonClient {
       throw new Error('Patreon identity fetch failed');
     }
     return this.parseIdentity((await response.json()) as IdentityPayload);
+  }
+
+  /**
+   * The same endpoint without the include that makes it slow.
+   *
+   * `include=memberships` is what times out for readers with many of them — server-side, at
+   * around ten seconds, and unaffected by `page[count]` or field selection. Dropping it asks a
+   * much smaller question, which is enough to know who is signing in.
+   *
+   * Returns a `PatreonProfile`, which has no memberships field. That is deliberate: a caller
+   * cannot accidentally treat "we did not ask" as "they support nobody", which would deactivate
+   * every membership they have.
+   */
+  async fetchProfile(accessToken: string): Promise<PatreonProfile> {
+    const params = new URLSearchParams({ 'fields[user]': 'full_name,email,image_url' });
+    const response = await fetch(`${this.apiUrl(IDENTITY_PATH)}?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) {
+      this.logger.warn(`Patreon profile fetch failed with status ${response.status}`);
+      throw new Error('Patreon profile fetch failed');
+    }
+    const body = (await response.json()) as IdentityPayload;
+    return {
+      patreonUserId: body.data.id,
+      fullName: body.data.attributes?.full_name ?? null,
+      email: body.data.attributes?.email ?? null,
+      avatarUrl: body.data.attributes?.image_url ?? null,
+    };
   }
 
   /**
