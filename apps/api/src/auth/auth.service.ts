@@ -1,7 +1,7 @@
-import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import { Inject, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { EncryptionService } from '../crypto/encryption.service';
 import { PATREON_CLIENT, PatreonClient } from '../patreon/patreon.client';
-import { PatreonTokens } from '../patreon/patreon.types';
+import { PatreonIdentity, PatreonProfile, PatreonTokens } from '../patreon/patreon.types';
 import { MembershipSyncService } from '../memberships/membership-sync.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionService } from '../session/session.service';
@@ -9,6 +9,8 @@ import { OAuthStateService } from './oauth-state.service';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     @Inject(PATREON_CLIENT) private readonly patreon: PatreonClient,
     private readonly states: OAuthStateService,
@@ -33,21 +35,52 @@ export class AuthService {
     }
 
     const tokens = await this.patreon.exchangeCode(code, codeVerifier);
-    const identity = await this.patreon.fetchIdentity(tokens.accessToken);
+
+    /**
+     * Null when Patreon could not tell us what they support.
+     *
+     * Their identity endpoint is reported to time out for readers with many memberships —
+     * server-side, at around ten seconds, and not helped by paging or trimming fields. Requiring
+     * it meant the people supporting the most creators could not sign in at all rather than now
+     * and then, which is the wrong way round: those are the readers with the most to lose.
+     *
+     * So a failure here degrades instead of refusing. What it must never do is continue with an
+     * empty list — `applyIdentity` deactivates every membership absent from what it is given, so
+     * treating "we did not ask" as "they support nobody" would revoke every board they pay for at
+     * the moment they signed in. `fetchProfile` returns a type with no memberships field at all,
+     * which makes that a compile error rather than something to remember.
+     */
+    let identity: PatreonIdentity | null = null;
+    try {
+      identity = await this.patreon.fetchIdentity(tokens.accessToken);
+    } catch (error) {
+      this.logger.warn(
+        `Patreon could not report memberships at login; signing in without them: ${
+          (error as Error).message
+        }`,
+      );
+    }
+    // Not caught: with no id there is no reader to sign in, and inventing one is worse than
+    // refusing. The fallback is about degrading, not about guessing.
+    const who: PatreonProfile = identity ?? (await this.patreon.fetchProfile(tokens.accessToken));
 
     const profile = {
-      fullName: identity.fullName,
-      email: identity.email,
-      avatarUrl: identity.avatarUrl,
+      fullName: who.fullName,
+      email: who.email,
+      avatarUrl: who.avatarUrl,
       ...this.encryptedTokenFields(tokens),
+      // Cleared only on the fallback, so the background refresh picks them up first — it orders
+      // by this stamp with nulls first. On the ordinary path it is left alone: memberships were
+      // just applied, and clearing it would claim nothing had been learned.
+      ...(identity ? {} : { membershipsRefreshedAt: null }),
     };
     const user = await this.prisma.user.upsert({
-      where: { patreonUserId: identity.patreonUserId },
-      create: { patreonUserId: identity.patreonUserId, ...profile },
+      where: { patreonUserId: who.patreonUserId },
+      create: { patreonUserId: who.patreonUserId, ...profile },
       update: profile,
     });
 
-    await this.memberships.applyIdentity(user.id, identity.memberships);
+    if (identity) await this.memberships.applyIdentity(user.id, identity.memberships);
 
     // Rotation on login: a session is always freshly minted, so a token captured beforehand is
     // never the one that ends up authenticated.
