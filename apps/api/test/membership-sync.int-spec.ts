@@ -129,4 +129,35 @@ describe('MembershipSyncService (integration)', () => {
     expect(scoped.isActivePatron).toBe(false);
     expect(untouched.isActivePatron).toBe(true);
   });
+
+  /**
+   * A sync that saw only part of the picture must not report the whole thing settled.
+   *
+   * `membershipsSyncPending` means "we still owe this reader a full read of what they support".
+   * A webhook speaks for one campaign, so clearing on that would call the debt paid on the
+   * strength of a partial view — the same distinction `deactivateAbsent` draws when it refuses to
+   * deactivate outside the campaigns it was told about.
+   */
+  describe('an outstanding membership sync', () => {
+    beforeEach(async () => {
+      await ctx.prisma.user.update({
+        where: { id: userId },
+        data: { membershipsSyncPending: true },
+      });
+    });
+
+    it('is settled by a sync that saw everything', async () => {
+      await sync.applyIdentity(userId, []);
+
+      const user = await ctx.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+      expect(user.membershipsSyncPending).toBe(false);
+    });
+
+    it('is not settled by a webhook speaking for one campaign', async () => {
+      await sync.applyIdentity(userId, [], { onlyCampaignIds: ['campaign-known'] });
+
+      const user = await ctx.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+      expect(user.membershipsSyncPending).toBe(true);
+    });
+  });
 });

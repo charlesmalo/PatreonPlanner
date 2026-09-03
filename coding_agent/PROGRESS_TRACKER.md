@@ -118,11 +118,18 @@ the real provider is a config value with no code, migration or data change.
   up first; on the ordinary path it is left alone. Both directions are tested,
   and both mutants die.
 
-  **One case remains and cannot be fixed here.** A reader whose _first ever_
-  login hits the timeout signs in with no memberships, and the refresh job will
-  not find them — it selects on having a stale membership, and they have none.
-  They can read public boards and a later successful login fixes it. If Patreon
-  can never return their memberships, no arrangement of this code invents them.
+  The first-time reader is covered too. Somebody whose _first_ login hits the
+  timeout has no memberships at all, so "has a stale membership" would never see
+  them again — `User.membershipsSyncPending` is the only trace that anything is
+  owed, and the job looks for it as well. Cleared by any sync that saw the whole
+  picture; deliberately **not** cleared by a webhook, which speaks for one
+  campaign and would otherwise call the debt paid on a partial view.
+
+  A column rather than widening the selector to "everyone with no memberships",
+  which is most people and would have the job re-asking Patreon about them
+  forever. Both clauses sit under one `AND` with the back-off, so a reader
+  Patreon cannot answer for still rotates to the back rather than filling every
+  batch.
 
 - ~~An empty membership response silently revoking everything~~ — checked and not
   reachable. `deactivateAbsent` would indeed deactivate every membership if

@@ -72,7 +72,12 @@ export class AuthService {
       // Cleared only on the fallback, so the background refresh picks them up first — it orders
       // by this stamp with nulls first. On the ordinary path it is left alone: memberships were
       // just applied, and clearing it would claim nothing had been learned.
-      ...(identity ? {} : { membershipsRefreshedAt: null }),
+      //
+      // The flag beside it carries the case the stamp cannot. A reader signing in for the first
+      // time has no memberships at all, so the job's "has a stale membership" selector would
+      // never look at them again — they would sign in once and never receive access to anything
+      // they pay for. `applyIdentity` clears it on the ordinary path.
+      ...(identity ? {} : { membershipsRefreshedAt: null, membershipsSyncPending: true }),
     };
     const user = await this.prisma.user.upsert({
       where: { patreonUserId: who.patreonUserId },
