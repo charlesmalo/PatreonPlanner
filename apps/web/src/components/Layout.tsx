@@ -25,8 +25,12 @@ export function Layout({ user, loadingSession, onSignOut, notifications, childre
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 py-3">
           <Link
             to="/"
-            className="text-lg font-semibold tracking-tight focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+            className="flex items-center gap-2 text-lg font-semibold tracking-tight focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
           >
+            {/* Decorative: the link already reads "PatreonPlanner", so naming the mascot again
+                would have a screen reader announce the same thing twice. Sized in rem rather than
+                by the file's own 675x897, which would otherwise dominate the bar. */}
+            <img src="/brand/mascot.png" alt="" aria-hidden="true" className="h-7 w-auto" />
             PatreonPlanner
           </Link>
           {loadingSession ? null : user ? (
