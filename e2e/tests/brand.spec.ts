@@ -52,6 +52,30 @@ test.describe('the logo and mascot', () => {
     await expect(planner).toHaveCSS('color', 'rgb(253, 93, 70)');
   });
 
+  test('the home page leads with the mark, at a size that carries it', async ({ page }) => {
+    await page.goto('/');
+    const hero = page.locator(
+      'main img[src="/brand/logo.png"], section img[src="/brand/logo.png"]',
+    );
+
+    await expect(hero.first()).toBeVisible();
+    const box = await hero.first().boundingBox();
+    // Well above the header's 36px, where the white fill stops separating from a light background
+    // and the silhouette breaks up. The hero is where the artwork is actually shown.
+    expect(box?.height ?? 0).toBeGreaterThan(90);
+  });
+
+  test('the slogan carries the brand colour on its last word', async ({ page }) => {
+    // Pitch and Plan belong to the reader and the creator; Play is what the board is pointed at,
+    // and it is the word the colour marks — the same treatment the wordmark gets in the header.
+    await page.goto('/');
+
+    const heading = page.getByRole('heading', { name: 'Pitch. Plan. Play.' });
+    await expect(heading).toBeVisible();
+    await expect(heading.locator('span.text-brand')).toHaveText('Play.');
+    await expect(heading.locator('span.text-brand')).toHaveCSS('color', 'rgb(253, 93, 70)');
+  });
+
   test('nothing but the brand asset is published', async ({ page }) => {
     // `public/` is copied into the image wholesale and served to anyone who asks. Mockups and
     // internal notes have been known to end up there.

@@ -43,18 +43,26 @@ the product's name rather than as pixels, and cannot fall out of step with the b
 logo generator's horizontal lockup was wrong twice over — it carried the wrong product name, and it
 put pixels where text belongs.
 
-## Known limitation: the mark is weak on light backgrounds
+## Where the mark is used, and where it is weak
 
-The artwork is a white fill with coral outlines. On the dark theme that reads beautifully — the
-white body carries the silhouette. On the light theme the fill disappears into the background and
-only the outlines remain, so at header size the robot fragments into disconnected coral shapes
-rather than reading as a robot.
+| | |
+| --- | --- |
+| **Home page hero**, 112–144 px | Where the artwork is actually shown. Reads well on both themes. |
+| **Header**, 36 px | Weak on the light theme — see below. |
+| **Favicon**, 16–32 px | Same weakness, more so. |
 
-Made larger it is still fragmented; this is not a sizing problem. What would fix it is a variant
-drawn for light backgrounds — darker outlines, or a solid coral silhouette — or setting the mark on
-a badge so it always has its own background.
+The artwork is a white fill with coral outlines. On the dark theme that reads beautifully at every
+size: the white body carries the silhouette against the background. On the light theme the fill
+disappears into the page and only the outlines remain — which is fine at hero size, where the
+outlines are thick enough to describe a robot, and poor at header and favicon size, where it
+fragments into disconnected coral shapes.
 
-Recorded rather than worked around, because it is a drawing decision and not a code one.
+So it is a small-size problem specifically, confirmed by screenshotting both themes at 2× and 3×
+rather than by eye. Enlarging the header mark from 28 px to 36 px helped and did not solve it.
+
+What would fix it is a second variant drawn for light backgrounds — darker outlines, or a solid
+silhouette — or a simplified mark for small sizes, which is what a favicon usually wants anyway.
+Recorded rather than worked around in CSS, because it is a drawing decision.
 
 ## History worth not repeating
 
