@@ -28,10 +28,15 @@ export function Layout({ user, loadingSession, onSignOut, notifications, childre
             className="flex items-center gap-2 text-lg font-semibold tracking-tight focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
           >
             {/* Decorative: the link already reads "PatreonPlanner", so naming the mascot again
-                would have a screen reader announce the same thing twice. Sized in rem rather than
-                by the file's own 675x897, which would otherwise dominate the bar. */}
-            <img src="/brand/mascot.png" alt="" aria-hidden="true" className="h-7 w-auto" />
-            PatreonPlanner
+                would have a screen reader announce the same thing twice. */}
+            <img src="/brand/logo.png" alt="" aria-hidden="true" className="h-9 w-auto" />
+            {/* The lockup as text rather than a rendered wordmark: it stays selectable, scales to
+                any size, and is read aloud as the product's name instead of as pixels. The first
+                half inherits the theme's foreground so it works on light and dark alike — a
+                literal black would vanish on the dark one. */}
+            <span>
+              Patreon<span className="text-brand">Planner</span>
+            </span>
           </Link>
           {loadingSession ? null : user ? (
             <div className="flex items-center gap-3">

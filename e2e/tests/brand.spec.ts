@@ -10,7 +10,7 @@ import { expect, test } from '@playwright/test';
  */
 test.describe('the logo and mascot', () => {
   const mark = (page: import('@playwright/test').Page) =>
-    page.locator('header img[src="/brand/mascot.png"]');
+    page.locator('header img[src="/brand/logo.png"]');
 
   test('the mascot is in the header and its bytes decoded', async ({ page }) => {
     await page.goto('/');
@@ -33,7 +33,7 @@ test.describe('the logo and mascot', () => {
   });
 
   test('the favicon is served as a real image', async ({ page }) => {
-    const response = await page.goto('/brand/favicon.png');
+    const response = await page.goto('/brand/logo.png');
 
     expect(response?.status()).toBe(200);
     // nginx answers the SPA fallback with 200 and text/html for anything missing, so a status
@@ -41,10 +41,21 @@ test.describe('the logo and mascot', () => {
     expect(response?.headers()['content-type']).toBe('image/png');
   });
 
-  test('nothing but the two brand assets is published', async ({ page }) => {
+  test('the wordmark is text, in the brand colour', async ({ page }) => {
+    // The generator's horizontal lockup was wrong twice over — the wrong name, and pixels where
+    // text belongs. This is the replacement: real text, and the second half in the coral sampled
+    // from the artwork so the two cannot drift apart.
+    await page.goto('/');
+
+    const planner = page.locator('header a[href="/"] span.text-brand');
+    await expect(planner).toHaveText('Planner');
+    await expect(planner).toHaveCSS('color', 'rgb(253, 93, 70)');
+  });
+
+  test('nothing but the brand asset is published', async ({ page }) => {
     // `public/` is copied into the image wholesale and served to anyone who asks. Mockups and
     // internal notes have been known to end up there.
-    for (const path of ['/brand/mockup-mug.jpg', '/brand/README.md']) {
+    for (const path of ['/brand/mockup-mug.jpg', '/brand/README.md', '/brand/mascot.png']) {
       const response = await page.goto(path);
       expect(response?.headers()['content-type']).toContain('text/html');
     }
