@@ -1,3 +1,154 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/**
+ * The title card sequence: three board cards landing one after another, each jostling the ones
+ * already sitting there.
+ *
+ * One shared timeline of 2.4s rather than three animations with delays, so a card's own keyframes
+ * describe both its arrival *and* the nudge it takes when the next one lands. Reading down a single
+ * percentage scale is how the choreography stays comprehensible.
+ *
+ * Landing beats: card 1 at 18%, card 2 at 52%, card 3 at 86%.
+ *
+ * Every keyframe writes the whole `transform`. A keyframe naming only `translateX` would replace
+ * the transform rather than add to it, and the card would snap back to its untranslated Y.
+ */
+@layer components {
+  .pp-title-card {
+    /* The resting state, and the only state anything sees when motion is unwelcome. */
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+    animation-duration: 2.4s;
+    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+    animation-fill-mode: both;
+  }
+
+  /**
+   * Picked out by position rather than by a numbered class.
+   *
+   * A class name composed in JSX — `pp-title-card-${n}` — is invisible to Tailwind's scanner,
+   * which reads source files as text and keeps only the class names it literally finds. These
+   * rules were purged, the cards lost their `animation-name`, and the sequence shipped without
+   * moving. Nothing failed and no test noticed: jsdom computes no keyframes, so only a real
+   * browser could tell.
+   *
+   * Wrapped in `:where()` so matching a position costs no specificity. Written plainly,
+   * `.pp-title-card:nth-child(1)` outranks the `.pp-title-card` rule in the reduced-motion block
+   * below — and a media query adds none of its own — so the guard parsed, applied, and lost.
+   * Cards kept animating for anybody who had asked them not to.
+   */
+  .pp-title-card:where(:nth-child(1)) {
+    animation-name: pp-card-one;
+  }
+  .pp-title-card:where(:nth-child(2)) {
+    animation-name: pp-card-two;
+  }
+  .pp-title-card:where(:nth-child(3)) {
+    animation-name: pp-card-three;
+  }
+
+  /* Arrives first, then takes two knocks — one as each later card lands beside it. */
+  @keyframes pp-card-one {
+    0% {
+      opacity: 0;
+      transform: translate3d(0, -2.5rem, 0) scale(0.96);
+    }
+    18% {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    24% {
+      transform: translate3d(0, -0.2rem, 0) scale(1);
+    }
+    30% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    52% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    58% {
+      transform: translate3d(-0.5rem, 0, 0) scale(1);
+    }
+    66% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    86% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    92% {
+      transform: translate3d(-0.4rem, 0, 0) scale(1);
+    }
+    100% {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+  }
+
+  /* Waits, lands second, then takes the knock from the third. */
+  @keyframes pp-card-two {
+    0%,
+    34% {
+      opacity: 0;
+      transform: translate3d(0, -2.5rem, 0) scale(0.96);
+    }
+    52% {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    58% {
+      transform: translate3d(0, -0.2rem, 0) scale(1);
+    }
+    64% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    86% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    92% {
+      transform: translate3d(-0.4rem, 0, 0) scale(1);
+    }
+    100% {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+  }
+
+  /* Lands last and settles; nothing arrives after it to push against. */
+  @keyframes pp-card-three {
+    0%,
+    68% {
+      opacity: 0;
+      transform: translate3d(0, -2.5rem, 0) scale(0.96);
+    }
+    86% {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    92% {
+      transform: translate3d(0, -0.2rem, 0) scale(1);
+    }
+    100% {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+  }
+
+  /**
+   * Asked for less motion, given none.
+   *
+   * `animation: none` rather than a shortened duration: the cards' resting state above is already
+   * the finished one, so removing the animation leaves the sequence complete and readable rather
+   * than mid-flight. Nothing is communicated by the movement that the words do not also say.
+   *
+   * This only reaches the cards because the rules above keep their positional matches inside
+   * `:where()`. Raise their specificity and this silently stops working — the browser check in
+   * `landing-motion` is what would catch it.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    .pp-title-card {
+      animation: none;
+    }
+  }
+}
