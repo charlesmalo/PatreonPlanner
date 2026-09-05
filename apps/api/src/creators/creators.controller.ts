@@ -44,7 +44,12 @@ export class CreatorsController {
   async capabilities(
     @CurrentCreator() creator: ResolvedCreator,
     @CurrentViewer() viewer: Viewer,
-  ): Promise<Record<Lowercase<Capability>, boolean> & { permissions: StaffPermissionValue[] }> {
+  ): Promise<
+    Record<Lowercase<Capability>, boolean> & {
+      contact: boolean;
+      permissions: StaffPermissionValue[];
+    }
+  > {
     const policy: Policy = await this.creators.policyForResolver(creator.id);
     return {
       view: can('VIEW', viewer, policy),
@@ -52,6 +57,14 @@ export class CreatorsController {
       submit: can('SUBMIT', viewer, policy),
       moderate: can('MODERATE', viewer, policy),
       administer: can('ADMINISTER', viewer, policy),
+      // Not a Capability, because it is not resolved from tiers or staff roles — it is the one
+      // question `can()` cannot answer. Present because the board had no way to ask it and so
+      // drew the contact form behind `view`, offering an anonymous reader of a public board a
+      // form the server then refused after they had written the message.
+      //
+      // Signing in is what makes somebody accountable for what they send, which is the whole
+      // reason `allowAnonymousTickets` exists: the flag is about anonymity, not about tickets.
+      contact: viewer.isAuthenticated || creator.allowAnonymousTickets,
       // The five booleans above are too coarse to render staff controls: MODERATE is true for
       // any staff member, while the endpoints behind those controls each demand a specific
       // permission. Without this the SPA offers a HANDLE_REPORTS moderator buttons the API

@@ -32,7 +32,7 @@ interface BoardColumnProps {
  * further down a page nobody had fetched — and "Load more" would mean the board, not the column.
  */
 const SORTS: Array<[string, string]> = [
-  ['', 'Most upvoted'],
+  ['', 'Top rated'],
   ['newest', 'Newest'],
   ['oldest', 'Oldest'],
   // Last, and never the default: the board is a demand signal first, and a hand-made order is

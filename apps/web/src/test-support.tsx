@@ -14,13 +14,16 @@ export const allCapabilities: Capabilities = {
   submit: true,
   moderate: false,
   administer: false,
+  contact: true,
   permissions: [],
 };
 
+/** What an anonymous reader of a public board gets: reading, and nothing that writes. */
 export const viewOnly: Capabilities = {
   view: true,
   upvote: false,
   submit: false,
+  contact: false,
   moderate: false,
   administer: false,
   permissions: [],

@@ -500,4 +500,37 @@ describe('CreatorBoard admin link', () => {
     await screen.findByRole('heading', { name: 'Ada Writes' });
     expect(screen.queryByRole('link', { name: 'Moderators' })).not.toBeInTheDocument();
   });
+
+  describe('the contact form', () => {
+    /**
+     * A write control offered to somebody who cannot write.
+     *
+     * The board drew this behind `view`, which is true for any anonymous reader of a public
+     * board. The server refused them — correctly, and only after they had written the message.
+     * Offering a form that cannot be submitted is worse than not offering one.
+     */
+    it('is absent for a reader who may not open a ticket', async () => {
+      global.fetch = fakeApi({
+        'GET /api/v1/creators/ada-writes': creator,
+        'GET /api/v1/creators/ada-writes/capabilities': viewOnly,
+        'GET /api/v1/creators/ada-writes/recommendations': { items: [], nextCursor: null },
+      });
+      renderBoard();
+
+      // Waits for the board to settle first, so this cannot pass merely by being early.
+      await screen.findByRole('heading', { name: /ada writes/i });
+      expect(screen.queryByLabelText(/message the moderators/i)).not.toBeInTheDocument();
+    });
+
+    it('is offered to a reader who may', async () => {
+      global.fetch = fakeApi({
+        'GET /api/v1/creators/ada-writes': creator,
+        'GET /api/v1/creators/ada-writes/capabilities': { ...viewOnly, contact: true },
+        'GET /api/v1/creators/ada-writes/recommendations': { items: [], nextCursor: null },
+      });
+      renderBoard();
+
+      expect(await screen.findByLabelText(/message the moderators/i)).toBeInTheDocument();
+    });
+  });
 });

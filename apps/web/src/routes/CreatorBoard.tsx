@@ -147,7 +147,7 @@ export function CreatorBoard() {
         ))}
       </div>
 
-      {capabilities.view ? (
+      {capabilities.contact ? (
         <div className="mt-8 max-w-prose">
           <ContactForm slug={slug} />
         </div>
