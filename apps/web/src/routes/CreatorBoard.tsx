@@ -107,7 +107,10 @@ export function CreatorBoard() {
             Moderators
           </Link>
         ) : null}
-        {capabilities.administer ? (
+        {/* Optional chaining, not decoration: this runs inside render, and a capabilities payload
+            without `permissions` — a cached response, an API mid-deploy — would throw here and
+            blank the entire board. The failure is a white page, not a missing link. */}
+        {capabilities.permissions?.includes('MANAGE_POLICY') ? (
           <Link
             to={`/c/${encodeURIComponent(slug)}/settings`}
             className="text-sm text-sky-700 underline focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:text-sky-400"

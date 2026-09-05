@@ -11,7 +11,9 @@ export type StaffPermissionValue =
   | 'EDIT_ENTRIES'
   | 'HANDLE_REPORTS'
   | 'WRITE_NOTES'
-  | 'MANAGE_THEMES';
+  | 'MANAGE_THEMES'
+  /** Who may read the board, and the gates on suggesting and upvoting. */
+  | 'MANAGE_POLICY';
 
 export const ALL_STAFF_PERMISSIONS: StaffPermissionValue[] = [
   'MOVE_ENTRIES',
@@ -19,6 +21,7 @@ export const ALL_STAFF_PERMISSIONS: StaffPermissionValue[] = [
   'HANDLE_REPORTS',
   'WRITE_NOTES',
   'MANAGE_THEMES',
+  'MANAGE_POLICY',
 ];
 
 interface PermissionViewer {

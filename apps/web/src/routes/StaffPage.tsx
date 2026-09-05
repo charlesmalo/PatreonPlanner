@@ -11,6 +11,9 @@ const PERMISSIONS: Array<[StaffPermission, string]> = [
   ['HANDLE_REPORTS', 'Handle reports'],
   ['WRITE_NOTES', 'Write notes'],
   ['MANAGE_THEMES', 'Manage themes'],
+  // Deciding who may read the board is a bigger power than running its queue, which is why it is
+  // grantable rather than implied by being staff.
+  ['MANAGE_POLICY', 'Change board settings'],
 ];
 
 export function StaffPage() {

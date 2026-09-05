@@ -75,9 +75,10 @@ const SWITCHES: Array<{ key: keyof Policy; label: string; hint: string }> = [
 /**
  * Everything a creator decides about their own board.
  *
- * `ADMINISTER`, not `MODERATE` — the same line the API draws, and for the same reason: a moderator
- * who arrived by invite link must not be able to change who can read the board. If that needs
- * delegating it wants a permission of its own rather than being folded into moderation.
+ * Behind `MANAGE_POLICY`, which is a permission of its own rather than part of moderating.
+ * Running the queue and deciding who may read the board are different powers: somebody who
+ * arrived by invite link holds the first, and holds the second only if the creator granted it.
+ * An owner holds it either way, by the role short-circuit in `hasPermission`.
  */
 export function BoardSettings() {
   const { slug = '' } = useParams();
@@ -129,8 +130,8 @@ export function BoardSettings() {
   if (status === 'denied')
     return (
       <p className="p-4">
-        Only the creator can change these. Moderators can run the board without being able to change
-        who may read it.
+        You do not have permission to change this board&apos;s settings. Running the board and
+        deciding who may read it are separate — the creator can grant this from the moderators page.
       </p>
     );
   if (status === 'failed' || !policy) return <p className="p-4">Could not load the settings.</p>;

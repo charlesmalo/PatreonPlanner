@@ -1,0 +1,11 @@
+-- A moderator may be trusted with the board's settings without being the creator.
+--
+-- Its own permission rather than folding into MODERATE, because the two are not the same power:
+-- somebody who arrived by invite link should be able to run the queue without being able to open
+-- the board to the whole internet. A creator who wants to delegate it grants it explicitly.
+--
+-- Additive: no existing staff row gains it, so nobody's powers change on deploy.
+--
+-- ADD VALUE is safe inside a transaction on Postgres 12 and later provided the value is not used
+-- in the same transaction. Nothing here uses it — the grants come later, from the staff page.
+ALTER TYPE "StaffPermission" ADD VALUE 'MANAGE_POLICY';
