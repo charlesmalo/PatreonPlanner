@@ -14,7 +14,7 @@ describe('Catalogue search (integration)', () => {
         ownerUserId: owner.id,
         displayName: 'Cat Co',
         slug: 'cat-co',
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
     });
     creatorId = creator.id;

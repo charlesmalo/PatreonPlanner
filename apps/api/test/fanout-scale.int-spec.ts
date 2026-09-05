@@ -36,7 +36,7 @@ describe('Fan-out at follower scale (integration)', () => {
           ownerUserId: owner,
           displayName: 'Busy Co',
           slug: 'busy-co',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
           staff: { create: { userId: owner, role: 'OWNER' } },
         },
       })

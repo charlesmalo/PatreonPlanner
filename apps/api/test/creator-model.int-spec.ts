@@ -55,10 +55,10 @@ describe('Creator staff and policy models (integration)', () => {
     ).rejects.toThrow();
   });
 
-  it('defaults a policy to public with no tier gates', async () => {
+  it('defaults a policy to subscribers-only with no tier gates', async () => {
     const { creator } = await seedCreator('c');
     const policy = await prisma.creatorPolicy.create({ data: { creatorId: creator.id } });
-    expect(policy.viewVisibility).toBe('PUBLIC');
+    expect(policy.viewVisibility).toBe('SUBSCRIBERS_ONLY');
     expect(policy.submitMinTierId).toBeNull();
     expect(policy.upvoteMinTierId).toBeNull();
     expect(policy.hidePendingFromPublic).toBe(false);

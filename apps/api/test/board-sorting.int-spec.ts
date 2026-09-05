@@ -19,7 +19,7 @@ describe('Board sorting (integration)', () => {
           ownerUserId: owner.id,
           displayName: 'Sort Co',
           slug: 'sort-co',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
           staff: { create: { userId: owner.id, role: 'OWNER' } },
         },
       })
@@ -212,7 +212,7 @@ describe('Board sorting (integration)', () => {
           ownerUserId: await userId('bs-owner'),
           displayName: 'Other',
           slug: 'bs-other',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
         },
       });
       const foreign = await ctx.prisma.recommendation.create({

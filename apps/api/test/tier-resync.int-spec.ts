@@ -36,7 +36,7 @@ describe('Tier re-sync (integration)', () => {
         tiers: {
           create: [{ patreonTierId: 't-lo', title: 'Bronze', amountCents: 300, order: 0 }],
         },
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
     });
     creatorId = creator.id;

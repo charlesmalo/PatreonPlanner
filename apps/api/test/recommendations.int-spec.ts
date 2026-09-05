@@ -23,7 +23,7 @@ describe('Recommendations (integration)', () => {
             { patreonTierId: 'b-hi', title: 'Gold', amountCents: 1000, order: 1 },
           ],
         },
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
       include: { tiers: true },
     });
@@ -36,7 +36,7 @@ describe('Recommendations (integration)', () => {
         ownerUserId: owner.id,
         displayName: 'Other Board',
         slug: 'other-board',
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
     });
     otherCreatorId = other.id;

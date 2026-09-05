@@ -31,7 +31,7 @@ describe('Staff management (integration)', () => {
         ownerUserId,
         displayName: 'Staff Co',
         slug: 'staff-co',
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
         staff: { create: { userId: ownerUserId, role: 'OWNER' } },
       },
     });
@@ -43,7 +43,7 @@ describe('Staff management (integration)', () => {
         ownerUserId,
         displayName: 'Other Co',
         slug: 'st-other',
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
         staff: { create: { userId: ownerUserId, role: 'OWNER' } },
       },
     });

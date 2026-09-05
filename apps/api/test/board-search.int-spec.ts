@@ -29,7 +29,7 @@ describe('Board search (integration)', () => {
         ownerUserId: owner.id,
         displayName: 'Search Co',
         slug: 'search-co',
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
     });
     creatorId = creator.id;
@@ -40,7 +40,7 @@ describe('Board search (integration)', () => {
           ownerUserId: owner.id,
           displayName: 'Other',
           slug: 'bs-other',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
         },
       })
     ).id;

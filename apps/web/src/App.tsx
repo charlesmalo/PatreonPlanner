@@ -7,6 +7,7 @@ import { LandingPage } from './routes/LandingPage';
 import { MyVotes } from './routes/MyVotes';
 import { CarryOver } from './routes/CarryOver';
 import { Premium } from './routes/Premium';
+import { BoardSettings } from './routes/BoardSettings';
 import { NotificationSettings } from './routes/NotificationSettings';
 import { NotificationsPage } from './routes/NotificationsPage';
 import { AcceptInvite } from './routes/AcceptInvite';
@@ -35,6 +36,7 @@ export default function App() {
           <Route path="/c/:slug/my-votes" element={<MyVotes />} />
           <Route path="/c/:slug/notifications" element={<NotificationSettings />} />
           <Route path="/c/:slug/staff" element={<StaffPage />} />
+          <Route path="/c/:slug/settings" element={<BoardSettings />} />
           <Route path="/c/:slug/tickets" element={<Tickets />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/carry-over" element={<CarryOver />} />

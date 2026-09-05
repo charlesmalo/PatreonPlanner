@@ -25,4 +25,27 @@ export class UpdatePolicyDto {
   @ValidateIf((_, value) => value !== undefined)
   @IsBoolean()
   hidePendingFromPublic?: boolean;
+
+  /*
+   * The rest of what a creator already decides, which the API held and never let anybody set.
+   * Every one of these was reachable only by editing the database directly.
+   */
+
+  /** A public contact form on a public board is the highest-value spam target in the app. */
+  @ValidateIf((_, value) => value !== undefined)
+  @IsBoolean()
+  allowAnonymousTickets?: boolean;
+
+  @ValidateIf((_, value) => value !== undefined)
+  @IsBoolean()
+  allowReactions?: boolean;
+
+  @ValidateIf((_, value) => value !== undefined)
+  @IsBoolean()
+  acceptsCarryOver?: boolean;
+
+  /** Whether a patron may lift votes cast at a cheaper tier to the one they now pay. */
+  @ValidateIf((_, value) => value !== undefined)
+  @IsBoolean()
+  allowVoteRatchet?: boolean;
 }

@@ -22,7 +22,7 @@ describe('Creator read and policy endpoints (integration)', () => {
             { patreonTierId: 'p-hi', title: 'Gold', amountCents: 1000, order: 1 },
           ],
         },
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
       include: { tiers: true },
     });
@@ -63,6 +63,14 @@ describe('Creator read and policy endpoints (integration)', () => {
   }
 
   it('exposes the public creator profile without a login', async () => {
+    // Said out loud rather than inherited. Boards are subscribers-only by default now, so a test
+    // about what an anonymous reader sees has to open the board first — otherwise it is testing
+    // the default, and it would pass or fail on a decision made somewhere else entirely.
+    await ctx.prisma.creatorPolicy.update({
+      where: { creatorId },
+      data: { viewVisibility: 'PUBLIC' },
+    });
+
     const res = await request(ctx.app.getHttpServer())
       .get('/api/v1/creators/policy-co')
       .expect(200);
@@ -100,7 +108,18 @@ describe('Creator read and policy endpoints (integration)', () => {
       .get(`/api/v1/creators/${creatorId}/policy`)
       .set('Cookie', auth.session)
       .expect(200);
-    expect(res.body.viewVisibility).toBe('PUBLIC');
+    // Whatever the previous test left, not a hardcoded guess: this is about staff being allowed
+    // to read the policy at all, not about which visibility it happens to hold.
+    const stored = await ctx.prisma.creatorPolicy.findUniqueOrThrow({ where: { creatorId } });
+    expect(res.body.viewVisibility).toBe(stored.viewVisibility);
+    // Every setting a creator decides comes back, including the four that the API held and never
+    // exposed until the settings page needed them.
+    expect(res.body).toMatchObject({
+      allowAnonymousTickets: expect.any(Boolean),
+      allowReactions: expect.any(Boolean),
+      acceptsCarryOver: expect.any(Boolean),
+      allowVoteRatchet: expect.any(Boolean),
+    });
   });
 
   it('lets staff update the policy', async () => {
@@ -218,5 +237,57 @@ describe('Creator read and policy endpoints (integration)', () => {
       .set('x-csrf-token', auth.csrfToken)
       .send({ submitMinTierId: otherCreator.tiers[0].id })
       .expect(400);
+  });
+
+  describe('a board is private until its creator opens it', () => {
+    /**
+     * The default is a security decision. A public board publishes what a creator is currently
+     * watching, and those lists are scraped to file fraudulent DMCA claims against them.
+     *
+     * ANY_PATREON_USER is no defence: a Patreon account is free, so it costs an automated reader
+     * nothing. Only SUBSCRIBERS_ONLY puts a price on looking.
+     */
+    it('starts subscribers-only', async () => {
+      const owner = await ctx.prisma.user.create({
+        data: { patreonUserId: `default-owner-${Date.now()}` },
+      });
+      const fresh = await ctx.prisma.creator.create({
+        data: {
+          patreonCampaignId: `default-campaign-${Date.now()}`,
+          ownerUserId: owner.id,
+          displayName: 'Fresh Board',
+          slug: `fresh-${Date.now()}`,
+          // Deliberately unset: this test is about what a board gets when nobody chooses.
+          policy: { create: {} },
+        },
+      });
+
+      const policy = await ctx.prisma.creatorPolicy.findUniqueOrThrow({
+        where: { creatorId: fresh.id },
+      });
+      expect(policy.viewVisibility).toBe('SUBSCRIBERS_ONLY');
+    });
+
+    it('leaves a board that already chose public alone', async () => {
+      // Changing a default must not rewrite anybody's decision. A creator who chose PUBLIC chose
+      // it, and their patrons would arrive at a board that had vanished with no explanation.
+      const owner = await ctx.prisma.user.create({
+        data: { patreonUserId: `open-owner-${Date.now()}` },
+      });
+      const open = await ctx.prisma.creator.create({
+        data: {
+          patreonCampaignId: `open-campaign-${Date.now()}`,
+          ownerUserId: owner.id,
+          displayName: 'Open Board',
+          slug: `open-${Date.now()}`,
+          policy: { create: { viewVisibility: 'PUBLIC' } },
+        },
+      });
+
+      const policy = await ctx.prisma.creatorPolicy.findUniqueOrThrow({
+        where: { creatorId: open.id },
+      });
+      expect(policy.viewVisibility).toBe('PUBLIC');
+    });
   });
 });

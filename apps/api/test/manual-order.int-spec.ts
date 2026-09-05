@@ -19,7 +19,7 @@ describe('Manual order (integration)', () => {
           ownerUserId: owner.id,
           displayName: 'Order Co',
           slug: 'order-co',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
           staff: { create: { userId: owner.id, role: 'OWNER' } },
         },
       })
@@ -203,7 +203,7 @@ describe('Manual order (integration)', () => {
         ownerUserId: await userId('mo-owner'),
         displayName: 'Other',
         slug: 'mo-other',
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
     });
     const foreign = await ctx.prisma.recommendation.create({

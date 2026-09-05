@@ -23,7 +23,7 @@ describe('Entry detail (integration)', () => {
           ownerUserId: owner.id,
           displayName: 'Detail Co',
           slug: 'detail-co',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
           staff: { create: { userId: owner.id, role: 'OWNER' } },
         },
       })
@@ -35,7 +35,7 @@ describe('Entry detail (integration)', () => {
           ownerUserId: owner.id,
           displayName: 'Other Co',
           slug: 'ed-other',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
         },
       })
     ).id;

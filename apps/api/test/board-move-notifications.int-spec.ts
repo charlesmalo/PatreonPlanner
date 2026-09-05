@@ -39,7 +39,7 @@ describe('Following what moves (integration)', () => {
           ownerUserId: owner,
           displayName: 'Move Co',
           slug: 'move-co',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
           staff: { create: { userId: owner, role: 'OWNER' } },
         },
       })
@@ -378,7 +378,7 @@ describe('Following what moves (integration)', () => {
           ownerUserId: owner,
           displayName: 'Other',
           slug: 'bm-other',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
           staff: { create: { userId: owner, role: 'OWNER' } },
         },
       });
@@ -567,7 +567,7 @@ describe('Following what moves (integration)', () => {
             ownerUserId: owner,
             displayName: 'Elsewhere',
             slug: 'bm-follow-other',
-            policy: { create: {} },
+            policy: { create: { viewVisibility: 'PUBLIC' } },
             staff: { create: { userId: owner, role: 'OWNER' } },
           },
         });

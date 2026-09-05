@@ -30,7 +30,7 @@ describe('Link candidates (integration)', () => {
           ownerUserId: owner.id,
           displayName: 'Link Co',
           slug: 'link-co',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
           staff: { create: { userId: owner.id, role: 'OWNER' } },
         },
       })
@@ -365,7 +365,7 @@ describe('Link candidates (integration)', () => {
           ownerUserId: await userId('lk-owner'),
           displayName: 'Other',
           slug: 'lk-other',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
         },
       });
       const foreignEntry = await ctx.prisma.recommendation.create({

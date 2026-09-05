@@ -19,7 +19,7 @@ describe('Submission lifecycle (integration)', () => {
         ownerUserId: owner.id,
         displayName: 'Lifecycle Co',
         slug: 'lifecycle-co',
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
     });
     creatorId = creator.id;
@@ -30,7 +30,7 @@ describe('Submission lifecycle (integration)', () => {
         ownerUserId: owner.id,
         displayName: 'Other Co',
         slug: 'lc-other',
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
     });
     otherCreatorId = other.id;

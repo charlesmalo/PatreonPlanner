@@ -23,7 +23,7 @@ describe('Weighted voting (integration)', () => {
           ownerUserId: await userId('wv-owner'),
           displayName: 'Weight Co',
           slug: 'weight-co',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
           staff: { create: { userId: await userId('wv-owner'), role: 'OWNER' } },
         },
       })
@@ -167,7 +167,7 @@ describe('Weighted voting (integration)', () => {
           ownerUserId: await userId('wv-owner'),
           displayName: 'Other',
           slug: 'wv-other',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
         },
       });
       const foreign = await ctx.prisma.tier.create({

@@ -23,7 +23,7 @@ describe('Board visibility (integration)', () => {
         ownerUserId: owner.id,
         displayName: 'Visibility Co',
         slug: 'visibility-co',
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
     });
     creatorId = creator.id;

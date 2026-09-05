@@ -21,7 +21,7 @@ describe('Franchise and watch-order submissions (integration)', () => {
         ownerUserId: owner.id,
         displayName: 'Classes Co',
         slug: 'classes-co',
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
     });
     creatorId = creator.id;

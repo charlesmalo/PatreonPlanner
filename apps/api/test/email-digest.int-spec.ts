@@ -28,7 +28,7 @@ describe('Email digests (integration)', () => {
           ownerUserId: owner.id,
           displayName: 'Digest Co',
           slug: 'digest-co',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
           staff: { create: { userId: owner.id, role: 'OWNER' } },
         },
       })

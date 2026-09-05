@@ -20,7 +20,7 @@ describe('MembershipRefreshJob (integration)', () => {
         tiers: {
           create: [{ patreonTierId: 'r-tier', title: 'Gold', amountCents: 1000, order: 0 }],
         },
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
     });
     creatorId = creator.id;

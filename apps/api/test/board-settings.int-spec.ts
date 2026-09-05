@@ -17,7 +17,7 @@ describe('Board view settings (integration)', () => {
             ownerUserId: owner.id,
             displayName: slug,
             slug,
-            policy: { create: {} },
+            policy: { create: { viewVisibility: 'PUBLIC' } },
             staff: { create: { userId: owner.id, role: 'OWNER' } },
           },
         })
