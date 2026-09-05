@@ -70,6 +70,52 @@ export function BoardTabs({ tabs, initialIndex = 0, onChange, children }: BoardT
     return () => node.removeEventListener('wheel', onWheel);
   }, [index, tabs.length]);
 
+  /**
+   * Swiping between columns.
+   *
+   * Pointer events rather than touch events, so a finger, a stylus and a trackpad drag all take
+   * the same path. It commits to a gesture only once it is clearly horizontal — a vertical drag
+   * is somebody scrolling the card list, and stealing it would make a long column unreadable on
+   * a phone.
+   *
+   * A mouse is left alone: it already has the arrows and the wheel, and a click-drag on a board
+   * belongs to the card drag-and-drop that already exists.
+   */
+  const swipe = useRef<{ x: number; y: number; decided: boolean } | null>(null);
+
+  const onPointerDown = (event: React.PointerEvent) => {
+    if (event.pointerType === 'mouse') return;
+    if ((event.target as HTMLElement).closest('[draggable="true"]')) return;
+    swipe.current = { x: event.clientX, y: event.clientY, decided: false };
+  };
+
+  const onPointerMove = (event: React.PointerEvent) => {
+    const start = swipe.current;
+    if (!start || start.decided) return;
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
+    // Unusable coordinates mean no gesture, not a gesture in some default direction. Written as
+    // an explicit check because the comparisons below fail *open* on NaN — `Math.abs(NaN) < 48`
+    // is false, so every guard passes and the board changes column on nothing at all.
+    if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
+    // Waits until the direction is unambiguous. Deciding on the first pixel turns every attempt
+    // to scroll a column into a column change.
+    if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    // Once per gesture. Belt-and-braces today: `go` closes over `index`, and `index` does not
+    // change until the re-render, so every move in one gesture already computes the same target.
+    // Removing this flag currently changes nothing — mutation testing says so. It stays because
+    // that accident is one refactor from ending: read the index from a ref, or batch differently,
+    // and a single long drag starts crossing every column at once.
+    start.decided = true;
+    // Dragging right reveals what is to the left, which is the previous column — the content
+    // follows the finger.
+    go(index + (dx > 0 ? -1 : 1));
+  };
+
+  const endSwipe = () => {
+    swipe.current = null;
+  };
+
   const onKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === 'ArrowLeft') {
       event.preventDefault();
@@ -147,7 +193,17 @@ export function BoardTabs({ tabs, initialIndex = 0, onChange, children }: BoardT
         {/* A ceiling on the reading width even at full screen: a card list stretched across a
             wide monitor is a long sideways scan for every title. Centred, so the dead space is
             symmetrical rather than all on one side. */}
-        <div ref={strip} className="mx-auto min-w-0 max-w-5xl flex-1 overflow-hidden">
+        <div
+          ref={strip}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={endSwipe}
+          onPointerCancel={endSwipe}
+          // Vertical panning stays with the browser so a long column still scrolls; horizontal is
+          // ours. Without this the browser claims the gesture before the handler above sees it.
+          style={{ touchAction: 'pan-y' }}
+          className="mx-auto min-w-0 max-w-5xl flex-1 overflow-hidden"
+        >
           <div
             className="flex motion-safe:transition-transform motion-safe:duration-300 motion-safe:ease-out"
             style={{ transform: `translate3d(-${index * 100}%, 0, 0)` }}

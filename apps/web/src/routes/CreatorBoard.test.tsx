@@ -193,7 +193,10 @@ describe('CreatorBoard columns', () => {
         name: new RegExp(`^${label}`, 'i'),
         hidden: true,
       });
-      expect(within(column).getByText(title)).toBeInTheDocument();
+      // `findByText`, not `getByText`: each column fetches its own page, so awaiting the first
+      // one says nothing about whether the other three have arrived. A synchronous read here
+      // passes or fails on which request happened to resolve first.
+      expect(await within(column).findByText(title)).toBeInTheDocument();
     }
   });
 
@@ -259,7 +262,9 @@ describe('CreatorBoard columns', () => {
       expect(screen.getByRole('tab', { name: label })).toBeInTheDocument();
     }
     const empty = screen.getByRole('region', { name: /now playing/i, hidden: true });
-    expect(within(empty).getByText(/nothing here yet/i)).toBeInTheDocument();
+    // Awaited for the same reason as above: an off-screen column fetches its own page, and its
+    // empty state only appears once that has come back.
+    expect(await within(empty).findByText(/nothing here yet/i)).toBeInTheDocument();
   });
 
   it('offers moderator controls only when the viewer moderates', async () => {

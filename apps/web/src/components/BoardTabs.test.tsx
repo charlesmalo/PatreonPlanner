@@ -124,6 +124,18 @@ describe('BoardTabs', () => {
     expect(panels[2].hasAttribute('inert')).toBe(true);
   });
 
+  /*
+   * Swiping is tested in `e2e/tests/board-navigation.spec.ts`, not here.
+   *
+   * jsdom defines no `PointerEvent`: a dispatched pointer event arrives carrying neither
+   * `pointerType` nor coordinates, so every gesture written against it has NaN deltas. A test
+   * built on that measures how the implementation treats NaN, not how it treats a finger.
+   *
+   * It did find one thing worth keeping. The guards compared distances without checking the
+   * numbers were real, and `Math.abs(NaN) < 48` is false — so they failed *open* and the board
+   * changed column on an empty event. That check exists now.
+   */
+
   it('puts only the selected tab in the tab order', () => {
     setup(1);
 
