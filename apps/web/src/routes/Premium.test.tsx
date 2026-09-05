@@ -209,19 +209,33 @@ describe('Premium', () => {
     });
   });
 
-  describe('the demo payment controls', () => {
-    it('are absent on an instance connected to a real provider', async () => {
+  describe('the pre-launch payment notice', () => {
+    it('is absent on an instance connected to a real provider', async () => {
       renderPage(state({ available: true, sandbox: false, subscription: null }));
 
-      await screen.findByRole('button', { name: /subscribe/i });
-      expect(screen.queryByText(/demo payment controls/i)).not.toBeInTheDocument();
+      await screen.findByRole('button', { name: /^subscribe$/i });
+      expect(screen.queryByText(/payments are not switched on/i)).not.toBeInTheDocument();
     });
 
-    it('appear, and say plainly that nothing is charged, when the provider is fake', async () => {
+    it('says the omission is deliberate rather than broken', async () => {
+      // "Not connected to a payment provider" reads as a misconfiguration. It is a decision:
+      // payments arrive at launch, and until then the whole flow is simulated on purpose.
       renderPage(state({ available: true, sandbox: true, subscription: null }));
 
-      expect(await screen.findByText(/demo payment controls/i)).toBeInTheDocument();
-      expect(screen.getByText(/nothing here charges anybody/i)).toBeInTheDocument();
+      expect(await screen.findByText(/payments are not switched on yet/i)).toBeInTheDocument();
+      expect(screen.getByText(/deliberately, not by accident/i)).toBeInTheDocument();
+      expect(screen.getByText(/no card is ever\s+asked for/i)).toBeInTheDocument();
+    });
+
+    it('offers no real Subscribe button while nothing can be bought', async () => {
+      // Two buttons doing the same thing, one dressed as the real article, is how a play-tester
+      // ends up believing they have been charged.
+      renderPage(state({ available: true, sandbox: true, subscription: null }));
+
+      expect(
+        await screen.findByRole('button', { name: /open the simulated checkout/i }),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^subscribe$/i })).not.toBeInTheDocument();
     });
 
     it('stay reachable once subscribed, which is the only way back to a refund', async () => {
@@ -240,7 +254,7 @@ describe('Premium', () => {
       );
 
       expect(
-        await screen.findByRole('button', { name: /open the demo checkout/i }),
+        await screen.findByRole('button', { name: /open the simulated checkout/i }),
       ).toBeInTheDocument();
     });
   });

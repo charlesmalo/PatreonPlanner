@@ -1021,9 +1021,13 @@ test('a reader buys premium, sees the receipt, and a refund takes it straight ba
   await signIn(page, 500);
 
   await page.goto('/premium');
-  await expect(page.getByRole('button', { name: /^subscribe$/i })).toBeVisible();
+  // No plain "Subscribe" while payments are simulated — a primary button dressed as the real
+  // article is how somebody ends up believing they have been charged. The notice offers the only
+  // way in, and says why.
+  await expect(page.getByText(/payments are not switched on yet/i)).toBeVisible();
+  await expect(page.getByRole('button', { name: /^subscribe$/i })).toHaveCount(0);
 
-  await page.getByRole('button', { name: /^subscribe$/i }).click();
+  await page.getByRole('button', { name: /open the simulated checkout/i }).click();
   // The provider's stand-in, deliberately not styled like a real payment form.
   await expect(page.getByText(/not a real checkout/i)).toBeVisible();
   await page.getByRole('button', { name: /pay .*succeeds/i }).click();
@@ -1042,7 +1046,7 @@ test('a reader buys premium, sees the receipt, and a refund takes it straight ba
   // Part of the money back leaves them subscribed and entitled. They are still being charged, so
   // taking premium away would punish somebody who has done nothing wrong — and do it silently.
   await page.goto('/premium');
-  await page.getByRole('button', { name: /open the demo checkout/i }).click();
+  await page.getByRole('button', { name: /open the simulated checkout/i }).click();
   await page.getByRole('button', { name: /refund \$1 of it/i }).click();
   await page.waitForURL((url) => url.pathname === '/premium');
 
@@ -1060,7 +1064,7 @@ test('a reader buys premium, sees the receipt, and a refund takes it straight ba
   // Named exactly rather than by /refund/i: there are two refund buttons now, and a loose match
   // resolves to both. That is the assertion failing for its own reason rather than a flake.
   await page.goto('/premium');
-  await page.getByRole('button', { name: /open the demo checkout/i }).click();
+  await page.getByRole('button', { name: /open the simulated checkout/i }).click();
   await page.getByRole('button', { name: /refund the last order in full/i }).click();
 
   await page.waitForURL((url) => url.pathname === '/premium');
