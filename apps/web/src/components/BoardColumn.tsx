@@ -32,7 +32,7 @@ interface BoardColumnProps {
  * further down a page nobody had fetched — and "Load more" would mean the board, not the column.
  */
 const SORTS: Array<[string, string]> = [
-  ['', 'Most upvoted'],
+  ['', 'Top rated'],
   ['newest', 'Newest'],
   ['oldest', 'Oldest'],
   // Last, and never the default: the board is a demand signal first, and a hand-made order is
@@ -152,7 +152,7 @@ export function BoardColumn({
         dragOver
           ? 'border-sky-500 bg-sky-50 dark:bg-sky-950/30'
           : 'border-slate-200 dark:border-slate-800'
-      } ${collapsed ? 'w-14' : 'w-full sm:w-96 sm:shrink-0'}`}
+      } ${collapsed ? 'w-14' : 'w-full'}`}
     >
       <header className="flex items-center justify-between gap-2 px-3 py-2">
         <h2 className={`text-sm font-medium ${collapsed ? 'sr-only' : ''}`}>{label}</h2>

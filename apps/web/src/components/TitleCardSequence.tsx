@@ -1,8 +1,21 @@
 /** The slogan, and the order it has to stay in. */
+/**
+ * The slogan, the order it has to stay in, and the colour each stage takes.
+ *
+ * `accent` follows the mascot's three puzzle pieces — the outer two pale, the middle one coral —
+ * so the cards, the heading above them and the artwork all say the same thing. Empty means the
+ * word inherits the theme's foreground, which is white on the dark theme and readable on the
+ * light one, where literal white would not be.
+ */
 const STAGES = [
-  { word: 'Pitch.', column: 'Suggested', gloss: 'A patron puts something forward.' },
-  { word: 'Plan.', column: 'Accepted', gloss: 'You decide it is happening, and when.' },
-  { word: 'Play.', column: 'Now Playing', gloss: 'It reaches the top of the queue.' },
+  { word: 'Pitch.', column: 'Suggested', gloss: 'A patron puts something forward.', accent: '' },
+  {
+    word: 'Plan.',
+    column: 'Accepted',
+    gloss: 'You decide it is happening, and when.',
+    accent: 'text-brand',
+  },
+  { word: 'Play.', column: 'Now Playing', gloss: 'It reaches the top of the queue.', accent: '' },
 ] as const;
 
 /**
@@ -33,7 +46,9 @@ export function TitleCardSequence() {
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
             {stage.column}
           </p>
-          <p className="mt-1 text-2xl font-semibold tracking-tight">{stage.word}</p>
+          <p className={`mt-1 text-2xl font-semibold tracking-tight ${stage.accent}`}>
+            {stage.word}
+          </p>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{stage.gloss}</p>
         </li>
       ))}

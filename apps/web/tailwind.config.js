@@ -1,6 +1,9 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
+  // Class rather than the default media query, so the reader can override the operating system
+  // from the header. `System` remains an explicit option and the default — see src/theme.ts.
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {

@@ -78,6 +78,18 @@ async function signIn(
   await expect(page.getByRole('button', { name: /sign out/i })).toBeVisible();
 }
 
+/**
+ * Brings a column on screen.
+ *
+ * Columns are tabbed rather than side by side, so only one is visible at a time — an off-screen
+ * panel is genuinely not visible to a browser, and is `inert` so nothing in it can be reached.
+ * Anything asserting on a column other than the one a board opens on has to ask for it first,
+ * which is what a person does.
+ */
+async function showColumn(page: import('@playwright/test').Page, label: string | RegExp) {
+  await page.getByRole('tab', { name: label }).click();
+}
+
 async function signOut(page: import('@playwright/test').Page) {
   await page.getByRole('button', { name: /sign out/i }).click();
   await expect(page.getByRole('link', { name: /sign in with patreon/i })).toBeVisible();
@@ -233,10 +245,16 @@ test('a moderator accepts a suggestion and it moves to the Accepted column', asy
 
   // The card changes column; the columns themselves stay put. A kanban whose columns vanish when
   // they empty loses its shape, and there is nowhere left to move the next card to.
+  await showColumn(page, 'Accepted');
   const accepted = page.getByRole('region', { name: /^accepted/i });
   const suggestions = page.getByRole('region', { name: /suggestions/i });
   await expect(accepted.getByText('Princess Mononoke')).toBeVisible();
+
+  // And it is gone from where it came from. Asked for by name, because Suggestions is off-screen
+  // once Accepted is showing — the card leaving one column and arriving in the other are two
+  // separate claims, and this is the one a moderator actually worries about.
   await expect(suggestions.getByText('Princess Mononoke')).toHaveCount(0);
+  await showColumn(page, 'Suggestions');
   await expect(suggestions.getByText(/nothing suggested yet/i)).toBeVisible();
 });
 
@@ -564,6 +582,7 @@ test('an entry opens on its own page, and that page can be shared', async ({ pag
   seedEntryFrom('patreon-other-e2e', 'Ponyo', 'ACCEPTED');
   await page.goto(`/c/${CREATOR.slug}`);
 
+  await showColumn(page, 'Accepted');
   await page.getByRole('link', { name: 'Ponyo' }).click();
   await page.waitForURL((url) => /\/e\/[0-9a-f-]+$/.test(url.pathname));
   await expect(page.getByRole('heading', { level: 1, name: 'Ponyo' })).toBeVisible();
@@ -619,6 +638,7 @@ test('a follower is told when a board starts something', async ({ page }) => {
   await signIn(page, 500, 'patreon-movemod-e2e');
   makeStaff('patreon-movemod-e2e');
   await page.goto(`/c/${CREATOR.slug}`);
+  await showColumn(page, 'Accepted');
   await page.getByRole('button', { name: /Move “Nausicaa” to another column/i }).click();
   await page.getByRole('menuitem', { name: 'Now Playing' }).click();
   await signOut(page);
@@ -1021,9 +1041,13 @@ test('a reader buys premium, sees the receipt, and a refund takes it straight ba
   await signIn(page, 500);
 
   await page.goto('/premium');
-  await expect(page.getByRole('button', { name: /^subscribe$/i })).toBeVisible();
+  // No plain "Subscribe" while payments are simulated — a primary button dressed as the real
+  // article is how somebody ends up believing they have been charged. The notice offers the only
+  // way in, and says why.
+  await expect(page.getByText(/payments are not switched on yet/i)).toBeVisible();
+  await expect(page.getByRole('button', { name: /^subscribe$/i })).toHaveCount(0);
 
-  await page.getByRole('button', { name: /^subscribe$/i }).click();
+  await page.getByRole('button', { name: /open the simulated checkout/i }).click();
   // The provider's stand-in, deliberately not styled like a real payment form.
   await expect(page.getByText(/not a real checkout/i)).toBeVisible();
   await page.getByRole('button', { name: /pay .*succeeds/i }).click();
@@ -1042,7 +1066,7 @@ test('a reader buys premium, sees the receipt, and a refund takes it straight ba
   // Part of the money back leaves them subscribed and entitled. They are still being charged, so
   // taking premium away would punish somebody who has done nothing wrong — and do it silently.
   await page.goto('/premium');
-  await page.getByRole('button', { name: /open the demo checkout/i }).click();
+  await page.getByRole('button', { name: /open the simulated checkout/i }).click();
   await page.getByRole('button', { name: /refund \$1 of it/i }).click();
   await page.waitForURL((url) => url.pathname === '/premium');
 
@@ -1060,7 +1084,7 @@ test('a reader buys premium, sees the receipt, and a refund takes it straight ba
   // Named exactly rather than by /refund/i: there are two refund buttons now, and a loose match
   // resolves to both. That is the assertion failing for its own reason rather than a flake.
   await page.goto('/premium');
-  await page.getByRole('button', { name: /open the demo checkout/i }).click();
+  await page.getByRole('button', { name: /open the simulated checkout/i }).click();
   await page.getByRole('button', { name: /refund the last order in full/i }).click();
 
   await page.waitForURL((url) => url.pathname === '/premium');

@@ -18,6 +18,9 @@ const NO_CAPABILITIES: Capabilities = {
   permissions: [],
   moderate: false,
   administer: false,
+  // The safe default while the answer is still in flight: offering a form and withdrawing it is
+  // worse than showing it a moment late.
+  contact: false,
 };
 
 export function useSession() {

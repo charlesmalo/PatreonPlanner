@@ -17,6 +17,15 @@ export interface Capabilities {
   moderate: boolean;
   administer: boolean;
   /**
+   * Whether this reader may message the creator at all.
+   *
+   * Not one of the five capabilities — it is the question `can()` cannot answer, because it turns
+   * on being signed in rather than on tiers or staff roles. It exists because the board had no way
+   * to ask it and drew the contact form behind `view`, which is true for any anonymous reader of a
+   * public board: they were offered a form the server then refused, after they had written it.
+   */
+  contact: boolean;
+  /**
    * What this staff member may do beyond being staff. A rendering hint only — every endpoint
    * behind these controls checks the same permission server-side and refuses regardless.
    * Empty for anyone who is not staff here; expanded to the full set for an owner, whose

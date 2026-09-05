@@ -148,16 +148,47 @@ async function main() {
         });
 
     for (const voter of entry.upvotes ?? []) {
+      // The tier they actually pledge at, as the real path records — a vote carries a reference to
+      // its tier so a creator rebalancing changes what already-cast votes are worth. Without it
+      // every demo vote would weigh 1 and the board would never show tier weighting at all.
+      const membership = await prisma.membership.findUnique({
+        where: { userId_creatorId: { userId: users[voter], creatorId } },
+        select: { currentTierId: true },
+      });
       await prisma.upvote.upsert({
         where: {
           recommendationId_userId: { recommendationId: row.id, userId: users[voter] },
         },
-        create: { recommendationId: row.id, userId: users[voter] },
-        update: {},
+        create: {
+          recommendationId: row.id,
+          userId: users[voter],
+          tierId: membership?.currentTierId ?? null,
+        },
+        update: { tierId: membership?.currentTierId ?? null },
       });
     }
-    const upvoteCount = await prisma.upvote.count({ where: { recommendationId: row.id } });
-    await prisma.recommendation.update({ where: { id: row.id }, data: { upvoteCount } });
+    /*
+     * Both derived columns, not one of them.
+     *
+     * `upvoteCount` and `weightedScore` are maintained together by `upvotes.service` — it
+     * increments and decrements both. Seeding only the first left every weighted score at zero,
+     * so the board's own "most upvoted" sort found every row tied and fell through to `createdAt`.
+     * The product was fine; the demo was lying, and a play-tester has no way to tell those apart.
+     *
+     * Weighted from the tier each voter actually pledges at, exactly as the service does, so the
+     * demo shows the real behaviour: a higher tier's vote counts for more.
+     */
+    const upvotes = await prisma.upvote.findMany({
+      where: { recommendationId: row.id },
+      select: { tier: { select: { voteWeight: true } } },
+    });
+    await prisma.recommendation.update({
+      where: { id: row.id },
+      data: {
+        upvoteCount: upvotes.length,
+        weightedScore: upvotes.reduce((total, vote) => total + (vote.tier?.voteWeight ?? 1), 0),
+      },
+    });
   }
 
   // Something for the review queue to hold, so it is not an empty screen on first look.

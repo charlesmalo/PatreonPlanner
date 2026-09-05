@@ -7,6 +7,7 @@ const staff: Capabilities = {
   submit: true,
   moderate: true,
   administer: true,
+  contact: true,
   permissions: ['EDIT_ENTRIES', 'MOVE_ENTRIES'],
 };
 
@@ -22,6 +23,7 @@ describe('narrowCapabilities', () => {
       submit: true,
       moderate: false,
       administer: false,
+      contact: true,
       // Emptied with them. A staff permission left standing here would keep rendering the
       // controls the preview exists to hide — and "view as patron" would show a patron view
       // with publish buttons on it.
@@ -38,6 +40,7 @@ describe('narrowCapabilities', () => {
       submit: false,
       moderate: false,
       administer: false,
+      contact: true,
       permissions: [],
     };
 
@@ -57,6 +60,9 @@ describe('narrowCapabilities', () => {
       submit: true,
       moderate: false,
       administer: false,
+      // No `contact` — an older payload predates the field, and absent reads as falsy, which
+      // hides the contact form. That is the safe direction: a control that appears late is better
+      // than one offered to somebody the server will refuse.
       permissions: [],
     });
   });
@@ -68,6 +74,7 @@ describe('narrowCapabilities', () => {
       submit: true,
       moderate: false,
       administer: false,
+      contact: true,
       permissions: [],
     };
 

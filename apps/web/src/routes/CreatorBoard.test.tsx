@@ -181,10 +181,20 @@ describe('CreatorBoard columns', () => {
     ]);
     renderBoard();
 
+    // Each entry sits under its own status. The columns are tabbed now, so three of the four are
+    // off-screen — mounted, which is what lets a card be dropped into one that is not showing.
     expect(await screen.findByRole('heading', { name: 'Suggestions' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Accepted' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Now Playing' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Completed' })).toBeInTheDocument();
+    for (const [label, title] of [
+      ['Accepted', 'Accepted One'],
+      ['Now Playing', 'Playing One'],
+      ['Completed', 'Done One'],
+    ]) {
+      const column = screen.getByRole('region', {
+        name: new RegExp(`^${label}`, 'i'),
+        hidden: true,
+      });
+      expect(within(column).getByText(title)).toBeInTheDocument();
+    }
   });
 
   it('shows the weight alongside the headcount when they differ', async () => {
@@ -236,16 +246,19 @@ describe('CreatorBoard columns', () => {
     expect(screen.getByLabelText(/viewing as/i)).toBeInTheDocument();
   });
 
-  it('keeps every column on screen, so the board holds its shape', async () => {
-    // The vertical board hid an empty section, because four headings over nothing read as a
-    // broken page. A kanban is the opposite: a column that vanishes when it empties takes the
-    // board's shape with it, and there is nowhere left to move a card to.
+  it('keeps every column, including the empty ones', async () => {
+    // The guarantee outlived the layout. Columns are tabbed now rather than side by side, but a
+    // column that vanishes when it empties still takes the board's shape with it and leaves
+    // nowhere to move a card to. Every one exists as a tab, and every panel stays mounted —
+    // off-screen, not absent.
     boardWith([recommendation({ id: 'a', status: 'PENDING' })]);
     renderBoard();
 
-    expect(await screen.findByRole('heading', { name: 'Suggestions' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Now Playing' })).toBeInTheDocument();
-    const empty = screen.getByRole('region', { name: /now playing/i });
+    expect(await screen.findByRole('tab', { name: 'Suggestions' })).toBeInTheDocument();
+    for (const label of ['Accepted', 'Now Playing', 'Completed']) {
+      expect(screen.getByRole('tab', { name: label })).toBeInTheDocument();
+    }
+    const empty = screen.getByRole('region', { name: /now playing/i, hidden: true });
     expect(within(empty).getByText(/nothing here yet/i)).toBeInTheDocument();
   });
 
@@ -288,7 +301,7 @@ describe('CreatorBoard columns', () => {
     // The card leaves the column it was in and turns up in the one it moved to. Both columns
     // stay on screen — a kanban keeps its shape whether or not a column is holding anything.
     const suggestions = screen.getByRole('region', { name: /suggestions/i });
-    const accepted = screen.getByRole('region', { name: /^accepted/i });
+    const accepted = screen.getByRole('region', { name: /^accepted/i, hidden: true });
     await waitFor(() => expect(within(accepted).getByText('Spirited Away')).toBeInTheDocument());
     expect(within(suggestions).queryByText('Spirited Away')).not.toBeInTheDocument();
   });
@@ -499,5 +512,38 @@ describe('CreatorBoard admin link', () => {
     renderBoard();
     await screen.findByRole('heading', { name: 'Ada Writes' });
     expect(screen.queryByRole('link', { name: 'Moderators' })).not.toBeInTheDocument();
+  });
+
+  describe('the contact form', () => {
+    /**
+     * A write control offered to somebody who cannot write.
+     *
+     * The board drew this behind `view`, which is true for any anonymous reader of a public
+     * board. The server refused them — correctly, and only after they had written the message.
+     * Offering a form that cannot be submitted is worse than not offering one.
+     */
+    it('is absent for a reader who may not open a ticket', async () => {
+      global.fetch = fakeApi({
+        'GET /api/v1/creators/ada-writes': creator,
+        'GET /api/v1/creators/ada-writes/capabilities': viewOnly,
+        'GET /api/v1/creators/ada-writes/recommendations': { items: [], nextCursor: null },
+      });
+      renderBoard();
+
+      // Waits for the board to settle first, so this cannot pass merely by being early.
+      await screen.findByRole('heading', { name: /ada writes/i });
+      expect(screen.queryByLabelText(/message the moderators/i)).not.toBeInTheDocument();
+    });
+
+    it('is offered to a reader who may', async () => {
+      global.fetch = fakeApi({
+        'GET /api/v1/creators/ada-writes': creator,
+        'GET /api/v1/creators/ada-writes/capabilities': { ...viewOnly, contact: true },
+        'GET /api/v1/creators/ada-writes/recommendations': { items: [], nextCursor: null },
+      });
+      renderBoard();
+
+      expect(await screen.findByLabelText(/message the moderators/i)).toBeInTheDocument();
+    });
   });
 });

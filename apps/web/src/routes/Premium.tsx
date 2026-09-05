@@ -102,6 +102,29 @@ export function Premium() {
         that follow you between devices, and carrying a list to every board you support.
       </p>
 
+      {sandbox && (
+        <div className="mt-4 rounded border-2 border-dashed border-amber-600 p-3 text-sm">
+          <h2 className="font-medium">Payments are not switched on yet</h2>
+          <p className="mt-1 text-slate-600 dark:text-slate-300">
+            Deliberately, not by accident. Nothing on this page charges anybody, no card is ever
+            asked for, and no payment provider is connected — subscribing is simulated end to end so
+            the rest of the product can be tried out before launch.
+          </p>
+          <p className="mt-2 text-slate-600 dark:text-slate-300">
+            Everything below behaves exactly as it will when payments are real, so it is worth
+            playing with: pay, fail a renewal, cancel, take a refund.
+          </p>
+          <button
+            type="button"
+            onClick={subscribe}
+            disabled={busy}
+            className="mt-3 rounded border border-slate-400 px-3 py-1.5 font-medium disabled:opacity-50 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:hover:bg-slate-800"
+          >
+            Open the simulated checkout
+          </button>
+        </div>
+      )}
+
       {subscription ? (
         <div className="mt-4 rounded border border-slate-300 p-3 text-sm dark:border-slate-700">
           <p>{STATUS_LABELS[subscription.status] ?? subscription.status}</p>
@@ -114,7 +137,11 @@ export function Premium() {
             emailed you links to it.
           </p>
         </div>
-      ) : available ? (
+      ) : available && !sandbox ? (
+        /* Hidden while payments are simulated: a primary "Subscribe" button implies a real
+           purchase, and the panel above already offers the simulated one. Two buttons doing the
+           same thing, one of them dressed as the real article, is how a play-tester ends up
+           believing they have been charged. */
         <button
           type="button"
           onClick={subscribe}
@@ -123,30 +150,11 @@ export function Premium() {
         >
           {busy ? 'Taking you there…' : 'Subscribe'}
         </button>
-      ) : (
+      ) : sandbox ? null : (
         <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">
           Subscriptions are not available on this instance.
         </p>
       )}
-      {sandbox && (
-        <div className="mt-6 rounded border-2 border-dashed border-amber-600 p-3 text-sm">
-          <h2 className="font-medium">Demo payment controls</h2>
-          <p className="mt-1 text-slate-600 dark:text-slate-300">
-            This instance is not connected to a payment provider. Nothing here charges anybody, and
-            no card is ever asked for. Use these to walk through what a subscription does — paying,
-            a failed renewal, cancelling, a refund.
-          </p>
-          <button
-            type="button"
-            onClick={subscribe}
-            disabled={busy}
-            className="mt-2 rounded border border-slate-400 px-3 py-1.5 font-medium disabled:opacity-50 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:hover:bg-slate-800"
-          >
-            Open the demo checkout
-          </button>
-        </div>
-      )}
-
       {receipts.length > 0 && (
         <div className="mt-6">
           <h2 className="text-sm font-medium">Payments</h2>

@@ -197,6 +197,8 @@ describe('CreatorAccessGuard (integration)', () => {
       submit: true,
       moderate: false,
       administer: false,
+      // Signed in, so they can reach the creator regardless of the anonymous-ticket setting.
+      contact: true,
       // Empty rather than absent: a client doing `permissions.includes(...)` on undefined
       // throws, and the card that crashes is the patron's, not the moderator's.
       permissions: [],
@@ -263,7 +265,63 @@ describe('CreatorAccessGuard (integration)', () => {
       submit: false,
       moderate: false,
       administer: false,
+      // Reading a public board does not make somebody able to write to its owner.
+      contact: false,
       permissions: [],
+    });
+  });
+
+  describe('whether the reader may open a ticket', () => {
+    /**
+     * The board decides which controls to draw from this payload, and it had no answer for
+     * "may this person message the moderators" — so it drew the form behind `view`, which is true
+     * for any anonymous reader of a public board. The server refused them, correctly and only
+     * after they had written the message.
+     */
+    it('is false for an anonymous reader while anonymous tickets are off', async () => {
+      await setVisibility('PUBLIC');
+      await ctx.prisma.creatorPolicy.update({
+        where: { creatorId },
+        data: { allowAnonymousTickets: false },
+      });
+
+      const res = await request(ctx.app.getHttpServer())
+        .get('/api/v1/creators/guarded/capabilities')
+        .expect(200);
+
+      expect(res.body.contact).toBe(false);
+    });
+
+    it('is true for an anonymous reader once the creator opens the door', async () => {
+      await setVisibility('PUBLIC');
+      await ctx.prisma.creatorPolicy.update({
+        where: { creatorId },
+        data: { allowAnonymousTickets: true },
+      });
+
+      const res = await request(ctx.app.getHttpServer())
+        .get('/api/v1/creators/guarded/capabilities')
+        .expect(200);
+
+      expect(res.body.contact).toBe(true);
+      await ctx.prisma.creatorPolicy.update({
+        where: { creatorId },
+        data: { allowAnonymousTickets: false },
+      });
+    });
+
+    it('is true for anybody signed in, whatever the setting', async () => {
+      // The setting is about anonymity, not about tickets. Somebody with an account is
+      // accountable for what they send, which is the whole reason the flag exists.
+      await setVisibility('PUBLIC');
+      const session = await loginAs('contact-reader');
+
+      const res = await request(ctx.app.getHttpServer())
+        .get('/api/v1/creators/guarded/capabilities')
+        .set('Cookie', session)
+        .expect(200);
+
+      expect(res.body.contact).toBe(true);
     });
   });
 
