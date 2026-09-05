@@ -78,6 +78,18 @@ async function signIn(
   await expect(page.getByRole('button', { name: /sign out/i })).toBeVisible();
 }
 
+/**
+ * Brings a column on screen.
+ *
+ * Columns are tabbed rather than side by side, so only one is visible at a time — an off-screen
+ * panel is genuinely not visible to a browser, and is `inert` so nothing in it can be reached.
+ * Anything asserting on a column other than the one a board opens on has to ask for it first,
+ * which is what a person does.
+ */
+async function showColumn(page: import('@playwright/test').Page, label: string | RegExp) {
+  await page.getByRole('tab', { name: label }).click();
+}
+
 async function signOut(page: import('@playwright/test').Page) {
   await page.getByRole('button', { name: /sign out/i }).click();
   await expect(page.getByRole('link', { name: /sign in with patreon/i })).toBeVisible();
@@ -233,10 +245,16 @@ test('a moderator accepts a suggestion and it moves to the Accepted column', asy
 
   // The card changes column; the columns themselves stay put. A kanban whose columns vanish when
   // they empty loses its shape, and there is nowhere left to move the next card to.
+  await showColumn(page, 'Accepted');
   const accepted = page.getByRole('region', { name: /^accepted/i });
   const suggestions = page.getByRole('region', { name: /suggestions/i });
   await expect(accepted.getByText('Princess Mononoke')).toBeVisible();
+
+  // And it is gone from where it came from. Asked for by name, because Suggestions is off-screen
+  // once Accepted is showing — the card leaving one column and arriving in the other are two
+  // separate claims, and this is the one a moderator actually worries about.
   await expect(suggestions.getByText('Princess Mononoke')).toHaveCount(0);
+  await showColumn(page, 'Suggestions');
   await expect(suggestions.getByText(/nothing suggested yet/i)).toBeVisible();
 });
 
@@ -564,6 +582,7 @@ test('an entry opens on its own page, and that page can be shared', async ({ pag
   seedEntryFrom('patreon-other-e2e', 'Ponyo', 'ACCEPTED');
   await page.goto(`/c/${CREATOR.slug}`);
 
+  await showColumn(page, 'Accepted');
   await page.getByRole('link', { name: 'Ponyo' }).click();
   await page.waitForURL((url) => /\/e\/[0-9a-f-]+$/.test(url.pathname));
   await expect(page.getByRole('heading', { level: 1, name: 'Ponyo' })).toBeVisible();
@@ -619,6 +638,7 @@ test('a follower is told when a board starts something', async ({ page }) => {
   await signIn(page, 500, 'patreon-movemod-e2e');
   makeStaff('patreon-movemod-e2e');
   await page.goto(`/c/${CREATOR.slug}`);
+  await showColumn(page, 'Accepted');
   await page.getByRole('button', { name: /Move “Nausicaa” to another column/i }).click();
   await page.getByRole('menuitem', { name: 'Now Playing' }).click();
   await signOut(page);

@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useCreator, useSession, useThemes, useViewMode } from '../api/hooks';
 import { hydrate } from '../api/board-settings';
 import { narrowCapabilities } from '../api/view-mode';
+import { BoardTabs } from '../components/BoardTabs';
 import { ContactForm } from '../components/ContactForm';
 import { ModeBanner } from '../components/ModeBanner';
 import { ViewModeSwitch } from '../components/ViewModeSwitch';
@@ -15,6 +16,33 @@ import { ThemeFilter } from '../components/ThemeFilter';
  * are absent by design — a patron never sees them, and a moderator reads them in the review
  * queue, which is the surface built for the bin.
  */
+const OPENING_COLUMN_KEY = (slug: string) => `pp.board.${slug}.column`;
+
+/**
+ * Which column this board opens on.
+ *
+ * Remembered per board rather than globally: somebody moderating one board lives in Suggestions,
+ * and reading another they follow they want Now Playing. Falls back to the first column, which is
+ * where a board with nothing on it has the only thing worth seeing.
+ */
+function openingColumn(slug: string): number {
+  try {
+    const stored = window.localStorage.getItem(OPENING_COLUMN_KEY(slug));
+    const found = COLUMNS.findIndex(([status]) => status === stored);
+    return found === -1 ? 0 : found;
+  } catch {
+    return 0;
+  }
+}
+
+function rememberColumn(slug: string, status: string): void {
+  try {
+    window.localStorage.setItem(OPENING_COLUMN_KEY(slug), status);
+  } catch {
+    // The board still works; only which column it opens on is forgotten.
+  }
+}
+
 const COLUMNS: Array<[string, string]> = [
   ['PENDING', 'Suggestions'],
   ['ACCEPTED', 'Accepted'],
@@ -123,15 +151,19 @@ export function CreatorBoard() {
         </div>
       ) : null}
 
-      {/* The row scrolls, never the page body — a horizontally scrolling page is unusable. Below
-          the breakpoint the columns stack, which is the reading order they already had. */}
-      <div className="mt-8 flex flex-col gap-4 overflow-x-auto pb-2 sm:flex-row sm:items-start">
-        {COLUMNS.map(([status, label]) => (
+      {/* One column at a time. Four side by side truncated every one of them at laptop width;
+          this gives whichever is being read the whole screen. */}
+      <BoardTabs
+        tabs={COLUMNS.map(([status, label]) => ({ status, label }))}
+        initialIndex={openingColumn(slug)}
+        onChange={(index) => rememberColumn(slug, COLUMNS[index][0])}
+      >
+        {(tab) => (
           <BoardColumn
-            key={`${status}-${revision}`}
+            key={`${tab.status}-${revision}`}
             slug={slug}
-            status={status}
-            label={label}
+            status={tab.status}
+            label={tab.label}
             theme={theme}
             canUpvote={capabilities.upvote}
             canModerate={capabilities.moderate}
@@ -139,13 +171,13 @@ export function CreatorBoard() {
             isPremium={user?.isPremium ?? false}
             onMoved={refresh}
             emptyText={
-              status === 'PENDING'
+              tab.status === 'PENDING'
                 ? `Nothing suggested yet.${capabilities.submit ? ' Be the first.' : ''}`
                 : undefined
             }
           />
-        ))}
-      </div>
+        )}
+      </BoardTabs>
 
       {capabilities.contact ? (
         <div className="mt-8 max-w-prose">

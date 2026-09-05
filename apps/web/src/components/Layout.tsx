@@ -20,6 +20,9 @@ interface LayoutProps {
 }
 
 export function Layout({ user, loadingSession, onSignOut, notifications, children }: LayoutProps) {
+  // The board only. Its sub-pages — the review queue, staff, tickets — are reading screens and
+  // keep the prose width.
+  const onABoard = /^\/c\/[^/]+\/?$/.test(useLocation().pathname);
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <header className="border-b border-slate-200 dark:border-slate-800">
@@ -77,7 +80,17 @@ export function Layout({ user, loadingSession, onSignOut, notifications, childre
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-3xl px-4 py-8">{children}</main>
+      {/*
+        Reading width everywhere except the board.
+        
+        `max-w-3xl` is right for prose — settings, notifications, the landing page — and wrong for
+        a board, which had a single column stranded in the middle of a laptop screen with dead
+        space either side. Widened here rather than by having the board break out of its own
+        container with negative margins, which works until something inside it overflows.
+      */}
+      <main className={`mx-auto px-4 py-8 ${onABoard ? 'max-w-none' : 'max-w-3xl'}`}>
+        {children}
+      </main>
       <Footer />
     </div>
   );
