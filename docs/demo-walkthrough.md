@@ -43,6 +43,16 @@ difference between two of them looking at the same page.
 
 Roughly in order. Each one is a thing that was built deliberately, with the reasoning behind it.
 
+### 0. The board moves one column at a time
+
+Columns are tabbed rather than side by side: four at once truncated every one of them at laptop
+width. Use the arrows either side, the strip along the top, the arrow keys, or — on a trackpad or a
+phone — **swipe**. Dragging right reveals the column to its left, because the content follows the
+gesture.
+
+A mouse is left out of that deliberately: it already has the arrows and the wheel, and a
+click-drag on a board is how a card gets moved.
+
 ### 1. The board, and who may do what
 
 Open **Ada Watches Things** as nobody at all — signed out. It reads. Now sign in as **Dee**, who
@@ -118,6 +128,19 @@ for everyone.
 
 Reading is never gated. Otherwise a count would vanish the day somebody stopped paying, which is a
 lie about the data rather than a locked feature.
+
+### 10b. What the board tells the world
+
+As **Ada**, open **Settings** from the board. Boards are **subscribers-only by default**, and each
+option says what it *exposes* rather than what it is called — because "public" sounds harmless, and
+what it actually means is a readable list of what a creator is currently watching.
+
+The middle option says plainly that a Patreon account is free to create. Against an automated
+reader it is no different from open to everyone, which is exactly the mistake it invites.
+
+A creator can hand this to a moderator with **Change board settings** on the moderators page.
+Running the queue and deciding who may read the board are separate powers, so it is granted
+deliberately or not at all.
 
 ### 11. Staff, invites and reports
 

@@ -37,32 +37,37 @@ tests passing**, typecheck clean across every package.
 
 Nothing in flight, and nothing designed but unbuilt.
 
-The Phase 2 sequence is complete, and so is **Amendment A** — every step of its
-A.5, including the two features it added (carrying a list across boards, and
-following what moves) and the email digests that were blocked on a provider
-decision until it was made.
+Phase 2 and **Amendment A** are complete. **Plan 20** put every payment provider
+behind one `PaymentProvider` port with a second implementation that takes no
+money, so the whole product — including buying premium — can be demonstrated
+before anybody has a merchant account. **Plan 21** is the first playtest round,
+and is finished; its findings are at the foot of that plan.
 
-**Plan 20** then put every payment provider behind one `PaymentProvider` port
-and added a second implementation that takes no money, so the whole product —
-including buying premium — can be demonstrated end to end before anybody has a
-merchant account. Both implementations pass one conformance suite, which is the
-gate any future provider walks through.
+**Payments are deliberately deferred to launch.** The intended provider is now
+**Stripe Managed Payments** rather than Lemon Squeezy — Lemon Squeezy is being
+folded into it, and it recommends Managed Payments for this business location
+itself. Nothing is wired: the demo runs the fake provider, the premium page says
+plainly that payments are simulated, and `docs/billing-sandbox-runbook.md`
+describes the switch. The Lemon Squeezy adapter stays as the second
+implementation the conformance suite holds the port to; a Stripe adapter is one
+new file and a config value when it is wanted.
 
-What remains needs access this repository does not have, and each has a document:
+One thing found while reading Stripe's documentation, recorded before it is
+needed: Managed Payments uses standard Stripe Billing, so ordinary
+`customer.subscription.*` webhooks — but `client_reference_id` arrives **only on
+`checkout.session.completed`**, not on later subscription events. Lemon Squeezy
+puts the reader's id on every one. `parse()` reads `userId` straight from the
+payload, which for Stripe works on the first event and nothing after it. A
+port-level question to settle deliberately rather than discover.
 
-|                                  |                                             |
-| -------------------------------- | ------------------------------------------- |
-| A Lemon Squeezy sandbox purchase | `docs/billing-sandbox-runbook.md`           |
-| SPF and DKIM on a sending domain | `docs/email-setup.md`                       |
-| `VITE_DONATION_URL`              | the donation page is built and switched off |
+What remains needs access this repository does not have:
 
-The first is still the most consequential, and plan 20 does **not** replace it.
-The fake provider proves this codebase's own plumbing works; it says nothing
-about whether Lemon Squeezy's real payload matches what the adapter expects.
-Billing fails **closed but silent**, so a mismatch means a subscriber pays and
-gets nothing, with nothing in the logs to say so. What has changed is that
-nothing else is waiting on it — premium is demonstrable today, and switching to
-the real provider is a config value with no code, migration or data change.
+|                                  |                                                        |
+| -------------------------------- | ------------------------------------------------------ |
+| A real payment provider          | `docs/billing-sandbox-runbook.md` — deferred to launch |
+| SPF and DKIM on a sending domain | `docs/email-setup.md`                                  |
+| One Svix test webhook            | confirms the bounce signature check                    |
+| `VITE_DONATION_URL`              | the donation page is built and switched off            |
 
 ## Open Questions Blocking Work
 

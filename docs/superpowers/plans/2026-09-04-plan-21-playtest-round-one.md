@@ -40,26 +40,26 @@ The board decides what to render from `capabilities`, and `capabilities` has no 
 this person open a ticket". `ContactForm` therefore sits behind `capabilities.view`, which is true
 for an anonymous reader of a public board.
 
-- [ ] **Step 1:** Failing test — an anonymous reader of a public board sees no contact form, and a
+- [x] **Step 1:** Failing test — an anonymous reader of a public board sees no contact form, and a
       signed-in one does.
-- [ ] **Step 2:** Add `contact` to the capabilities payload, resolved server-side from
+- [x] **Step 2:** Add `contact` to the capabilities payload, resolved server-side from
       `allowAnonymousTickets` and whether the reader is authenticated. The server is already the
       authority; this only stops the UI offering what the server will refuse.
-- [ ] **Step 3:** Audit every other control on the board against its capability — upvote, submit,
+- [x] **Step 3:** Audit every other control on the board against its capability — upvote, submit,
       react, drag, move. Anything offered without one gets a test.
-- [ ] **Step 4:** Commit.
+- [x] **Step 4:** Commit.
 
 ### Task 2: The sort tells the truth
 
 **Files:** `apps/api/scripts/seed-demo.ts`, `apps/api/test/board-sorting.int-spec.ts`
 
-- [ ] **Step 1:** Failing test — a board seeded with upvotes orders by them under `upvotes`.
-- [ ] **Step 2:** Seed through the real path, or set `weightedScore` alongside `upvoteCount`.
+- [x] **Step 1:** Failing test — a board seeded with upvotes orders by them under `upvotes`.
+- [x] **Step 2:** Seed through the real path, or set `weightedScore` alongside `upvoteCount`.
       Directly writing one of a pair of derived columns is what produced this.
-- [ ] **Step 3:** Rename the control. It orders by `weightedScore`, which is tier-weighted, so
+- [x] **Step 3:** Rename the control. It orders by `weightedScore`, which is tier-weighted, so
       "Most upvoted" is not what it does — a $15 patron's vote counts for more than a $5 one's, by
       design. **Top rated** or **Most supported** says that without lying.
-- [ ] **Step 4:** Commit.
+- [x] **Step 4:** Commit.
 
 ### Task 3: The board gets the whole window
 
@@ -67,12 +67,12 @@ for an anonymous reader of a public board.
 
 `Layout` wraps every route in `max-w-3xl`, which is right for reading and wrong for a board.
 
-- [ ] **Step 1:** Let a route opt out of the prose width rather than removing it globally — the
+- [x] **Step 1:** Let a route opt out of the prose width rather than removing it globally — the
       landing page, settings and notifications all want it.
-- [ ] **Step 2:** The board fills the viewport, columns laid out across it.
-- [ ] **Step 3:** Browser test at laptop width: all four columns visible without horizontal
+- [x] **Step 2:** The board fills the viewport, columns laid out across it.
+- [x] **Step 3:** Browser test at laptop width: all four columns visible without horizontal
       scrolling, no dead margin.
-- [ ] **Step 4:** Commit.
+- [x] **Step 4:** Commit.
 
 ### Task 4: Moving around the board
 
@@ -80,17 +80,17 @@ for an anonymous reader of a public board.
 
 The largest piece. A viewport wrapping the columns, with:
 
-- [ ] **Step 1:** **Pan by dragging the background.** Only the background — a drag starting on a
+- [x] **Step 1:** **Pan by dragging the background.** Only the background — a drag starting on a
       card is a card drag, and the two must not fight. The existing drag-and-drop is what decides.
-- [ ] **Step 2:** **Wheel behaviour.** Vertical wheel scrolls the board vertically; horizontal
+- [x] **Step 2:** **Wheel behaviour.** Vertical wheel scrolls the board vertically; horizontal
       wheel and shift-wheel move it sideways; **ctrl/⌘ + wheel zooms**, which is what a trackpad
       pinch actually sends.
-- [ ] **Step 3:** **Touch.** Two-finger pinch to zoom, one finger to pan.
-- [ ] **Step 4:** Zoom bounds and a reset control, so nobody can lose the board off-screen.
-- [ ] **Step 5:** **Keyboard equivalents for every gesture**, or the board becomes mouse-only.
+- [x] **Step 3:** **Touch.** Two-finger pinch to zoom, one finger to pan.
+- [x] **Step 4:** Zoom bounds and a reset control, so nobody can lose the board off-screen.
+- [x] **Step 5:** **Keyboard equivalents for every gesture**, or the board becomes mouse-only.
       Arrow keys pan, `+`/`-` zoom, `0` resets.
-- [ ] **Step 6:** Browser tests for each. jsdom dispatches no real gestures.
-- [ ] **Step 7:** Commit.
+- [x] **Step 6:** Browser tests for each. jsdom dispatches no real gestures.
+- [x] **Step 7:** Commit.
 
 ### Task 5: A board is private until its creator says otherwise
 
@@ -100,12 +100,47 @@ The reported reason is specific and worth writing down: **bots scan public board
 creator is watching and file fraudulent DMCA claims from it.** A board that lists "Now Playing" in
 public is a target list. Defaulting to public makes every new creator one by accident.
 
-- [ ] **Step 1:** Change the default for `viewVisibility` to `SUBSCRIBERS_ONLY`. Additive
+- [x] **Step 1:** Change the default for `viewVisibility` to `SUBSCRIBERS_ONLY`. Additive
       migration: **existing boards keep what they have** — silently making live boards private is
       as bad as the reverse.
-- [ ] **Step 2:** A settings page where a creator, or a moderator holding the right permission,
+- [x] **Step 2:** A settings page where a creator, or a moderator holding the right permission,
       sets visibility, the submit and upvote tier gates, `hidePendingFromPublic`, and
       `allowAnonymousTickets`. The model already carries all of it.
-- [ ] **Step 3:** Say what each choice exposes, in the page. A creator choosing "public" should
+- [x] **Step 3:** Say what each choice exposes, in the page. A creator choosing "public" should
       know it means a list anyone can read.
-- [ ] **Step 4:** Commit.
+- [x] **Step 4:** Commit.
+
+---
+
+## What it found
+
+Every task turned out smaller or different from the report, and the differences are the
+interesting part.
+
+**Two of the five were not product bugs.** The contact form was a UI gating bug over a server that
+already refused. The sort was the *demo seed* writing one of a pair of derived columns, so every
+weighted score was zero and everything tied — the product was correct and the demo was lying, which
+a play-tester has no way to tell apart.
+
+**The board redesign replaced tasks 3 and 4 rather than completing them.** The report asked for a
+widescreen board with zoom and pan; the follow-up asked for one column at a time, tabbed, with the
+neighbours dragged in. Tabs answer the truncation the zooming was for, so only swiping survived
+from that list.
+
+**Task 5 was mostly already built.** `viewVisibility`, the tier gates, `hidePendingFromPublic` and
+`allowAnonymousTickets` were all in `CreatorPolicy`, and `GET`/`PATCH policy` had existed since
+plan 03. What was missing was a UI, the default, and four settings that were in the database and
+reachable by nobody.
+
+**Changing the default broke 51 tests, and not one was a bug.** They were relying on an implicit
+default: 42 files created a board with `policy: { create: {} }` and then read it anonymously. They
+state what they need now, which is better than what they did before.
+
+**`MANAGE_POLICY` closed the gap between the ask and the delivery.** "Creators and their mods" got
+owner-only first; delegating it properly wanted a permission of its own rather than folding board
+settings into moderation.
+
+**jsdom cannot test a gesture.** It defines no `PointerEvent`, so pointer events arrive without
+type or coordinates and every deltas is NaN. That found the defect worth keeping from this round:
+the swipe guards compared distances without checking the numbers were real, and `Math.abs(NaN) < 48`
+is false — so they failed **open**, and the board changed column on an empty event.
