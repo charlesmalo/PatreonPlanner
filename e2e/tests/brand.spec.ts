@@ -65,16 +65,12 @@ test.describe('the logo and mascot', () => {
     expect(box?.height ?? 0).toBeGreaterThan(90);
   });
 
-  test('the slogan carries the brand colour on its last word', async ({ page }) => {
-    // Pitch and Plan belong to the reader and the creator; Play is what the board is pointed at,
-    // and it is the word the colour marks — the same treatment the wordmark gets in the header.
-    await page.goto('/');
-
-    const heading = page.getByRole('heading', { name: 'Pitch. Plan. Play.' });
-    await expect(heading).toBeVisible();
-    await expect(heading.locator('span.text-brand')).toHaveText('Play.');
-    await expect(heading.locator('span.text-brand')).toHaveCSS('color', 'rgb(253, 93, 70)');
-  });
+  /*
+   * The slogan's colouring moved to theme.spec.ts, which checks the same brand colour across both
+   * themes rather than only the default one. Two tests asserting one thing is how a change gets
+   * made in one place and missed in the other — which is exactly what happened when the coloured
+   * word moved from Play to Plan.
+   */
 
   test('nothing but the brand asset is published', async ({ page }) => {
     // `public/` is copied into the image wholesale and served to anyone who asks. Mockups and

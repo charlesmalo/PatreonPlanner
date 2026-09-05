@@ -12,6 +12,24 @@
       name="description"
       content="Pitch. Plan. Play. A request board for Patreon creators: patrons suggest what to cover next, and your own Patreon tiers decide what their voice can do."
     />
+    <script>
+      // Runs before the first paint, deliberately inline and blocking. Applying the theme from
+      // React instead would render one frame in the wrong one, which on a dark-theme machine is a
+      // white flash on every single navigation.
+      (function () {
+        try {
+          var stored = localStorage.getItem('pp.theme');
+          var choice = stored === 'light' || stored === 'dark' ? stored : 'system';
+          var dark =
+            choice === 'dark' ||
+            (choice === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.classList.toggle('dark', dark);
+          document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+        } catch (e) {
+          /* Storage blocked. The page renders light, and the menu still works. */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

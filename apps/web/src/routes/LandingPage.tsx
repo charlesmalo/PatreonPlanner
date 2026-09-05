@@ -29,10 +29,17 @@ export function LandingPage({ signedIn }: LandingPageProps) {
           height={512}
         />
 
+        {/*
+          Coloured like the three puzzle pieces the mascot is holding: the outer two pale, the
+          middle one coral. Outer/middle/outer is the pattern, not the literal paint.
+
+          "White" is what those pieces are, and white is what these words are on the dark theme.
+          On the light theme they inherit the foreground instead, because literal white on a white
+          page is an invisible slogan — and the light theme is half of what the toggle exists to
+          compare. The pattern survives; only the pale end of it moves with the background.
+        */}
         <h1 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
-          {/* The last word in the brand colour, echoing the wordmark in the header — and it is
-              the word the whole board is pointed at. */}
-          Pitch. Plan. <span className="text-brand">Play.</span>
+          Pitch. <span className="text-brand">Plan.</span> Play.
         </h1>
 
         <p className="mt-3 max-w-prose text-slate-600 dark:text-slate-300">
