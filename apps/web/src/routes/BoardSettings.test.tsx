@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { BoardSettings } from './BoardSettings';
@@ -13,6 +13,14 @@ const policy = {
   allowReactions: true,
   acceptsCarryOver: true,
   allowVoteRatchet: true,
+};
+
+const withTiers = {
+  ...creator,
+  tiers: [
+    { id: 'tier-lo', title: 'Sidekick', amountCents: 500, order: 0 },
+    { id: 'tier-hi', title: 'Producer', amountCents: 1500, order: 1 },
+  ],
 };
 
 const renderPage = () =>
@@ -130,5 +138,83 @@ describe('BoardSettings', () => {
       await screen.findByText(/do not have permission to change this board/i),
     ).toBeInTheDocument();
     expect(screen.getByText(/can grant this from the moderators page/i)).toBeInTheDocument();
+  });
+
+  describe('the tier gates', () => {
+    const withTierPolicy = (overrides: object = {}) => {
+      global.fetch = fakeApi({
+        'GET /api/v1/creators/ada-writes': withTiers,
+        'GET /api/v1/creators/ada-writes/capabilities': { administer: true, permissions: [] },
+        'GET /api/v1/creators/creator-1/policy': { ...policy, ...overrides },
+        'PATCH /api/v1/creators/creator-1/policy': { ...policy, ...overrides },
+      });
+    };
+
+    it('lets a creator gate suggesting and upvoting separately', async () => {
+      // Two decisions, not one. A board can be open to read, gated to suggest, and looser to
+      // vote on — which is the whole reason these are separate columns in the model.
+      withTierPolicy();
+      renderPage();
+
+      expect(await screen.findByLabelText(/who may suggest something/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/who may upvote/i)).toBeInTheDocument();
+    });
+
+    it('offers the board&apos;s own tiers, in the creator&apos;s order', async () => {
+      withTierPolicy();
+      renderPage();
+
+      const select = await screen.findByLabelText(/who may suggest something/i);
+      const options = within(select)
+        .getAllByRole('option')
+        .map((o) => o.textContent);
+      expect(options).toEqual([
+        'Any supporter, at any tier',
+        'Sidekick and above',
+        'Producer and above',
+      ]);
+    });
+
+    it('calls the empty option "any supporter", not "anyone"', async () => {
+      // A null gate does not remove the requirement — it drops it to any active patron. Calling
+      // it "anyone" would promise something the board does not do.
+      withTierPolicy();
+      renderPage();
+
+      const select = await screen.findByLabelText(/who may upvote/i);
+      expect(within(select).getByRole('option', { name: /any supporter/i })).toBeInTheDocument();
+      expect(within(select).queryByRole('option', { name: /^anyone/i })).not.toBeInTheDocument();
+    });
+
+    it('shows which tier is currently required', async () => {
+      withTierPolicy({ submitMinTierId: 'tier-hi' });
+      renderPage();
+
+      expect(await screen.findByLabelText(/who may suggest something/i)).toHaveValue('tier-hi');
+    });
+
+    it('saves a gate, and clears one back to any supporter', async () => {
+      withTierPolicy({ submitMinTierId: 'tier-hi' });
+      renderPage();
+      const select = await screen.findByLabelText(/who may suggest something/i);
+
+      await userEvent.selectOptions(select, '');
+
+      await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/saved/i));
+      expect(select).toHaveValue('');
+    });
+
+    it('says so when a board has no tiers to gate on', async () => {
+      // A board whose tiers have not synced yet would otherwise show two selects with one
+      // option each and no explanation.
+      global.fetch = fakeApi({
+        'GET /api/v1/creators/ada-writes': creator,
+        'GET /api/v1/creators/ada-writes/capabilities': { administer: true, permissions: [] },
+        'GET /api/v1/creators/creator-1/policy': policy,
+      });
+      renderPage();
+
+      expect(await screen.findByText(/no tiers have synced from patreon yet/i)).toBeInTheDocument();
+    });
   });
 });

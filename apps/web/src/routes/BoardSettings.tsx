@@ -44,6 +44,26 @@ const VISIBILITY: Array<{ value: Visibility; label: string; exposes: string }> =
   },
 ];
 
+/**
+ * The tier a supporter needs before they may do a thing.
+ *
+ * Kept apart from reading, which is the setting above: letting somebody see the board and letting
+ * them add to it are different decisions, and a creator who wants an open board with a gated
+ * suggestion box should not have to choose between them.
+ */
+const GATES: Array<{ key: 'submitMinTierId' | 'upvoteMinTierId'; label: string; hint: string }> = [
+  {
+    key: 'submitMinTierId',
+    label: 'Who may suggest something',
+    hint: 'The tier a supporter needs before they can add to the board.',
+  },
+  {
+    key: 'upvoteMinTierId',
+    label: 'Who may upvote',
+    hint: 'Usually looser than suggesting: voting costs you nothing to moderate.',
+  },
+];
+
 const SWITCHES: Array<{ key: keyof Policy; label: string; hint: string }> = [
   {
     key: 'hidePendingFromPublic',
@@ -88,6 +108,8 @@ export function BoardSettings() {
   const [saved, setSaved] = useState<string | null>(null);
 
   const creatorId = creator?.id;
+  // Ordered as the creator ordered them on Patreon, so the list reads the way their page does.
+  const tiers = [...(creator?.tiers ?? [])].sort((a, b) => a.order - b.order);
 
   useEffect(() => {
     if (!creatorId) return;
@@ -164,6 +186,48 @@ export function BoardSettings() {
               </span>
             </label>
           ))}
+        </div>
+      </fieldset>
+
+      <fieldset className="mt-8">
+        <legend className="text-sm font-medium">What it takes to take part</legend>
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+          Reading is set above. These are separate: somebody can be allowed to read the board
+          without being allowed to add to it.
+        </p>
+        <div className="mt-3 space-y-4">
+          {GATES.map((gate) => (
+            <div key={gate.key}>
+              <label htmlFor={gate.key} className="block text-sm font-medium">
+                {gate.label}
+              </label>
+              <select
+                id={gate.key}
+                value={(policy[gate.key] as string | null) ?? ''}
+                onChange={(event) => save({ [gate.key]: event.target.value || null })}
+                className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-slate-700 dark:bg-slate-950"
+              >
+                {/*
+                  An empty value is not "no requirement" — it drops the requirement to *any active
+                  patron*, which is what the model means by a null gate. Labelling it "anyone"
+                  would promise something the board does not do.
+                */}
+                <option value="">Any supporter, at any tier</option>
+                {tiers.map((tier) => (
+                  <option key={tier.id} value={tier.id}>
+                    {tier.title} and above
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{gate.hint}</p>
+            </div>
+          ))}
+          {tiers.length === 0 ? (
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              No tiers have synced from Patreon yet, so there is nothing to gate on beyond being a
+              supporter.
+            </p>
+          ) : null}
         </div>
       </fieldset>
 

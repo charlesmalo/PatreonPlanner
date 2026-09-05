@@ -49,6 +49,26 @@ Commit after each fully completed feature or task, so the work carries a
 timestamped record of what landed when. Only commit when verification is green —
 a red commit is not a checkpoint, it is a liability.
 
+### History is an audit trail, and is never rewritten
+
+**On a branch carrying work, never `git reset --hard`, never `git commit
+--amend`, never force-push.** The only acceptable `reset --hard` is creating a
+clean branch from a known ref _without_ touching the branch being worked on.
+
+The repository has to answer a question no summary can: start from the current
+state and walk **backwards** through the log to the decision that produced it,
+reconstructing what was true at that point. Rewriting history breaks that chain.
+Amending over a mistake is worse than the mistake, because it removes the
+evidence that anything was ever wrong.
+
+**Correct forward.** A wrong commit is answered by the next commit, saying what
+was wrong and why. Work that must be set aside is branched or stashed, never
+reset away. Mistakes stay in the log and are fixed in the open.
+
+Both of these have already cost this project: uncommitted work was destroyed by
+a `reset --hard` after a merge, and two commits were amended over — which is how
+this rule came to be written.
+
 ## 2. Never Assume — Ask Instead
 
 On any decision conflict, ambiguity, competing valid approaches, or choice
