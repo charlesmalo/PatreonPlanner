@@ -101,7 +101,11 @@ export const CREATOR = {
   displayName: 'Ada Writes',
   ownerId: '22222222-2222-2222-2222-222222222222',
   policyId: '33333333-3333-3333-3333-333333333333',
-  tierId: '44444444-4444-4444-4444-444444444444',
+  // A real v4 UUID rather than repeated digits like the ids above. `44444444-…-4444` is
+  // accepted by Postgres but is **not** RFC 4122 — its variant nibble is wrong — so
+  // `@IsUUID()` rejects it. This id is the only fixture id that travels in a request body
+  // (the policy gates), and a 400 there looks exactly like the feature being broken.
+  tierId: '89b82fa7-eef7-4bd5-a5ea-67a14b2fae59',
 };
 
 /** A second board, for the journeys that are about more than one. */

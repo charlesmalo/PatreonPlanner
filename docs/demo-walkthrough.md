@@ -138,8 +138,19 @@ what it actually means is a readable list of what a creator is currently watchin
 The middle option says plainly that a Patreon account is free to create. Against an automated
 reader it is no different from open to everyone, which is exactly the mistake it invites.
 
-A creator can hand this to a moderator with **Change board settings** on the moderators page.
-Running the queue and deciding who may read the board are separate powers, so it is granted
+Below it, **what it takes to take part** — who may suggest something, and who may upvote. These
+are deliberately separate from reading: letting somebody see the board and letting them add to it
+are different decisions, and a creator who wants an open board with a gated suggestion box should
+not have to choose between them. Set **Who may suggest something** to a tier as Ada, then look at
+the board as **Bea** ($5) and as **Cal** ($15) — the suggestion box appears for one and not the
+other, and the server refuses either way.
+
+The unset option reads **"Any supporter, at any tier"** rather than "anyone", because that is what
+it does: it drops the requirement to any active patron, it does not remove it. A settings page that
+overstates what it just turned off is worse than one that never offered the setting.
+
+A creator can hand all of this to a moderator with **Change board settings** on the moderators
+page. Running the queue and deciding who may read the board are separate powers, so it is granted
 deliberately or not at all.
 
 ### 11. Staff, invites and reports
