@@ -23,7 +23,7 @@ describe('POST /webhooks/patreon (integration)', () => {
         tiers: {
           create: [{ patreonTierId: 'h-tier', title: 'Gold', amountCents: 1000, order: 0 }],
         },
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
       include: { tiers: true },
     });
@@ -95,7 +95,7 @@ describe('POST /webhooks/patreon (integration)', () => {
         ownerUserId: owner.id,
         displayName: 'Bare',
         slug: 'bare',
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
     });
     await event(
@@ -116,7 +116,7 @@ describe('POST /webhooks/patreon (integration)', () => {
         ownerUserId: owner.id,
         displayName: 'Victim',
         slug: 'victim',
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
     });
     // Correctly signed for OUR creator, but naming someone else's campaign in the body. The
@@ -208,7 +208,7 @@ describe('POST /webhooks/patreon (integration)', () => {
         ).id,
         displayName: 'Hook Other',
         slug: 'hook-other',
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
     });
     await ctx.prisma.membership.upsert({

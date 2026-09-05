@@ -22,7 +22,7 @@ describe('Notifications (integration)', () => {
           ownerUserId: owner.id,
           displayName: 'Notify Co',
           slug: 'notify-co',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
         },
       })
     ).id;
@@ -33,7 +33,7 @@ describe('Notifications (integration)', () => {
           ownerUserId: owner.id,
           displayName: 'Other',
           slug: 'nf-other',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
         },
       })
     ).id;

@@ -32,7 +32,7 @@ describe('Creator blocklist (integration)', () => {
           ownerUserId: ownerId,
           displayName: 'Block Co',
           slug: 'block-co',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
           staff: { create: { userId: ownerId, role: 'OWNER' } },
         },
       })
@@ -47,7 +47,7 @@ describe('Creator blocklist (integration)', () => {
           ownerUserId: otherOwnerId,
           displayName: 'Other Co',
           slug: 'other-co',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
           staff: { create: { userId: otherOwnerId, role: 'OWNER' } },
         },
       })

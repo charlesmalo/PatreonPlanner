@@ -23,7 +23,7 @@ describe('MembershipSyncService (integration)', () => {
         tiers: {
           create: [{ patreonTierId: 's-tier', title: 'Gold', amountCents: 1000, order: 0 }],
         },
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
       include: { tiers: true },
     });
@@ -36,7 +36,7 @@ describe('MembershipSyncService (integration)', () => {
         ownerUserId: owner.id,
         displayName: 'Other Sync',
         slug: 'other-sync',
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
     });
     otherCreatorId = other.id;

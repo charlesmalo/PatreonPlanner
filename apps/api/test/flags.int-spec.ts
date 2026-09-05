@@ -18,7 +18,7 @@ describe('Community flags (integration)', () => {
         ownerUserId: owner.id,
         displayName: 'Flag Co',
         slug: 'flag-co',
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
     });
     creatorId = creator.id;
@@ -28,7 +28,7 @@ describe('Community flags (integration)', () => {
         ownerUserId: owner.id,
         displayName: 'Other Flag Co',
         slug: 'fl-other',
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
     });
     otherCreatorId = other.id;

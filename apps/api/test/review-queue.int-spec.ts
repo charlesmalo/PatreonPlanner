@@ -21,7 +21,7 @@ describe('Review queue (integration)', () => {
         ownerUserId: owner.id,
         displayName: 'Queue Co',
         slug: 'queue-co',
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
     });
     creatorId = creator.id;
@@ -31,7 +31,7 @@ describe('Review queue (integration)', () => {
         ownerUserId: owner.id,
         displayName: 'Other Queue',
         slug: 'rq-other',
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
     });
     otherCreatorId = other.id;

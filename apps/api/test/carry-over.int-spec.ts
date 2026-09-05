@@ -38,7 +38,7 @@ describe('Carrying a list across boards (integration)', () => {
             ownerUserId: owner,
             displayName: slug,
             slug,
-            policy: { create: {} },
+            policy: { create: { viewVisibility: 'PUBLIC' } },
             staff: { create: { userId: owner, role: 'OWNER' } },
           },
         })

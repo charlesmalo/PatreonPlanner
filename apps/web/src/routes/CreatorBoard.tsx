@@ -107,6 +107,14 @@ export function CreatorBoard() {
             Moderators
           </Link>
         ) : null}
+        {capabilities.administer ? (
+          <Link
+            to={`/c/${encodeURIComponent(slug)}/settings`}
+            className="text-sm text-sky-700 underline focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:text-sky-400"
+          >
+            Settings
+          </Link>
+        ) : null}
         {capabilities.upvote ? (
           <Link
             to={`/c/${encodeURIComponent(slug)}/my-votes`}

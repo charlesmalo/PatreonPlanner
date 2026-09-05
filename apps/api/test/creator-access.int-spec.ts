@@ -21,7 +21,7 @@ describe('CreatorAccessGuard (integration)', () => {
             { patreonTierId: 'g-hi', title: 'Gold', amountCents: 1000, order: 1 },
           ],
         },
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
     });
     creatorId = creator.id;
@@ -140,7 +140,7 @@ describe('CreatorAccessGuard (integration)', () => {
         ownerUserId: other.id,
         displayName: 'Other',
         slug: 'other',
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
     });
     const cookie = await loginAs('guard-user-5');
@@ -334,7 +334,7 @@ describe('CreatorAccessGuard (integration)', () => {
         ownerUserId: other.id,
         displayName: 'Cross',
         slug: 'cross',
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
     });
     const cookie = await loginAs('cross-staff');

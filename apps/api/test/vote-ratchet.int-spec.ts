@@ -21,7 +21,7 @@ describe('Vote ratchet (integration)', () => {
           ownerUserId: await userId('vr-owner'),
           displayName: 'Ratchet Co',
           slug: 'ratchet-co',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
           staff: { create: { userId: await userId('vr-owner'), role: 'OWNER' } },
         },
       })

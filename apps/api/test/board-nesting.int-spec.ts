@@ -34,7 +34,7 @@ describe('Board nesting and theme filtering (integration)', () => {
         ownerUserId: owner.id,
         displayName: 'Nesting Co',
         slug: 'nesting-co',
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
     });
     creatorId = creator.id;
@@ -45,7 +45,7 @@ describe('Board nesting and theme filtering (integration)', () => {
           ownerUserId: owner.id,
           displayName: 'Other',
           slug: 'nest-other',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
         },
       })
     ).id;

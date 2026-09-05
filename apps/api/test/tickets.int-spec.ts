@@ -28,7 +28,7 @@ describe('Tickets (integration)', () => {
           ownerUserId: await userId('tk-owner'),
           displayName: 'Ticket Co',
           slug: 'ticket-co',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
           staff: { create: { userId: await userId('tk-owner'), role: 'OWNER' } },
         },
       })
@@ -187,7 +187,7 @@ describe('Tickets (integration)', () => {
           ownerUserId: await userId('tk-owner'),
           displayName: 'Other',
           slug: 'tk-other',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
         },
       });
       const foreign = await ctx.prisma.recommendation.create({
@@ -304,7 +304,7 @@ describe('Tickets (integration)', () => {
           ownerUserId: await userId('tk-owner'),
           displayName: 'Other',
           slug: 'tk-other2',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
           staff: {
             create: {
               userId: handlerUserId,

@@ -83,7 +83,7 @@ describe('POST /api/v1/creators/claim (integration)', () => {
     expect(creator.tiers.map((t) => t.patreonTierId).sort()).toEqual(['tier-hi', 'tier-lo']);
     expect(creator.staff).toHaveLength(1);
     expect(creator.staff[0].role).toBe('OWNER');
-    expect(creator.policy?.viewVisibility).toBe('PUBLIC');
+    expect(creator.policy?.viewVisibility).toBe('SUBSCRIBERS_ONLY');
   });
 
   it('refuses to claim a campaign someone else already claimed', async () => {

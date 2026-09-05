@@ -33,7 +33,7 @@ describe('Notification triggers (integration)', () => {
           ownerUserId: owner,
           displayName: 'Trigger Co',
           slug: 'trigger-co',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
           // Claiming a board writes an OWNER staff row, so a fixture without one is a board the
           // app cannot produce — and it made the owner union in the fan-out look load-bearing.
           staff: { create: { userId: owner, role: 'OWNER' } },
@@ -221,7 +221,7 @@ describe('Notification triggers (integration)', () => {
           ownerUserId: elsewhere.id,
           displayName: 'Other',
           slug: 'tg-other',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
           staff: { create: { userId: elsewhere.id, role: 'OWNER' } },
         },
       });

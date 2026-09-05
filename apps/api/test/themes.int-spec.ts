@@ -23,7 +23,7 @@ describe('Theme curation (integration)', () => {
         ownerUserId: owner.id,
         displayName: 'Theme Co',
         slug: 'theme-co',
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
     });
     creatorId = creator.id;
@@ -34,7 +34,7 @@ describe('Theme curation (integration)', () => {
           ownerUserId: owner.id,
           displayName: 'Other',
           slug: 'th-other',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
         },
       })
     ).id;

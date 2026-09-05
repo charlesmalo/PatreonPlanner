@@ -24,7 +24,7 @@ describe('Creator notes (integration)', () => {
         ownerUserId: owner.id,
         displayName: 'Notes Co',
         slug: 'notes-co',
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
     });
     creatorId = creator.id;
@@ -35,7 +35,7 @@ describe('Creator notes (integration)', () => {
           ownerUserId: owner.id,
           displayName: 'Other',
           slug: 'nt-other',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
         },
       })
     ).id;

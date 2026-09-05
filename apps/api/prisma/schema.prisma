@@ -336,7 +336,17 @@ model StaffInvite {
 model CreatorPolicy {
   id                    String         @id @default(uuid()) @db.Uuid
   creatorId             String         @unique @db.Uuid
-  viewVisibility        ViewVisibility @default(PUBLIC)
+  // Subscribers only, deliberately, and this default is a security decision rather than a taste
+  // one. A public board publishes what a creator is currently watching, and that list is being
+  // scraped to file fraudulent DMCA claims against them. Defaulting to public made every new
+  // creator a target before they had chosen anything.
+  //
+  // ANY_PATREON_USER is no safer against that: a Patreon account is free, so it costs an
+  // automated reader nothing. Only SUBSCRIBERS_ONLY puts a price on looking.
+  //
+  // A creator who wants an open board still gets one — in two clicks, having been told what it
+  // exposes. The opposite mistake is silent.
+  viewVisibility        ViewVisibility @default(SUBSCRIBERS_ONLY)
   submitMinTierId       String?        @db.Uuid
   upvoteMinTierId       String?        @db.Uuid
   hidePendingFromPublic Boolean        @default(false)

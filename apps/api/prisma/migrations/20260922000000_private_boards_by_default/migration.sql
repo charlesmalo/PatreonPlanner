@@ -1,0 +1,13 @@
+-- New boards are subscribers-only unless their creator says otherwise.
+--
+-- A security default, not a taste one: a public board publishes what a creator is currently
+-- watching, and those lists are scraped to file fraudulent DMCA claims. Defaulting to public made
+-- every new creator a target before they had chosen anything.
+--
+-- ANY_PATREON_USER is no safer against that — a Patreon account is free, so it costs an automated
+-- reader nothing. Only SUBSCRIBERS_ONLY puts a price on looking.
+--
+-- **Changes the default only.** Every existing row keeps the visibility it already has. Silently
+-- making a live board private is as bad as the reverse: a creator who chose PUBLIC chose it, and
+-- their patrons would arrive at a board that had vanished with no explanation.
+ALTER TABLE "CreatorPolicy" ALTER COLUMN "viewVisibility" SET DEFAULT 'SUBSCRIBERS_ONLY';

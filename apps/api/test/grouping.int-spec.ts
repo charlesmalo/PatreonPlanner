@@ -22,7 +22,7 @@ describe('Grouping (integration)', () => {
           ownerUserId: await userId('gr-owner'),
           displayName: 'Group Co',
           slug: 'group-co',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
           staff: { create: { userId: await userId('gr-owner'), role: 'OWNER' } },
         },
       })
@@ -234,7 +234,7 @@ describe('Grouping (integration)', () => {
           ownerUserId: await userId('gr-owner'),
           displayName: 'Other',
           slug: 'gr-other',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
         },
       });
       const foreign = await ctx.prisma.recommendation.create({

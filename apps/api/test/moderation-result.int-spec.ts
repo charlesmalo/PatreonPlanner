@@ -29,7 +29,7 @@ describe('Moderation results (integration)', () => {
         ownerUserId: owner.id,
         displayName: 'Result Co',
         slug: 'result-co',
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
         staff: { create: { userId: owner.id, role: 'OWNER' } },
       },
     });
@@ -190,7 +190,7 @@ describe('Moderation results (integration)', () => {
         ).id,
         displayName: 'Other',
         slug: 'mr-other',
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
     });
 

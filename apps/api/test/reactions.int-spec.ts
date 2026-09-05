@@ -22,7 +22,7 @@ describe('Reactions (integration)', () => {
           ownerUserId: owner.id,
           displayName: 'React Co',
           slug: 'react-co',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
           staff: { create: { userId: owner.id, role: 'OWNER' } },
         },
       })
@@ -212,7 +212,7 @@ describe('Reactions (integration)', () => {
           ownerUserId: await userId('rx-owner'),
           displayName: 'Other',
           slug: 'rx-other',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
         },
       });
       const foreign = await ctx.prisma.recommendation.create({

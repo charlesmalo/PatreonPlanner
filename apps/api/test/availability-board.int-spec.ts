@@ -20,7 +20,7 @@ describe('Availability on the board (integration)', () => {
         ownerUserId: owner.id,
         displayName: 'Availability Co',
         slug: 'availability-co',
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
     });
     creatorId = creator.id;

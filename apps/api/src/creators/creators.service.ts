@@ -18,11 +18,21 @@ import { ClaimCreatorDto } from './dto/claim-creator.dto';
 import { UpdatePolicyDto } from './dto/update-policy.dto';
 import { slugify } from './slug';
 
+/**
+ * Everything a creator decides about their own board.
+ *
+ * The settings page renders from exactly this, so a column added to `CreatorPolicy` and not added
+ * here is a setting nobody can see or change — which is what the four below had been.
+ */
 const POLICY_FIELDS = {
   viewVisibility: true,
   submitMinTierId: true,
   upvoteMinTierId: true,
   hidePendingFromPublic: true,
+  allowAnonymousTickets: true,
+  allowReactions: true,
+  acceptsCarryOver: true,
+  allowVoteRatchet: true,
 } as const;
 
 @Injectable()

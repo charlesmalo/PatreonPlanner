@@ -32,7 +32,7 @@ describe('Coarse request limiter (integration)', () => {
         ownerUserId: owner.id,
         displayName: 'Limit Co',
         slug: 'limit-co',
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
     });
     creatorId = creator.id;

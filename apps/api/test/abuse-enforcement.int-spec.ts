@@ -32,7 +32,7 @@ describe('Abuse enforcement (integration)', () => {
         ownerUserId: owner.id,
         displayName: 'Abuse Co',
         slug: 'abuse-co',
-        policy: { create: {} },
+        policy: { create: { viewVisibility: 'PUBLIC' } },
       },
     });
     creatorId = creator.id;
@@ -294,7 +294,7 @@ describe('Abuse enforcement (integration)', () => {
             ownerUserId: patronUserId,
             displayName: `Multi ${i}`,
             slug: `ae-multi-${i}`,
-            policy: { create: {} },
+            policy: { create: { viewVisibility: 'PUBLIC' } },
           },
         });
         await ctx.prisma.membership.create({

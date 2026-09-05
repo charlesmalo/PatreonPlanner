@@ -22,7 +22,7 @@ describe('Staff permissions (integration)', () => {
           ownerUserId: await userId('sp-owner'),
           displayName: 'Permission Co',
           slug: 'permission-co',
-          policy: { create: {} },
+          policy: { create: { viewVisibility: 'PUBLIC' } },
           staff: { create: { userId: await userId('sp-owner'), role: 'OWNER' } },
         },
       })
