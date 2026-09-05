@@ -18,6 +18,12 @@ enum StaffPermission {
   HANDLE_REPORTS
   WRITE_NOTES
   MANAGE_THEMES
+  // Who may read the board, and the gates on suggesting and upvoting.
+  //
+  // Its own permission rather than part of MODERATE, because the two are not the same power: a
+  // moderator arriving by invite link should be able to run the queue without being able to open
+  // the board to the whole internet. A creator who wants to delegate it grants it explicitly.
+  MANAGE_POLICY
 }
 
 enum StaffRole {

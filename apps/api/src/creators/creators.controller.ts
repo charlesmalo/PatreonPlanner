@@ -12,6 +12,7 @@ import { CurrentUser, CurrentUserPayload, SessionGuard } from '../session/sessio
 import { CreatorsService } from './creators.service';
 import { ClaimCreatorDto } from './dto/claim-creator.dto';
 import { SetWebhookSecretDto } from './dto/set-webhook-secret.dto';
+import { RequirePermission } from '../access/require-permission.decorator';
 import { UpdatePolicyDto } from './dto/update-policy.dto';
 
 @Controller('creators')
@@ -78,9 +79,13 @@ export class CreatorsController {
     };
   }
 
+  // MANAGE_POLICY rather than ADMINISTER, so a creator can delegate the board's settings without
+  // handing over the board. An owner holds it by the short-circuit in `hasPermission`, so nothing
+  // changes for them; a moderator has it only if it was granted, and no existing staff row was.
   @Get(':creatorId/policy')
-  @RequireCapability('ADMINISTER')
-  @UseGuards(CreatorAccessGuard)
+  @RequireCapability('MODERATE')
+  @RequirePermission('MANAGE_POLICY')
+  @UseGuards(CreatorAccessGuard, SessionGuard)
   policy(@CurrentCreator() creator: ResolvedCreator) {
     return this.creators.getPolicy(creator.id);
   }
@@ -94,11 +99,14 @@ export class CreatorsController {
     return this.creators.setWebhookSecret(creator.id, dto.secret);
   }
 
-  // ADMINISTER, not MODERATE: this is the paywall switch. Design §7 files policy under Creator
-  // admin alongside staff, and a moderator arriving by invite link must not hold it.
+  // Not MODERATE: running the queue and deciding who may read the board are different powers,
+  // and a moderator arriving by invite link holds only the first unless the creator says
+  // otherwise. That was the reason this sat behind ADMINISTER; a permission of its own keeps the
+  // reason and makes the delegation possible.
   @Patch(':creatorId/policy')
-  @RequireCapability('ADMINISTER')
-  @UseGuards(CreatorAccessGuard)
+  @RequireCapability('MODERATE')
+  @RequirePermission('MANAGE_POLICY')
+  @UseGuards(CreatorAccessGuard, SessionGuard)
   updatePolicy(@CurrentCreator() creator: ResolvedCreator, @Body() dto: UpdatePolicyDto) {
     return this.creators.updatePolicy(creator.id, dto);
   }

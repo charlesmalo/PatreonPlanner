@@ -98,7 +98,8 @@ export type StaffPermission =
   | 'EDIT_ENTRIES'
   | 'HANDLE_REPORTS'
   | 'WRITE_NOTES'
-  | 'MANAGE_THEMES';
+  | 'MANAGE_THEMES'
+  | 'MANAGE_POLICY';
 
 export interface StaffMember {
   userId: string;

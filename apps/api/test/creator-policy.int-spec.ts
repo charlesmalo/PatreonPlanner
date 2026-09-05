@@ -290,4 +290,69 @@ describe('Creator read and policy endpoints (integration)', () => {
       expect(policy.viewVisibility).toBe('PUBLIC');
     });
   });
+
+  describe('delegating the settings to a moderator', () => {
+    /**
+     * Running the queue and deciding who may read the board are different powers. A moderator
+     * arriving by invite link holds the first; the second is granted deliberately or not at all.
+     */
+    const asModerator = async (patreonUserId: string, permissions: string[]) => {
+      const auth = await loginAs(patreonUserId);
+      const user = await ctx.prisma.user.findUniqueOrThrow({ where: { patreonUserId } });
+      await ctx.prisma.creatorStaff.upsert({
+        where: { creatorId_userId: { creatorId, userId: user.id } },
+        create: { creatorId, userId: user.id, role: 'MOD', permissions: permissions as never },
+        update: { role: 'MOD', permissions: permissions as never },
+      });
+      return auth;
+    };
+
+    it('refuses a moderator who was not given it', async () => {
+      const auth = await asModerator('policy-plain-mod', ['MOVE_ENTRIES']);
+
+      await request(ctx.app.getHttpServer())
+        .get(`/api/v1/creators/${creatorId}/policy`)
+        .set('Cookie', auth.session)
+        .expect(403);
+    });
+
+    it('lets a moderator who was read it', async () => {
+      const auth = await asModerator('policy-trusted-mod', ['MANAGE_POLICY']);
+
+      await request(ctx.app.getHttpServer())
+        .get(`/api/v1/creators/${creatorId}/policy`)
+        .set('Cookie', auth.session)
+        .expect(200);
+    });
+
+    it('lets them change it too', async () => {
+      const auth = await asModerator('policy-writing-mod', ['MANAGE_POLICY']);
+
+      await request(ctx.app.getHttpServer())
+        .patch(`/api/v1/creators/${creatorId}/policy`)
+        .set('Cookie', [auth.session, auth.csrf])
+        .set('x-csrf-token', auth.csrfToken)
+        .send({ allowReactions: false })
+        .expect(200);
+
+      const policy = await ctx.prisma.creatorPolicy.findUniqueOrThrow({ where: { creatorId } });
+      expect(policy.allowReactions).toBe(false);
+      await ctx.prisma.creatorPolicy.update({
+        where: { creatorId },
+        data: { allowReactions: true },
+      });
+    });
+
+    it('still lets the owner, who was granted nothing', async () => {
+      // An owner's powers come from the role short-circuiting the permission check. Their stored
+      // column is empty by design, and requiring a grant would lock them out of their own board.
+      const auth = await loginAs('policy-owner-check');
+      await makeStaff('policy-owner-check');
+
+      await request(ctx.app.getHttpServer())
+        .get(`/api/v1/creators/${creatorId}/policy`)
+        .set('Cookie', auth.session)
+        .expect(200);
+    });
+  });
 });

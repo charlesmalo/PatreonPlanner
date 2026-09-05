@@ -113,9 +113,10 @@ describe('BoardSettings', () => {
     expect(screen.getByRole('checkbox', { name: /allow reactions/i })).toBeChecked();
   });
 
-  it('tells a moderator this is not theirs, rather than showing an error', async () => {
+  it('tells a moderator without the permission that it is grantable, not broken', async () => {
     // 403 is the ordinary answer for somebody who simply does not hold this power. Calling it a
-    // failure is how a person files a bug report about working software.
+    // failure is how a person files a bug report about working software — and it is worth saying
+    // the creator can grant it, because they can.
     global.fetch = fakeApi({
       'GET /api/v1/creators/ada-writes': creator,
       'GET /api/v1/creators/ada-writes/capabilities': { administer: false, permissions: [] },
@@ -125,6 +126,9 @@ describe('BoardSettings', () => {
     });
     renderPage();
 
-    expect(await screen.findByText(/only the creator can change these/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/do not have permission to change this board/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/can grant this from the moderators page/i)).toBeInTheDocument();
   });
 });
