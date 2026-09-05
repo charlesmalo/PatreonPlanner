@@ -8,8 +8,11 @@ being built in sequence. Every sequenced step has shipped, including the
 link/candidate model (design §4), which was split out of grouping rather than
 dropped.
 
-The verification baseline at the time of writing: **1045 API + 329 web + 42 e2e
-tests passing**, typecheck clean across every package.
+The verification baseline, re-measured rather than carried forward: **1250 API +
+379 web + 71 e2e tests passing** (92 API suites), typecheck clean across every
+package, and both coverage gates enforced in CI. The number that stood here said
+1045, which was true when it was written and had not been true for some weeks —
+a count copied forward is a claim nobody is checking, so this one was re-run.
 
 ## Milestones
 
@@ -32,10 +35,23 @@ tests passing**, typecheck clean across every package.
 - [x] M15: Donation page (link-out; needs a payment URL to switch on)
 - [x] M17: Link candidates — a submitted link waits for staff, and staff decide
       on the card (plans 09 and 10)
+- [x] M18: Payments behind a port, and a fake provider that takes no money, so
+      the whole product demonstrates before there is a merchant account (plan 20)
+- [x] M19: Brand and landing page — the mascot, `Pitch. Plan. Play.`, and a
+      light/dark theme that still follows the operating system by default
+- [x] M20: Playtest round one — private by default, one board column at a time,
+      and a settings page a creator can actually reach every policy from
+      (plan 21)
 
 ## Active Task
 
 Nothing in flight, and nothing designed but unbuilt.
+
+The last thing built was the pair of tier gates on the settings page — who may
+suggest, and who may upvote. They complete plan 21's task 5, which had shipped
+with both fields wired end to end and **no control to set either**: it read as
+finished from the inside and was caught only by reading the original request
+against the page. The plan's findings record why nothing failed.
 
 Phase 2 and **Amendment A** are complete. **Plan 20** put every payment provider
 behind one `PaymentProvider` port with a second implementation that takes no
@@ -163,3 +179,6 @@ What remains needs access this repository does not have:
 | 2026-09-01 | Amendment A complete: digests, order refunds, interest tagging, follows, demo   |
 | 2026-08-27 | Cosmetics shipped (plan 16); every unblocked item in Amendment A is built       |
 | 2026-09-01 | Payment provider behind a port; a fake one makes premium demonstrable (plan 20) |
+| 2026-09-03 | Payments deferred to launch; brand, landing page and the slogan shipped         |
+| 2026-09-04 | Playtest round one: private by default, tabbed board, settings page (plan 21)   |
+| 2026-09-05 | Tier gates finish plan 21; history-is-an-audit-trail made a permanent rule      |

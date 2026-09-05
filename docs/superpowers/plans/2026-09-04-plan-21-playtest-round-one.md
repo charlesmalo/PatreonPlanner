@@ -144,3 +144,16 @@ settings into moderation.
 type or coordinates and every deltas is NaN. That found the defect worth keeping from this round:
 the swipe guards compared distances without checking the numbers were real, and `Math.abs(NaN) < 48`
 is false — so they failed **open**, and the board changed column on an empty event.
+
+**The settings page shipped with half of task 5 missing, and it read as finished.**
+`submitMinTierId` and `upvoteMinTierId` were loaded from the API, held in state and sent back on
+save — every part of the round trip existed except a control to change them. Nothing failed: no
+test, no typecheck, no reviewer. "Creators decide who may suggest and who may upvote" was in the
+report and the two fields were visibly wired, so the page looked complete from the inside. It was
+caught by reading the request again against the page rather than against the diff, which is the
+only thing that would have caught it.
+
+The label matters as much as the control. An unset gate does not mean *anyone* — it means any
+active patron, at any tier — so the empty option says so, and a test asserts the word "anyone"
+never appears there. A settings page that overstates what it just turned off is worse than one
+that never offered the setting.
