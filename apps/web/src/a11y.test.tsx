@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { RecommendationCard } from './components/RecommendationCard';
@@ -13,25 +14,10 @@ const noNotifications = {
 };
 
 describe('accessibility basics', () => {
-  it('keeps the donation link off a creator board, and offers it elsewhere', () => {
-    // A donation ask on a creator's page competes with that creator's own Patreon ask, in front
-    // of an audience that came for them.
+  it('keeps the donation ask out of the page, and off a creator board entirely', async () => {
+    // It used to be a footer under every page. Now it is behind the header's More menu, so it
+    // is one press away rather than sitting underneath whatever the reader came to do.
     const { unmount } = render(
-      <MemoryRouter initialEntries={['/c/ada-writes']}>
-        <Layout
-          user={null}
-          loadingSession={false}
-          onSignOut={vi.fn()}
-          notifications={noNotifications}
-        >
-          <p>content</p>
-        </Layout>
-      </MemoryRouter>,
-    );
-    expect(screen.queryByRole('link', { name: /support the developers/i })).not.toBeInTheDocument();
-    unmount();
-
-    render(
       <MemoryRouter initialEntries={['/']}>
         <Layout
           user={null}
@@ -43,7 +29,28 @@ describe('accessibility basics', () => {
         </Layout>
       </MemoryRouter>,
     );
-    expect(screen.getByRole('link', { name: /support the developers/i })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /support the developers/i })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /more/i }));
+    expect(screen.getByRole('menuitem', { name: /support the developers/i })).toBeInTheDocument();
+    unmount();
+
+    // A donation ask on a creator's page competes with that creator's own Patreon ask, in front
+    // of an audience that came for them.
+    render(
+      <MemoryRouter initialEntries={['/c/ada-writes']}>
+        <Layout
+          user={null}
+          loadingSession={false}
+          onSignOut={vi.fn()}
+          notifications={noNotifications}
+        >
+          <p>content</p>
+        </Layout>
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole('button', { name: /more/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/support the developers/i)).not.toBeInTheDocument();
   });
 
   it('offers a sign-in link when signed out and a sign-out button when signed in', () => {
