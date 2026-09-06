@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useLocation } from 'react-router-dom';
 import type { Notification, SessionUser } from '../api/types';
+import { AppMenu } from './AppMenu';
 import { NotificationBell } from './NotificationBell';
 import { ThemeMenu } from './ThemeMenu';
 
@@ -44,8 +45,10 @@ export function Layout({ user, loadingSession, onSignOut, notifications, childre
           </Link>
           <div className="flex items-center gap-3">
             {/* Outside the signed-in branch on purpose: choosing a theme is not something anyone
-                should have to sign in to do. */}
+                should have to sign in to do. The app's own links sit next to it for the same
+                reason, and because both are the app speaking rather than the board. */}
             <ThemeMenu />
+            <AppMenu />
             {loadingSession ? null : user ? (
               <div className="flex items-center gap-3">
                 {/* Signed-in only: there is nobody to notify otherwise, and the endpoints 401. */}
@@ -91,29 +94,6 @@ export function Layout({ user, loadingSession, onSignOut, notifications, childre
       <main className={`mx-auto px-4 py-8 ${onABoard ? 'max-w-none' : 'max-w-3xl'}`}>
         {children}
       </main>
-      <Footer />
     </div>
-  );
-}
-
-/**
- * App-level links, deliberately absent from a creator's board.
- *
- * A donation ask on a creator's page competes with that creator's own Patreon ask, in front of an
- * audience that came for them — which creators would reasonably read as monetising their
- * audience. It belongs to the app, so it appears where the app speaks for itself.
- */
-function Footer() {
-  const onACreatorBoard = useLocation().pathname.startsWith('/c/');
-  if (onACreatorBoard) return null;
-  return (
-    <footer className="mx-auto max-w-3xl px-4 pb-8 text-sm text-slate-500 dark:text-slate-400">
-      <Link
-        to="/support"
-        className="underline focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
-      >
-        Support the developers
-      </Link>
-    </footer>
   );
 }
