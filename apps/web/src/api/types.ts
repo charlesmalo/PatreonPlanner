@@ -233,11 +233,24 @@ export interface NotificationPayload {
   creatorName: string;
   status?: 'PENDING' | 'ACCEPTED' | 'ACTIVE' | 'COMPLETED' | 'REJECTED' | 'DELETED';
   reason?: string;
+  /** Ticket notifications only. The id is what makes the message findable on the tickets page. */
+  ticketId?: string;
+  resolution?: string;
+  /** What the moderator wrote back. The reason a reader opens a resolved-message notification. */
+  reply?: string;
 }
 
 export interface Notification {
   id: string;
-  type: 'ENTRY_STATUS_CHANGED' | 'ENTRY_FLAGGED' | 'ENTRY_MOVED';
+  // Every type the API emits. Leaving the ticket pair out did not stop them arriving — it only
+  // stopped anything being written for them, so they fell through to the status branch and read
+  // "was updated on Ada Writes" while pointing at the board.
+  type:
+    | 'ENTRY_STATUS_CHANGED'
+    | 'ENTRY_FLAGGED'
+    | 'ENTRY_MOVED'
+    | 'TICKET_RAISED'
+    | 'TICKET_RESOLVED';
   /** A snapshot taken when the event happened, not a live view of the entry. */
   payload: NotificationPayload;
   /**

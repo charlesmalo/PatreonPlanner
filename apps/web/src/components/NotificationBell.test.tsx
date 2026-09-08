@@ -191,4 +191,120 @@ describe('NotificationBell', () => {
 
     expect(screen.getByText(/1 other change(?!s)/i)).toBeInTheDocument();
   });
+
+  describe('a message to the moderators', () => {
+    // The API emits TICKET_RAISED and TICKET_RESOLVED, ranks TICKET_RAISED above everything else,
+    // and the web type union did not list either. They fell through to the status branch and read
+    // "was updated on Ada Writes", pointing at the board.
+    const ticket = (over: Partial<Notification> = {}): Notification => ({
+      id: 'n9',
+      type: 'TICKET_RAISED',
+      groupCount: 1,
+      readAt: null,
+      createdAt: '2026-09-08T10:00:00.000Z',
+      payload: {
+        recommendationId: '',
+        title: 'the board',
+        creatorSlug: 'ada-writes',
+        creatorName: 'Ada Writes',
+        ticketId: 't1',
+      },
+      ...over,
+    });
+
+    it('says a message was sent, not that something was updated', async () => {
+      renderBell({ items: [ticket()], unreadCount: 1 });
+      await userEvent.click(screen.getByRole('button', { name: /notifications/i }));
+
+      expect(screen.getByText(/message to the moderators/i)).toBeInTheDocument();
+      expect(screen.queryByText(/was updated on/i)).not.toBeInTheDocument();
+    });
+
+    it('sends a moderator to the tickets page, where it can be answered', async () => {
+      renderBell({ items: [ticket()], unreadCount: 1 });
+      await userEvent.click(screen.getByRole('button', { name: /notifications/i }));
+
+      expect(screen.getByRole('link', { name: /the board/i })).toHaveAttribute(
+        'href',
+        '/c/ada-writes/tickets',
+      );
+    });
+
+    it('shows the reply when a message is answered', async () => {
+      // The whole point of resolving a ticket. The payload carried the reply and the resolution
+      // and neither was ever rendered, so the reader was told only that something happened.
+      renderBell({
+        items: [
+          ticket({
+            id: 'n10',
+            type: 'TICKET_RESOLVED',
+            payload: {
+              recommendationId: '',
+              title: 'your message',
+              creatorSlug: 'ada-writes',
+              creatorName: 'Ada Writes',
+              ticketId: 't1',
+              resolution: 'ACTIONED',
+              reply: 'Removed it, thanks for flagging.',
+            },
+          }),
+        ],
+        unreadCount: 1,
+      });
+      await userEvent.click(screen.getByRole('button', { name: /notifications/i }));
+
+      expect(screen.getByText(/removed it, thanks for flagging/i)).toBeInTheDocument();
+    });
+
+    it('says the outcome even when there is no reply', async () => {
+      // `resolution` is always set; `reply` is optional, because "handled internally" is a
+      // legitimate answer. Rendering only the reply leaves those readers told that something
+      // happened and nothing about what.
+      renderBell({
+        items: [
+          ticket({
+            id: 'n11',
+            type: 'TICKET_RESOLVED',
+            payload: {
+              recommendationId: '',
+              title: 'your message',
+              creatorSlug: 'ada-writes',
+              creatorName: 'Ada Writes',
+              ticketId: 't1',
+              resolution: 'DENIED',
+            },
+          }),
+        ],
+        unreadCount: 1,
+      });
+      await userEvent.click(screen.getByRole('button', { name: /notifications/i }));
+
+      expect(screen.getByText(/declined by the moderators/i)).toBeInTheDocument();
+    });
+
+    it('stays readable if the API adds a resolution this build has never heard of', async () => {
+      // A new enum value must not render "undefined by the moderators of Ada Writes".
+      renderBell({
+        items: [
+          ticket({
+            id: 'n12',
+            type: 'TICKET_RESOLVED',
+            payload: {
+              recommendationId: '',
+              title: 'your message',
+              creatorSlug: 'ada-writes',
+              creatorName: 'Ada Writes',
+              ticketId: 't1',
+              resolution: 'ESCALATED_TO_SOMETHING_NEW',
+            },
+          }),
+        ],
+        unreadCount: 1,
+      });
+      await userEvent.click(screen.getByRole('button', { name: /notifications/i }));
+
+      expect(screen.getByText(/answered by the moderators/i)).toBeInTheDocument();
+      expect(screen.queryByText(/undefined/i)).not.toBeInTheDocument();
+    });
+  });
 });

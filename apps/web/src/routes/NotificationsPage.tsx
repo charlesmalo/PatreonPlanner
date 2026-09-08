@@ -2,8 +2,15 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import type { Notification } from '../api/types';
+import { describeResolution } from '../api/ticket-wording';
 
-type Filter = '' | 'ENTRY_STATUS_CHANGED' | 'ENTRY_FLAGGED' | 'ENTRY_MOVED';
+type Filter =
+  | ''
+  | 'ENTRY_STATUS_CHANGED'
+  | 'ENTRY_FLAGGED'
+  | 'ENTRY_MOVED'
+  | 'TICKET_RAISED'
+  | 'TICKET_RESOLVED';
 type Sort = '' | 'oldest' | 'severity';
 
 /**
@@ -62,6 +69,8 @@ export function NotificationsPage() {
             <option value="ENTRY_FLAGGED">Reports</option>
             <option value="ENTRY_STATUS_CHANGED">Status changes</option>
             <option value="ENTRY_MOVED">Boards you follow</option>
+            <option value="TICKET_RAISED">Messages to moderators</option>
+            <option value="TICKET_RESOLVED">Answers to your messages</option>
           </select>
         </div>
 
@@ -118,18 +127,19 @@ export function NotificationsPage() {
                 >
                   {item.payload.title}
                 </Link>{' '}
-                {item.type === 'ENTRY_FLAGGED'
-                  ? `was reported on ${item.payload.creatorName}`
-                  : `was ${(item.payload.status ?? 'updated').toLowerCase()} on ${item.payload.creatorName}${
-                      (item.groupCount ?? 1) > 1
-                        ? ` and ${item.groupCount - 1} other change${item.groupCount === 2 ? '' : 's'}`
-                        : ''
-                    }`}
+                {describe(item)}
                 {/* The reason is what decides the ranking, so it belongs on the row that ranking
                     moves around. */}
                 {item.payload.reason ? (
                   <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                     {item.payload.reason.toLowerCase().replace(/_/g, ' ')}
+                  </span>
+                ) : null}
+                {/* The moderator's actual answer, which is the reason to open this at all. It sat
+                    in the payload unrendered from the day tickets shipped. */}
+                {item.payload.reply ? (
+                  <span className="mt-1 block border-l-2 border-slate-300 pl-2 text-slate-600 dark:border-slate-700 dark:text-slate-300">
+                    {item.payload.reply}
                   </span>
                 ) : null}
               </span>
@@ -141,9 +151,25 @@ export function NotificationsPage() {
   );
 }
 
+/** Rendered from type and payload, the same way the dropdown does it. */
+function describe(item: Notification): string {
+  if (item.type === 'TICKET_RAISED') {
+    return `— a message to the moderators of ${item.payload.creatorName}`;
+  }
+  if (item.type === 'TICKET_RESOLVED') {
+    return `— ${describeResolution(item.payload.resolution)} by the moderators of ${item.payload.creatorName}`;
+  }
+  if (item.type === 'ENTRY_FLAGGED') return `was reported on ${item.payload.creatorName}`;
+  const alsoCount = (item.groupCount ?? 1) - 1;
+  const also = alsoCount > 0 ? ` and ${alsoCount} other change${alsoCount === 1 ? '' : 's'}` : '';
+  return `was ${(item.payload.status ?? 'updated').toLowerCase()} on ${item.payload.creatorName}${also}`;
+}
+
 /** Same rule as the dropdown: a report goes where it can be acted on. */
 function destinationFor(item: Notification): string {
   const board = `/c/${item.payload.creatorSlug}`;
   if (item.type === 'ENTRY_FLAGGED') return `${board}/review`;
+  // A message is answered on the tickets page, not on the entry it happens to be about.
+  if (item.type === 'TICKET_RAISED' || item.type === 'TICKET_RESOLVED') return `${board}/tickets`;
   return item.payload.recommendationId ? `${board}/e/${item.payload.recommendationId}` : board;
 }
