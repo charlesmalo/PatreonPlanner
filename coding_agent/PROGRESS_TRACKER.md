@@ -95,6 +95,28 @@ What remains needs access this repository does not have:
 | Should a reader be able to follow one entry?     | Yes, and a follow beats theme narrowing (plan 18)           |
 | Which permissions stay bundled under `MODERATE`? | The five that exist; nothing since has needed a sixth       |
 
+## The sweep that keeps finding things
+
+Three defects in a row shared one shape: **complete server-side, tested, and
+unreachable or unrendered by the client.** The tier gates, the blocklist, and the
+ticket notifications. None of them failed a test, because every test covered the
+parts that existed.
+
+Two checks find this class, and both are worth re-running whenever a feature
+lands:
+
+1. **Every API route against every path the SPA calls.** Found the blocklist and
+   the webhook secret. Twelve of the fourteen misses were legitimate — OAuth
+   callback, health, webhooks, the fake checkout, the email unsubscribe link.
+2. **Every enum value against what the client renders.** Found the ticket
+   notifications: the web's `Notification` type named three of the five types the
+   API emits, so the other two fell through to a branch that described them
+   wrongly and pointed them at the wrong page.
+
+Neither is a test, and neither can be. They compare what exists against what is
+reachable, and a test suite is written from the same understanding that produced
+the gap.
+
 ## Known Debt
 
 - ~~**Web coverage is not wired.**~~ Both gates are live and **enforced in CI**,
