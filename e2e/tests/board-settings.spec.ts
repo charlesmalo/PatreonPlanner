@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import {
   CREATOR,
+  clearBlocklist,
   clearStaff,
   makeOwner,
   makeStaff,
@@ -22,6 +23,7 @@ import {
 test.beforeEach(() => {
   seedCreator();
   clearStaff();
+  clearBlocklist();
   resetRateLimits();
 });
 
@@ -100,4 +102,34 @@ test('a moderator without MANAGE_POLICY is refused, and told why', async ({ page
 
   await expect(page.getByText(/do not have permission/i)).toBeVisible();
   await expect(page.getByLabel(/who may suggest something/i)).toBeHidden();
+});
+
+test('an owner can put a word on the blocklist and take it off again', async ({ page }) => {
+  // Every part of this existed server-side and no page called any of it: list, add, remove,
+  // normalisation, the conflict on a duplicate, and enforcement in the moderation pipeline. The
+  // same shape as the tier gates — complete, tested, and unreachable.
+  await signIn(page, 'settings-blocklist');
+  makeOwner('settings-blocklist');
+  await page.goto(`/c/${CREATOR.slug}/settings`);
+
+  await expect(page.getByText(/words this board will not accept/i)).toBeVisible();
+  await expect(page.getByText(/nothing on the list/i)).toBeVisible();
+
+  await page.getByLabel(/word or phrase/i).fill('spoilers');
+  await page.getByRole('button', { name: /^add$/i }).click();
+  await expect(page.getByText('spoilers')).toBeVisible();
+
+  // It is the server's list, not the page's: it has to survive coming back.
+  await page.reload();
+  await expect(page.getByText('spoilers')).toBeVisible();
+
+  // The server answers a duplicate with 409 on purpose, and case is normalised on both sides.
+  await page.getByLabel(/word or phrase/i).fill('SPOILERS');
+  await page.getByRole('button', { name: /^add$/i }).click();
+  await expect(page.getByRole('status')).toHaveText(/already on the list/i);
+
+  await page.getByRole('button', { name: /remove spoilers/i }).click();
+  await expect(page.getByText('spoilers')).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByText(/nothing on the list/i)).toBeVisible();
 });
