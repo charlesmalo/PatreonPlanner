@@ -255,5 +255,56 @@ describe('NotificationBell', () => {
 
       expect(screen.getByText(/removed it, thanks for flagging/i)).toBeInTheDocument();
     });
+
+    it('says the outcome even when there is no reply', async () => {
+      // `resolution` is always set; `reply` is optional, because "handled internally" is a
+      // legitimate answer. Rendering only the reply leaves those readers told that something
+      // happened and nothing about what.
+      renderBell({
+        items: [
+          ticket({
+            id: 'n11',
+            type: 'TICKET_RESOLVED',
+            payload: {
+              recommendationId: '',
+              title: 'your message',
+              creatorSlug: 'ada-writes',
+              creatorName: 'Ada Writes',
+              ticketId: 't1',
+              resolution: 'DENIED',
+            },
+          }),
+        ],
+        unreadCount: 1,
+      });
+      await userEvent.click(screen.getByRole('button', { name: /notifications/i }));
+
+      expect(screen.getByText(/declined by the moderators/i)).toBeInTheDocument();
+    });
+
+    it('stays readable if the API adds a resolution this build has never heard of', async () => {
+      // A new enum value must not render "undefined by the moderators of Ada Writes".
+      renderBell({
+        items: [
+          ticket({
+            id: 'n12',
+            type: 'TICKET_RESOLVED',
+            payload: {
+              recommendationId: '',
+              title: 'your message',
+              creatorSlug: 'ada-writes',
+              creatorName: 'Ada Writes',
+              ticketId: 't1',
+              resolution: 'ESCALATED_TO_SOMETHING_NEW',
+            },
+          }),
+        ],
+        unreadCount: 1,
+      });
+      await userEvent.click(screen.getByRole('button', { name: /notifications/i }));
+
+      expect(screen.getByText(/answered by the moderators/i)).toBeInTheDocument();
+      expect(screen.queryByText(/undefined/i)).not.toBeInTheDocument();
+    });
   });
 });

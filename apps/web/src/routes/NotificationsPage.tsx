@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import type { Notification } from '../api/types';
+import { describeResolution } from '../api/ticket-wording';
 
 type Filter =
   | ''
@@ -156,7 +157,7 @@ function describe(item: Notification): string {
     return `— a message to the moderators of ${item.payload.creatorName}`;
   }
   if (item.type === 'TICKET_RESOLVED') {
-    return `— answered by the moderators of ${item.payload.creatorName}`;
+    return `— ${describeResolution(item.payload.resolution)} by the moderators of ${item.payload.creatorName}`;
   }
   if (item.type === 'ENTRY_FLAGGED') return `was reported on ${item.payload.creatorName}`;
   const alsoCount = (item.groupCount ?? 1) - 1;
