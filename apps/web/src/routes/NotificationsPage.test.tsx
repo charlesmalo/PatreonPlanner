@@ -2,10 +2,12 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { NotificationsPage } from './NotificationsPage';
+import type { Notification } from '../api/types';
 
-const report = (id: string, title: string, reason = 'SPAM') => ({
+const report = (id: string, title: string, reason = 'SPAM'): Notification => ({
   id,
-  type: 'ENTRY_FLAGGED' as const,
+  type: 'ENTRY_FLAGGED',
+  groupCount: 1,
   readAt: null,
   createdAt: '2026-08-24T10:00:00.000Z',
   payload: {
@@ -24,7 +26,10 @@ describe('NotificationsPage', () => {
   });
 
   /** Records what the page asked for, so the controls are tested by their effect. */
-  function stubApi(items = [report('n1', 'Reported entry')]) {
+  // Typed rather than inferred from the default: inference narrowed it to the report's exact
+  // shape, so passing any other notification type failed to compile — which the test run alone
+  // would not have told us, since vitest does not typecheck.
+  function stubApi(items: Notification[] = [report('n1', 'Reported entry')]) {
     const queries: string[] = [];
     global.fetch = vi.fn(async (input: RequestInfo | URL) => {
       const url = new URL(String(input), 'http://localhost');
@@ -103,5 +108,60 @@ describe('NotificationsPage', () => {
     setup();
 
     expect(await screen.findByText(/harassment/i)).toBeInTheDocument();
+  });
+
+  describe('messages to the moderators', () => {
+    const resolved: Notification = {
+      id: 'n9',
+      type: 'TICKET_RESOLVED',
+      groupCount: 1,
+      readAt: null,
+      createdAt: '2026-09-08T10:00:00.000Z',
+      payload: {
+        recommendationId: '',
+        title: 'your message',
+        creatorSlug: 'ada-writes',
+        creatorName: 'Ada Writes',
+        ticketId: 't1',
+        resolution: 'ACTIONED',
+        reply: 'Removed it, thanks for flagging.',
+      },
+    };
+
+    it('shows what the moderator wrote back', async () => {
+      // It was in the payload from the day tickets shipped and rendered nowhere.
+      stubApi([resolved]);
+      setup();
+
+      expect(await screen.findByText(/removed it, thanks for flagging/i)).toBeInTheDocument();
+    });
+
+    it('does not describe a message as a status change', async () => {
+      stubApi([resolved]);
+      setup();
+
+      await screen.findByText(/removed it, thanks/i);
+      expect(screen.queryByText(/was updated on/i)).not.toBeInTheDocument();
+    });
+
+    it('links to the tickets page, where the message lives', async () => {
+      stubApi([resolved]);
+      setup();
+
+      expect(await screen.findByRole('link', { name: /your message/i })).toHaveAttribute(
+        'href',
+        '/c/ada-writes/tickets',
+      );
+    });
+
+    it('can be filtered to just messages', async () => {
+      const queries = stubApi([resolved]);
+      setup();
+      await screen.findByText(/removed it, thanks/i);
+
+      await userEvent.selectOptions(screen.getByLabelText(/show/i), 'TICKET_RAISED');
+
+      await waitFor(() => expect(queries.at(-1)).toContain('type=TICKET_RAISED'));
+    });
   });
 });

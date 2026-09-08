@@ -84,6 +84,14 @@ export function NotificationBell({
                       {item.payload.title}
                     </Link>{' '}
                     {describe(item)}
+                    {/* The moderator's actual answer. It was in the payload from the day tickets
+                        shipped and rendered nowhere, so a reader was told their message had been
+                        dealt with and never got to read what was said. */}
+                    {item.payload.reply ? (
+                      <span className="mt-1 block border-l-2 border-slate-300 pl-2 text-slate-600 dark:border-slate-700 dark:text-slate-300">
+                        {item.payload.reply}
+                      </span>
+                    ) : null}
                   </span>
                 </li>
               ))}
@@ -114,6 +122,9 @@ export function NotificationBell({
 function destinationFor(item: Notification): string {
   const board = `/c/${item.payload.creatorSlug}`;
   if (item.type === 'ENTRY_FLAGGED') return `${board}/review`;
+  // A message is answered on the tickets page. Sending a moderator to the entry it happens to be
+  // about leaves them looking at the thing rather than at what was said about it.
+  if (item.type === 'TICKET_RAISED' || item.type === 'TICKET_RESOLVED') return `${board}/tickets`;
   return item.payload.recommendationId
     ? `${board}/e/${item.payload.recommendationId}`
     : // No id means the content was refused before it existed; the board is all there is.
@@ -122,6 +133,12 @@ function destinationFor(item: Notification): string {
 
 /** Rendered from type and payload; there is nothing else to consult, by design. */
 function describe(item: Notification): string {
+  if (item.type === 'TICKET_RAISED') {
+    return `— a message to the moderators of ${item.payload.creatorName}.`;
+  }
+  if (item.type === 'TICKET_RESOLVED') {
+    return `— answered by the moderators of ${item.payload.creatorName}.`;
+  }
   if (item.type === 'ENTRY_FLAGGED') {
     return `was reported on ${item.payload.creatorName}${
       item.payload.reason ? ` (${item.payload.reason.toLowerCase()})` : ''
