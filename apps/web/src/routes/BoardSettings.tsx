@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { useCreator } from '../api/hooks';
+import { Blocklist } from '../components/Blocklist';
 
 type Visibility = 'PUBLIC' | 'ANY_PATREON_USER' | 'SUBSCRIBERS_ONLY';
 
@@ -102,7 +103,7 @@ const SWITCHES: Array<{ key: keyof Policy; label: string; hint: string }> = [
  */
 export function BoardSettings() {
   const { slug = '' } = useParams();
-  const { creator } = useCreator(slug);
+  const { creator, capabilities } = useCreator(slug);
   const [policy, setPolicy] = useState<Policy | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'denied' | 'failed'>('loading');
   const [saved, setSaved] = useState<string | null>(null);
@@ -250,6 +251,20 @@ export function BoardSettings() {
           ))}
         </div>
       </fieldset>
+
+      {/*
+        Owner-level, and separate from everything above it.
+
+        The blocklist decides what the board will accept at all, which is why the API files it
+        under ADMINISTER rather than MANAGE_POLICY. Rendering it for a moderator who holds only
+        MANAGE_POLICY would show them a section whose every request comes back 403.
+      */}
+      {capabilities.administer ? (
+        <fieldset className="mt-8">
+          <legend className="text-sm font-medium">Words this board will not accept</legend>
+          <Blocklist slug={slug} />
+        </fieldset>
+      ) : null}
 
       {saved ? (
         <p role="status" className="mt-6 text-sm text-slate-600 dark:text-slate-300">

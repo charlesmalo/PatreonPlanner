@@ -217,4 +217,31 @@ describe('BoardSettings', () => {
       expect(await screen.findByText(/no tiers have synced from patreon yet/i)).toBeInTheDocument();
     });
   });
+
+  it('offers the blocklist to an owner', async () => {
+    // Everything behind it existed and no page called any of it, which is how the tier gates
+    // shipped unreachable too. The section is the only way in.
+    withPolicy({}, { 'GET /api/v1/creators/ada-writes/blocklist': { items: [] } });
+    renderPage();
+
+    expect(await screen.findByText(/words this board will not accept/i)).toBeInTheDocument();
+  });
+
+  it('hides the blocklist from a moderator who only holds MANAGE_POLICY', async () => {
+    // The API files it under ADMINISTER. Rendering it here would show a section whose every
+    // request comes back 403 — a control that looks available and does nothing.
+    global.fetch = fakeApi({
+      'GET /api/v1/creators/ada-writes': creator,
+      'GET /api/v1/creators/ada-writes/capabilities': {
+        administer: false,
+        moderate: true,
+        permissions: ['MANAGE_POLICY'],
+      },
+      'GET /api/v1/creators/creator-1/policy': policy,
+    });
+    renderPage();
+
+    await screen.findByRole('radio', { name: /only my supporters/i });
+    expect(screen.queryByText(/words this board will not accept/i)).not.toBeInTheDocument();
+  });
 });

@@ -348,6 +348,15 @@ export function makeOwner(patreonUserId: string): void {
   `);
 }
 
+/**
+ * The blocklist outlives a run: nothing else deletes it, so a test that adds a word leaves the
+ * next run starting with it already there. That passes on a fresh database and fails on every run
+ * afterwards — the worst shape of failure, because the first thing anybody does is re-run it.
+ */
+export function clearBlocklist(): void {
+  seed(`DELETE FROM "CreatorBlockword" WHERE "creatorId" = '${CREATOR.id}';`);
+}
+
 export function clearStaff(): void {
   seed(`
     DELETE FROM "StaffInvite" WHERE "creatorId" = '${CREATOR.id}';
