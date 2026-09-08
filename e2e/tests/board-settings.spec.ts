@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import {
   CREATOR,
+  clearAbuse,
   clearBlocklist,
   clearStaff,
   makeOwner,
@@ -24,6 +25,9 @@ test.beforeEach(() => {
   seedCreator();
   clearStaff();
   clearBlocklist();
+  // A strike outlives a test, and a timed-out reader cannot suggest anything — so without this
+  // the blocklist journey poisons every later run of itself.
+  clearAbuse();
   resetRateLimits();
 });
 
@@ -132,4 +136,39 @@ test('an owner can put a word on the blocklist and take it off again', async ({ 
   await expect(page.getByText('spoilers')).toHaveCount(0);
   await page.reload();
   await expect(page.getByText(/nothing on the list/i)).toBeVisible();
+});
+
+test('a word on the blocklist actually stops a suggestion', async ({ page }) => {
+  // The point of the feature, and the part the add-and-remove journey does not prove. A list a
+  // creator can edit and that changes nothing is the same defect as no list at all — it just
+  // takes longer to notice.
+  await signIn(page, 'blocklist-owner');
+  makeOwner('blocklist-owner');
+  await page.goto(`/c/${CREATOR.slug}/settings`);
+  await page.getByLabel(/word or phrase/i).fill('bootleg');
+  await page.getByRole('button', { name: /^add$/i }).click();
+  await expect(page.getByText('bootleg')).toBeVisible();
+
+  // The control runs first, and has to: a blocked submission is an abuse strike, and the strike
+  // times the reader out of suggesting anything at all. Run the other way round, this would fail
+  // on the timeout and look like the clean suggestion being blocked too.
+  await page.goto(`/c/${CREATOR.slug}`);
+  await page.getByLabel(/catalogue does not have/i).fill('A pristine recording');
+  await page.getByLabel(/why\?/i).fill('Worth a look.');
+  await page.getByRole('button', { name: 'Suggest', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'A pristine recording' })).toBeVisible();
+
+  await page.getByLabel(/catalogue does not have/i).fill('A bootleg recording');
+  await page.getByLabel(/why\?/i).fill('Worth a look.');
+  await page.getByRole('button', { name: 'Suggest', exact: true }).click();
+
+  // A refusal the reader can see, rather than an absence. Checking only that the entry is missing
+  // would pass if the form had failed for any other reason — or had simply not rendered yet.
+  //
+  // The refusal names no word, by design: §9 wants nothing that lets someone probe the rules by
+  // submitting until they find the boundary. Worth knowing that a blocked suggestion is also
+  // scored as abuse — enough of them and this message becomes a timeout instead, which is why
+  // `clearAbuse` runs before each test and why the control above goes first.
+  await expect(page.getByText(/that suggestion was rejected/i)).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'A bootleg recording' })).toHaveCount(0);
 });
