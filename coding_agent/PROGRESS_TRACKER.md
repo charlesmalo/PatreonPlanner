@@ -159,6 +159,26 @@ What remains needs access this repository does not have:
   `http-patreon.client.ts`, so producing it would take a change to our own code
   rather than anything external.
 
+- **The per-creator webhook secret cannot be set from anywhere.** `PUT
+/creators/:creatorId/webhook-secret` exists, is `ADMINISTER`-gated, encrypts what
+  it stores and never echoes it back — and no page calls it. Without a secret
+  `webhook-signature.guard.ts` throws 401 on **every** delivery, so per-creator
+  Patreon webhooks are dead in production and membership changes arrive only from
+  the periodic sync job.
+
+  Deliberately **not** built yet. It is a credential a creator pastes from
+  Patreon's developer portal, so it is only meaningful against a real campaign —
+  it belongs with the other items below that need access this repository does not
+  have, not with the unreachable-feature fixes. A UI would want a
+  `webhookConfigured` boolean too, since there is no GET and a creator otherwise
+  cannot tell whether theirs is set; exposing that is a small API change worth
+  agreeing rather than assuming.
+
+  Found by the same sweep that found the blocklist: every route in
+  `apps/api/src/**` matched against every path the SPA calls. The other twelve
+  misses were all legitimate — OAuth callback, health, webhooks, the fake
+  checkout, the email unsubscribe link.
+
 - **Two migrations are not rolling-deploy safe** — `ThemeSource` (backfill then
   `DROP COLUMN`) and `link_candidates` (backfill then `SET NOT NULL`), each in
   one step. Harmless with nothing deployed, and deliberately _not_ fixed in
