@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import request from 'supertest';
 import { AuthTestContext, pickCookie, startAuthApp } from './support/auth-app';
 
@@ -140,5 +141,163 @@ describe('Claiming a board (integration)', () => {
       .set('x-csrf-token', auth.csrfToken)
       .send({ patreonCampaignId: 'camp-someone-elses' })
       .expect(403);
+  });
+});
+
+/**
+ * Whether a board's webhook secret is set — never what it is.
+ *
+ * `PUT webhook-secret` has existed since Phase 1 and nothing called it, so per-creator Patreon
+ * webhooks were dead in production: without a secret the signature guard rejects every delivery.
+ * A page to set one needs to know whether one is already there, and there was no way to ask.
+ */
+describe('Webhook secret state (integration)', () => {
+  let ctx: AuthTestContext;
+
+  beforeAll(async () => {
+    ctx = await startAuthApp();
+  });
+
+  afterAll(async () => {
+    await ctx.teardown();
+  });
+
+  async function loginAs(patreonUserId: string) {
+    ctx.patreon.identity = { ...ctx.patreon.identity, patreonUserId, memberships: [] };
+    const start = await request(ctx.app.getHttpServer()).get('/auth/patreon/login').expect(302);
+    const state = new URL(start.headers.location).searchParams.get('state') as string;
+    const res = await request(ctx.app.getHttpServer())
+      .get(`/auth/patreon/callback?code=auth-code&state=${state}`)
+      .set('Cookie', pickCookie(start, 'pp_oauth_state'))
+      .expect(302);
+    const csrf = pickCookie(res, 'pp_csrf').split(';')[0];
+    return {
+      session: pickCookie(res, 'pp_session'),
+      csrf,
+      csrfToken: csrf.split('=').slice(1).join('='),
+    };
+  }
+
+  async function boardOwnedBy(patreonUserId: string, campaignId: string) {
+    const user = await ctx.prisma.user.findUniqueOrThrow({ where: { patreonUserId } });
+    const creator = await ctx.prisma.creator.create({
+      data: {
+        patreonCampaignId: campaignId,
+        ownerUserId: user.id,
+        displayName: 'Hook Board',
+        slug: `hook-${campaignId}`,
+        policy: { create: {} },
+        staff: { create: { userId: user.id, role: 'OWNER' } },
+      },
+      select: { id: true },
+    });
+    return creator.id;
+  }
+
+  it('says a board has no secret before one is set', async () => {
+    const auth = await loginAs('hook-owner-a');
+    const creatorId = await boardOwnedBy('hook-owner-a', 'hook-campaign-a');
+
+    const res = await request(ctx.app.getHttpServer())
+      .get(`/api/v1/creators/${creatorId}/webhook-secret`)
+      .set('Cookie', auth.session)
+      .expect(200);
+
+    expect(res.body).toEqual({ configured: false });
+  });
+
+  it('says it has one afterwards, and never returns the secret itself', async () => {
+    const auth = await loginAs('hook-owner-b');
+    const creatorId = await boardOwnedBy('hook-owner-b', 'hook-campaign-b');
+
+    await request(ctx.app.getHttpServer())
+      .put(`/api/v1/creators/${creatorId}/webhook-secret`)
+      .set('Cookie', [auth.session, auth.csrf])
+      .set('x-csrf-token', auth.csrfToken)
+      .send({ secret: 'a-real-looking-secret' })
+      .expect(200);
+
+    const res = await request(ctx.app.getHttpServer())
+      .get(`/api/v1/creators/${creatorId}/webhook-secret`)
+      .set('Cookie', auth.session)
+      .expect(200);
+
+    expect(res.body).toEqual({ configured: true });
+    // The whole body, so a secret added to the payload later fails here rather than leaking.
+    expect(JSON.stringify(res.body)).not.toContain('a-real-looking-secret');
+  });
+
+  it('is stored encrypted rather than as typed', async () => {
+    const auth = await loginAs('hook-owner-c');
+    const creatorId = await boardOwnedBy('hook-owner-c', 'hook-campaign-c');
+
+    await request(ctx.app.getHttpServer())
+      .put(`/api/v1/creators/${creatorId}/webhook-secret`)
+      .set('Cookie', [auth.session, auth.csrf])
+      .set('x-csrf-token', auth.csrfToken)
+      .send({ secret: 'plain-text-secret' })
+      .expect(200);
+
+    const row = await ctx.prisma.creator.findUniqueOrThrow({
+      where: { id: creatorId },
+      select: { webhookSecretEncrypted: true },
+    });
+    expect(row.webhookSecretEncrypted).not.toContain('plain-text-secret');
+  });
+
+  it('a secret registered through the endpoint makes a real delivery succeed', async () => {
+    // The reason the page exists. Everything else here checks a boolean; this checks that setting
+    // the secret is what turns Patreon's deliveries from rejected into accepted — which is the
+    // only claim the settings page actually makes.
+    const auth = await loginAs('hook-owner-e');
+    const creatorId = await boardOwnedBy('hook-owner-e', 'hook-campaign-e');
+    const secret = 'secret-from-the-portal';
+    const body = JSON.stringify({ data: { attributes: {}, relationships: {} } });
+    const deliver = () =>
+      request(ctx.app.getHttpServer())
+        // Root path: webhooks are excluded from the global prefix, because the URL is registered
+        // with Patreon and must not move when the API version does.
+        .post(`/webhooks/patreon/${creatorId}`)
+        .set('X-Patreon-Event', 'members:pledge:delete')
+        .set(
+          'X-Patreon-Signature',
+          createHmac('md5', secret).update(Buffer.from(body)).digest('hex'),
+        )
+        .set('Content-Type', 'application/json')
+        .send(body);
+
+    // Before: correctly signed for a secret the board does not have, so it is rejected — this is
+    // the state every board was in, because nothing could set one.
+    await deliver().expect(401);
+
+    await request(ctx.app.getHttpServer())
+      .put(`/api/v1/creators/${creatorId}/webhook-secret`)
+      .set('Cookie', [auth.session, auth.csrf])
+      .set('x-csrf-token', auth.csrfToken)
+      .send({ secret })
+      .expect(200);
+
+    // After: the same delivery, now accepted. 204 rather than 200 — the webhook returns no body.
+    await deliver().expect(204);
+  });
+
+  it('refuses a moderator who is not the owner', async () => {
+    // ADMINISTER, not MODERATE: whoever holds this secret can forge membership events, minting
+    // active-patron status at any pledge for anyone on the campaign.
+    const ownerAuth = await loginAs('hook-owner-d');
+    const creatorId = await boardOwnedBy('hook-owner-d', 'hook-campaign-d');
+    const modAuth = await loginAs('hook-mod');
+    const mod = await ctx.prisma.user.findUniqueOrThrow({
+      where: { patreonUserId: 'hook-mod' },
+    });
+    await ctx.prisma.creatorStaff.create({
+      data: { creatorId, userId: mod.id, role: 'MOD', permissions: ['MANAGE_POLICY'] },
+    });
+
+    await request(ctx.app.getHttpServer())
+      .get(`/api/v1/creators/${creatorId}/webhook-secret`)
+      .set('Cookie', modAuth.session)
+      .expect(403);
+    expect(ownerAuth.session).toBeDefined();
   });
 });
