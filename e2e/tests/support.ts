@@ -308,11 +308,18 @@ export function seedTheme(name: string, tmdbIds: number[]): void {
       SELECT '${CREATOR.id}','${slug}', th.id FROM "Theme" th
       WHERE th."creatorId"='${CREATOR.id}' AND th.slug='${slug}'
       ON CONFLICT DO NOTHING;
-    INSERT INTO "TitleTheme"("titleId","themeId")
+    ${
+      // A theme with no titles is a legitimate thing to seed — it is what a rename or a merge
+      // test wants — and an empty list produced `IN ()`, which is a syntax error rather than an
+      // empty result. Skipped entirely instead.
+      tmdbIds.length === 0
+        ? ''
+        : `INSERT INTO "TitleTheme"("titleId","themeId")
       SELECT t.id, th.id FROM "Title" t, "Theme" th
       WHERE t."tmdbId" IN (${tmdbIds.join(',')}) AND th."creatorId" = '${CREATOR.id}'
         AND th.slug = '${slug}'
-      ON CONFLICT DO NOTHING;
+      ON CONFLICT DO NOTHING;`
+    }
   `);
 }
 
