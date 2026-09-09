@@ -312,6 +312,38 @@ describe('Board search (integration)', () => {
       expect(ids((await search(patron, query).expect(200)).body)).toContain(bebopId);
     });
 
+    it('does not offer an unrelated entry just because it is the nearest one', async () => {
+      // Nearest-neighbour with no floor returns the closest rows however far away they are, so on
+      // a small board every query matched everything. That reaches the reader: this endpoint is
+      // what the submit form asks as they type, and it answers "already on the board — upvote
+      // instead?" — a prompt that is wrong is worse than one that is missing.
+      const title = await ctx.prisma.title.create({
+        data: { tmdbId: 9002, mediaType: 'TV', name: 'Serial Experiments Lain' },
+      });
+      const lainId = (await entry('Serial Experiments Lain', { titleId: title.id })).id;
+      await embed();
+
+      // No shared trigram and no declared equivalence, so the only arm that could return it is
+      // the vector one.
+      const res = await search(patron, 'quarterly tax filing spreadsheet').expect(200);
+
+      expect(ids(res.body)).not.toContain(lainId);
+    });
+
+    it('still finds a genuine match once the floor is in place', async () => {
+      // The floor must not cost recall. Missing a duplicate is the failure this whole feature
+      // exists to prevent; showing a stray one merely annoys.
+      const title = await ctx.prisma.title.create({
+        data: { tmdbId: 9003, mediaType: 'TV', name: 'Ergo Proxy' },
+      });
+      const proxyId = (await entry('Ergo Proxy', { titleId: title.id })).id;
+      const query = 'androids questioning their purpose';
+      ctx.embeddings.near(query, 'ergo proxy');
+      await embed();
+
+      expect(ids((await search(patron, query).expect(200)).body)).toContain(proxyId);
+    });
+
     it('still finds trigram matches when the model is unavailable', async () => {
       // Semantic matching improves a working feature; it is never a dependency of one.
       ctx.embeddings.configured = false;

@@ -42,6 +42,14 @@ WORKDIR /app
 COPY --from=build /prod/node_modules ./node_modules
 COPY --from=build /repo/apps/api/dist ./dist
 COPY --from=build /repo/apps/api/package.json ./
+# A writable home for the embedding model, owned by the user the process runs as.
+#
+# Created here rather than left to the deployment, because Docker copies this directory's
+# ownership into a *fresh named volume* mounted over it — so a compose file that mounts one at
+# /models gets a directory `node` can write to, instead of a root-owned mountpoint. Without it,
+# mounting a volume here reproduces exactly the EACCES this path exists to avoid: the model
+# download fails and search silently degrades to trigram.
+RUN mkdir -p /models && chown node:node /models
 USER node
 EXPOSE 3000
 CMD ["node", "dist/main.js"]

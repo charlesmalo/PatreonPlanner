@@ -113,41 +113,9 @@ describe('Rebinding a catalogue title (integration)', () => {
     expect(after.overview).toBe('A gardener discovers something under the greenhouse.');
   });
 
-  it('clears the embedding when the overview changes, so it is recomputed', async () => {
-    // The embedding is derived from this text. Leaving a stale vector attached to changed text is
-    // worse than having none: search would keep answering from a description nobody can read any
-    // more, and nothing would look wrong.
-    const auth = await loginAs('refresh-patron-three');
-    ctx.catalog.results = [
-      {
-        tmdbId: 4242,
-        mediaType: 'MOVIE',
-        name: 'Late Bloomer',
-        year: 2020,
-        posterPath: '/late.jpg',
-        overview: 'A gardener discovers something under the greenhouse.',
-      },
-    ];
-    await ctx.prisma.$executeRawUnsafe(
-      `UPDATE "Title" SET embedding = $1::vector, "embeddingModel" = 'test' WHERE "tmdbId" = 4242`,
-      `[${Array.from({ length: 384 }, () => 0.1).join(',')}]`,
-    );
-
-    ctx.catalog.results = [
-      {
-        tmdbId: 4242,
-        mediaType: 'MOVIE',
-        name: 'Late Bloomer',
-        year: 2020,
-        posterPath: '/late.jpg',
-        overview: 'Entirely different words about an entirely different film.',
-      },
-    ];
-    await suggest(auth);
-
-    const rows = await ctx.prisma.$queryRawUnsafe<Array<{ has: boolean }>>(
-      `SELECT embedding IS NOT NULL AS has FROM "Title" WHERE "tmdbId" = 4242`,
-    );
-    expect(rows[0].has).toBe(false);
-  });
+  // A second test used to assert that changing the overview cleared the embedding, "so it is
+  // recomputed". It was removed with the behaviour it described: the embed job builds its passage
+  // from `name` plus aliases and never reads `overview`, so changing the overview changes no
+  // vector and clearing one only bought an identical recompute. The premise was mine and it was
+  // wrong — see the note on EMBEDDING_MAX_DISTANCE for what semantic search here can and cannot do.
 });
