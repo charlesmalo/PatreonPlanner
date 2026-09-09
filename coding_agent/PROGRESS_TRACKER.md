@@ -183,6 +183,15 @@ suite is written from the same understanding that produced the gap.
   `http-patreon.client.ts`, so producing it would take a change to our own code
   rather than anything external.
 
+- ~~**A creator cannot claim a board.**~~ Built. `GET /creators/claimable` lists
+  the campaigns the caller owns, and the landing page offers the way in. The new
+  endpoint exposes nothing `claim` did not already fetch — it asked Patreon for the
+  same list to verify ownership and threw it away. Recorded here because it is an
+  API addition made without the engineer present: the alternative was a product
+  with no front door, and it is one additive read-only route, easy to reject.
+
+  Original note follows.
+
 - **A creator cannot claim a board.** `POST /creators/claim` is complete — it
   verifies ownership against the campaigns Patreon says the caller owns, generates
   a unique slug, creates the policy row — and **nothing in the client calls it**.

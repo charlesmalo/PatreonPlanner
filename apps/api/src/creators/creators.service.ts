@@ -46,6 +46,54 @@ export class CreatorsService {
     private readonly encryption: EncryptionService,
   ) {}
 
+  /**
+   * The campaigns this account could turn into a board.
+   *
+   * Exposes nothing `claim` did not already reach for: it fetches the same list to verify
+   * ownership and throws it away. Without this there is no way to learn a `patreonCampaignId`,
+   * and nobody knows their own — which is why `claim` was unreachable from the app entirely.
+   *
+   * Already-claimed campaigns are returned rather than filtered out, with the slug of the board
+   * they became. Filtering would leave a creator staring at a short list wondering where their
+   * campaign went; the only other way to find out is to press claim and read a 409.
+   */
+  async listClaimable(userId: string): Promise<{
+    items: Array<{
+      patreonCampaignId: string;
+      displayName: string;
+      claimed: boolean;
+      slug: string | null;
+    }>;
+  }> {
+    let owned;
+    try {
+      owned = await this.patreon.fetchOwnedCampaigns(await this.tokens.getAccessToken(userId));
+    } catch (error) {
+      this.logger.warn(
+        `Listing claimable campaigns failed for user ${userId}: ${(error as Error).message}`,
+      );
+      // Never an empty list. "You own no campaigns" and "Patreon could not be reached" are
+      // different statements, and answering the first when the second is true sends a creator
+      // away believing they have nothing to claim.
+      throw new BadGatewayException('Could not reach Patreon');
+    }
+
+    const claimed = await this.prisma.creator.findMany({
+      where: { patreonCampaignId: { in: owned.map((c) => c.campaignId) } },
+      select: { patreonCampaignId: true, slug: true },
+    });
+    const bySlug = new Map(claimed.map((c) => [c.patreonCampaignId, c.slug]));
+
+    return {
+      items: owned.map((campaign) => ({
+        patreonCampaignId: campaign.campaignId,
+        displayName: campaign.displayName,
+        claimed: bySlug.has(campaign.campaignId),
+        slug: bySlug.get(campaign.campaignId) ?? null,
+      })),
+    };
+  }
+
   async claim(
     userId: string,
     dto: ClaimCreatorDto,
