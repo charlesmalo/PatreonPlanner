@@ -58,13 +58,6 @@ export class SubmissionResolverService {
     // nothing can ever resolve.
     if (!result) throw new BadRequestException('Unknown title');
 
-    // Read before the upsert, not after: the upsert's own result already carries the new value,
-    // so comparing against it would always find them equal and never invalidate anything.
-    const previous = await this.prisma.title.findUnique({
-      where: { tmdbId_mediaType: { tmdbId: result.tmdbId, mediaType } },
-      select: { overview: true },
-    });
-
     const existing = await this.prisma.title.upsert({
       where: { tmdbId_mediaType: { tmdbId: result.tmdbId, mediaType } },
       create: {
@@ -78,9 +71,7 @@ export class SubmissionResolverService {
       update: {
         // Refreshed on each binding: posters and overviews change upstream. The overview used to
         // be named in this comment and absent from the object, so a title first bound before its
-        // description existed upstream kept a null one for ever — and the overview is what the
-        // embedding is computed from, so its semantic search stayed as weak as it was on the day
-        // the title first appeared.
+        // description existed upstream kept a null one for ever.
         name: result.name,
         year: result.year,
         posterPath: result.posterPath,
@@ -90,18 +81,8 @@ export class SubmissionResolverService {
         // on creator B's board would otherwise leave B without theme chips forever.
         enrichedAt: null,
       },
-      select: { id: true, name: true, overview: true },
+      select: { id: true, name: true },
     });
-
-    // The embedding is derived from the overview, so a changed overview invalidates it. Dropping
-    // it puts the title back in front of the embedding job; leaving a stale vector attached to
-    // text nobody can read any more is worse than having none, because search keeps answering
-    // confidently from a description that no longer exists.
-    if (previous && previous.overview !== result.overview) {
-      await this.prisma.$executeRaw`
-        UPDATE "Title" SET embedding = NULL, "embeddingModel" = NULL WHERE id = ${existing.id}::uuid
-      `;
-    }
 
     return { id: existing.id, name: existing.name };
   }

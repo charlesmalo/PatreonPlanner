@@ -165,6 +165,35 @@ export const configSchema = z.object({
   EMBEDDING_CACHE_DIR: z.string().min(1).default(join(tmpdir(), 'patreonplanner-embeddings')),
   // Must match the width of the `Title.embedding` column; changing it needs a migration.
   EMBEDDING_DIMENSIONS: z.coerce.number().int().positive().default(384),
+  /**
+   * How far a vector may be and still count as a match, as pgvector cosine distance (0..2).
+   *
+   * Nearest-neighbour with no floor returns the closest rows however far away they are, so on a
+   * small board every query matched everything — including the submit form's "already on the
+   * board — upvote instead?" prompt, which is worse wrong than missing.
+   *
+   * 0.18 is measured against what the embed job actually stores — **name plus aliases**, not the
+   * overview — with the configured model:
+   *
+   *   name-ish queries ("sprited away", "ghibli")     0.066 – 0.138   must match
+   *   plot descriptions ("a girl in a bathhouse…")    0.219 – 0.221   cannot match, see below
+   *   unrelated ("how to repair a bicycle chain")     0.204 – 0.265   must not match
+   *
+   * 0.18 sits in the gap: 0.042 above the furthest true match, 0.023 below the nearest false one.
+   *
+   * Note what the middle row means. A plot description is *further away than some nonsense* —
+   * "zzz nonsense query" measured 0.2035 — because the plot is never embedded. Semantic search
+   * here buys cross-language surface forms and misspellings, not matching by meaning, and no
+   * threshold can change that. Embedding `Title.overview` would; that is a retrieval decision, not
+   * a tuning one.
+   *
+   * The numbers belong to this model. Change `EMBEDDING_MODEL` and measure again rather than
+   * assuming they transfer.
+   *
+   * Recall is protected by the other arm: trigram runs independently and catches anything matching
+   * by spelling, so a floor set slightly tight costs fuzzy matches, never exact duplicates.
+   */
+  EMBEDDING_MAX_DISTANCE: z.coerce.number().positive().default(0.18),
 
   SUBMIT_LIMIT_PER_HOUR: z.coerce.number().int().positive().default(1),
   // Design §6 item 3: a looser cap across all creators, so a patron of twenty creators cannot

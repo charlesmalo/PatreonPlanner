@@ -356,15 +356,31 @@ async function main() {
   // the limitation the design records. Two of these entries are bound to a catalogue title here so
   // that narrowing by theme filters *something* rather than everything, and so the difference
   // between a themed entry and an untyped one is visible side by side.
-  const themed: Array<[string, number, string[]]> = [
-    ['Spirited Away', 129, ['Anime', 'Long Watch']],
-    ['Perfect Blue', 10494, ['Anime']],
+  //
+  // Overviews match what the catalogue stub serves for the same ids, so a title reached by
+  // suggesting it and one seeded here describe themselves the same way. They are for reading:
+  // the embed job builds its passage from the name and aliases and never touches `overview`.
+  const themed: Array<[string, number, string[], string]> = [
+    [
+      'Spirited Away',
+      129,
+      ['Anime', 'Long Watch'],
+      'A girl wanders into a world of spirits, and works in a bathhouse to win back her parents.',
+    ],
+    [
+      'Perfect Blue',
+      10494,
+      ['Anime'],
+      'A pop idol turns actress and loses her grip on which of her selves is real.',
+    ],
   ];
-  for (const [title, tmdbId, names] of themed) {
+  for (const [title, tmdbId, names, overview] of themed) {
     const catalogTitle = await prisma.title.upsert({
       where: { tmdbId_mediaType: { tmdbId, mediaType: 'MOVIE' } },
-      create: { tmdbId, mediaType: 'MOVIE', name: title },
-      update: {},
+      create: { tmdbId, mediaType: 'MOVIE', name: title, overview },
+      // Set on an existing row too, so a demo seeded before this carries it after a reseed
+      // rather than staying null until somebody happens to suggest the title again.
+      update: { overview },
       select: { id: true },
     });
     for (const name of names) {

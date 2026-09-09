@@ -138,6 +138,22 @@ suite is written from the same understanding that produced the gap.
 
 ## Known Debt
 
+- **Semantic search matches names, not meaning.** `EmbedTitlesJob` builds its passage from
+  `Title.name` plus aliases and never reads `overview`, so the vector arm buys cross-language
+  surface forms and misspellings — real value — and cannot match a plot description at all.
+  Measured against the demo's own titles: name-ish queries land at 0.066–0.138 cosine distance,
+  plot descriptions at 0.219–0.221, and _nonsense_ at 0.204. A plot query is further away than
+  some gibberish, so no threshold separates them.
+
+  Embedding the overview would change that, and it is a retrieval decision rather than a tuning
+  one — bigger passages, a re-embed of every row, and a different distance profile that would need
+  `EMBEDDING_MAX_DISTANCE` measured again. Recorded rather than done.
+
+  **This corrects a claim made in PR #83**, which said the overview is what the embedding is
+  computed from. It is not. The overview refresh in that PR is still right — the comment beside it
+  had promised the refresh for a long time and the code did not do it — but the embedding
+  invalidation it added was dead weight and has been removed.
+
 - **19 vulnerability advisories against production dependencies**, 7 high, down
   from 24 and 9. The two **reachable** ones were fixed; the rest were traced and
   left, which is the part worth reading.

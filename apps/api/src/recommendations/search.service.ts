@@ -144,6 +144,9 @@ export class SearchService {
         WHERE r."creatorId" = ${creatorId}::uuid
           AND t."embedding" IS NOT NULL
           AND t."embeddingModel" = ${this.embeddings.modelId()}
+          -- A floor, not just an ordering. Without it this returns the nearest rows however far
+          -- away they are, so every query matched everything on a small board.
+          AND (t."embedding" <=> ${literal}::vector) < ${this.config.get('EMBEDDING_MAX_DISTANCE')}
         ORDER BY t."embedding" <=> ${literal}::vector
         LIMIT ${MAX_SEARCH_RESULTS * CANDIDATE_MULTIPLIER}
       `);
