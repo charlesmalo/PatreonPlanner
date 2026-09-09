@@ -19,6 +19,14 @@ import { UpdatePolicyDto } from './dto/update-policy.dto';
 export class CreatorsController {
   constructor(private readonly creators: CreatorsService) {}
 
+  // Declared before the parameterised routes below so `claimable` is matched as a literal rather
+  // than being swallowed by `:slug` — the same reason `claim` sits up here.
+  @Get('claimable')
+  @UseGuards(SessionGuard)
+  claimable(@CurrentUser() user: CurrentUserPayload) {
+    return this.creators.listClaimable(user.id);
+  }
+
   // Declared before the parameterised routes below so `claim` is matched as a literal rather
   // than being swallowed by `:slug`.
   @Post('claim')

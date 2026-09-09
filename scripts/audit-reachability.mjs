@@ -52,13 +52,6 @@ const EXPECTED = new Map([
   ['POST /webhooks/resend', 'Inbound from Resend'],
   ['POST /billing/webhook', 'Inbound from the payment provider'],
   [
-    'POST /creators/claim',
-    'KNOWN GAP, and the largest one this audit has found: nothing in the client claims a board, ' +
-      'so a creator cannot create one. Every board that exists was seeded by SQL or by a test. ' +
-      'A UI also needs an endpoint listing the caller’s owned campaigns — `claim` takes a ' +
-      'patreonCampaignId the client has no way to learn. See PROGRESS_TRACKER.md.',
-  ],
-  [
     'PUT /creators/:creatorId/webhook-secret',
     'KNOWN GAP: no UI exists, and without a secret the signature guard rejects every delivery. ' +
       'Deliberately deferred — it is a credential from Patreon’s developer portal and needs a ' +

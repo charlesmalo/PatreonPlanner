@@ -16,6 +16,7 @@ import { StaffPage } from './routes/StaffPage';
 import { Support } from './routes/Support';
 import { Tickets } from './routes/Tickets';
 import { Themes } from './routes/Themes';
+import { ClaimBoard } from './routes/ClaimBoard';
 
 export default function App() {
   const { user, loading, signOut } = useSession();
@@ -44,6 +45,7 @@ export default function App() {
           <Route path="/carry-over" element={<CarryOver />} />
           <Route path="/premium" element={<Premium />} />
           <Route path="/support" element={<Support />} />
+          <Route path="/claim" element={<ClaimBoard />} />
           <Route path="/invite" element={<AcceptInvite user={user} />} />
           <Route path="*" element={<p>Page not found.</p>} />
         </Routes>

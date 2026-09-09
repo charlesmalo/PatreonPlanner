@@ -9,11 +9,13 @@ export interface StubMembership {
   tierIds?: string[];
 }
 
-/** Tells the stub who the next login is and what they support. */
+/** Tells the stub who the next login is, what they support, and what they run. */
 export async function setPatreonIdentity(options: {
   id: string;
   fullName?: string;
   memberships?: StubMembership[];
+  /** Campaigns this account owns — what `GET /creators/claimable` answers with. */
+  campaigns?: Array<{ campaignId: string; displayName: string }>;
 }): Promise<void> {
   const response = await fetch(`${STUB}/__control`, {
     method: 'POST',
@@ -21,6 +23,10 @@ export async function setPatreonIdentity(options: {
     body: JSON.stringify({
       identity: { id: options.id, full_name: options.fullName ?? 'Ada Lovelace' },
       memberships: options.memberships ?? [],
+      // Always sent, so a test that owns nothing clears what a previous one set. The stub keeps
+      // this in module state, and inheriting another test's campaigns is the shape of failure
+      // that passes alone and fails in a suite.
+      campaigns: options.campaigns ?? [],
     }),
   });
   if (!response.ok) throw new Error(`stub control failed: ${response.status}`);

@@ -1,5 +1,6 @@
 import { CreatorSearch } from '../components/CreatorSearch';
 import { TitleCardSequence } from '../components/TitleCardSequence';
+import { Link } from 'react-router-dom';
 
 interface LandingPageProps {
   signedIn: boolean;
@@ -58,6 +59,23 @@ export function LandingPage({ signedIn }: LandingPageProps) {
       <div className="mt-10">
         <CreatorSearch signedIn={signedIn} />
       </div>
+
+      {/* The creator's way in, and the reason it is here: the page a creator lands on said only
+          how to find somebody else's board. Signed-in only — it lists the campaigns this account
+          owns, which needs a session, and offering it to a signed-out reader would send them to a
+          page that can only say "sign in". */}
+      {signedIn ? (
+        <p className="mt-8 text-center text-sm text-slate-600 dark:text-slate-300">
+          Run a Patreon campaign?{' '}
+          <Link
+            to="/claim"
+            className="underline focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+          >
+            Create a board for it
+          </Link>
+          .
+        </p>
+      ) : null}
     </section>
   );
 }
