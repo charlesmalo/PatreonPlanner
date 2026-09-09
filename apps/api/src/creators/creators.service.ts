@@ -57,9 +57,7 @@ export class CreatorsService {
    * they became. Filtering would leave a creator staring at a short list wondering where their
    * campaign went; the only other way to find out is to press claim and read a 409.
    */
-  async listClaimable(
-    userId: string,
-  ): Promise<{
+  async listClaimable(userId: string): Promise<{
     items: Array<{
       patreonCampaignId: string;
       displayName: string;

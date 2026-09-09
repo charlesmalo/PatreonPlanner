@@ -60,9 +60,9 @@ test('a board it already made is a link to it, not an offer to make it again', a
     'href',
     '/c/ada-repeats',
   );
-  await expect(
-    page.getByRole('button', { name: 'Create the board for Ada Repeats' }),
-  ).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Create the board for Ada Repeats' })).toHaveCount(
+    0,
+  );
 });
 
 test('a reader who runs no campaign is told so plainly', async ({ page }) => {
