@@ -161,6 +161,45 @@ then remove them. Permissions are per-board and per-capability — `MOVE_ENTRIES
 
 **/c/ada-watches-things/tickets** is where reports land.
 
+### 11b. Making a board at all
+
+Until recently there was no way to do this from the app: the endpoint existed and no page called
+it, so every board here was created by SQL. Sign in as **Ada** and the landing page offers
+**Create a board for it**.
+
+Her campaign appears as *already a board* — a link to it rather than an offer to make it again,
+because pressing claim on a campaign you already claimed answers 409 and sending you to the board
+is the answer you wanted. To see the other side, sign in as **Bea**, who runs no campaign: the page
+says Patreon lists none for the account rather than showing an empty box.
+
+A new board starts visible to **only your supporters**, and the page says so before you make one —
+a board the whole internet can read is a list of what you are watching.
+
+### 11c. Words a board will not accept
+
+As **Ada**, open **Settings**. Below the tier gates is the blocklist, and the demo already has two
+words on it: **ganondorf** is refused outright, **spoiler** is sent for review. They have been
+enforcing on every suggestion since this demo was built, and until recently no screen showed them.
+
+Try suggesting *"a bootleg recording"* after adding **bootleg**. The refusal names no word, on
+purpose — §9 wants nothing that lets somebody find the boundary by submitting until they hit it.
+Worth knowing that a blocked suggestion is also scored as abuse: enough of them and the refusal
+becomes a timeout.
+
+### 11d. Renaming and merging themes
+
+**Themes**, from the board, needs `MANAGE_THEMES`. Rename one, or merge two into one — themes are
+suggested automatically, so a board ends up with "Anime" and "anime" and neither is wrong. The
+merge says how many entries it will move before it moves them, because it cannot be undone here.
+
+### 11e. The Patreon webhook
+
+Also on **Settings**, owner-only. It shows the URL to give Patreon and whether a secret is
+registered — never the secret, since any prefix of one is a head start.
+
+Without a secret the signature check rejects **every** delivery, and nothing looks broken when that
+happens: memberships still arrive, just at the next sync. That is why the page says it plainly.
+
 ### 12. The rest
 
 - **/notifications** — everything, with filters and severity ordering.
@@ -168,7 +207,9 @@ then remove them. Permissions are per-board and per-capability — `MOVE_ENTRIES
 - **/c/:slug/e/:id** — an entry has its own page and a shareable URL.
 - **/c/:slug/notifications** — per-board news settings. **Premium-gated**, and the honest place to
   check that a purchase actually landed.
-- **Themes** — narrow the board to one theme.
+- **Themes** — narrow the board to one theme; rename and merge them at **/c/:slug/themes**.
+- **The ⋯ menu**, top right — the app's own links. **Support the developers** lives there rather
+  than in a footer under every page, and it does not offer to take you to the page you are on.
 - **Franchises and watch orders** — a film nests under its franchise; a watch order can be
   composed, reordered and submitted as one thing.
 

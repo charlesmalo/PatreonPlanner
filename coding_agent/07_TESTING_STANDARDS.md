@@ -26,6 +26,27 @@ repository, so it does not depend on remembering which files were touched.
 If verification fails, say so immediately with the actual output. A red build
 reported honestly is worth more than a green claim that is not true.
 
+### Playwright: half the assertions do not wait
+
+`expect(locator).toBeVisible()` retries. `locator.count()`, `.isVisible()`,
+`.innerText()`, `.allInnerTexts()` and `.allTextContents()` **do not** — they answer
+about the page as it is at that instant, which on a page still fetching is "not
+there" and "empty".
+
+This has produced four false bug reports in this project, each one costing an
+investigation into working code: a settings page reported as stuck loading, a board
+reported as hiding the suggestion box from a patron who qualified, a claim page
+reported as blank, and an owner reported as unable to see the Themes link. Every
+time the app was correct and the check was early.
+
+Before any non-retrying read, wait for something on the page with `expect(…)`
+first — a heading is usually enough. And prefer the retrying form:
+`await expect(locator).toHaveCount(0)` says the same thing as `count() === 0` and
+waits.
+
+The cost is worse than a flaky test, because it points the investigation at the
+wrong thing. One of these nearly went into the demo walkthrough as a stated fact.
+
 ## 2. Test-Driven by Default
 
 1. **Red** — write the failing test; run it; confirm it fails **for the right
