@@ -11,6 +11,9 @@ export default defineConfig({
     proxy: {
       '/api': 'http://localhost:3000',
       '/auth': 'http://localhost:3000',
+      // Kept in step with apps/web/nginx.conf, which says the same. Both were missing this, so
+      // a webhook never reached the API in development either.
+      '/webhooks': 'http://localhost:3000',
     },
   },
   test: {

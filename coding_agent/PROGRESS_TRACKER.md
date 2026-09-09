@@ -138,6 +138,23 @@ suite is written from the same understanding that produced the gap.
 
 ## Known Debt
 
+- ~~**Webhooks never reached the API through the deployed origin.**~~ Fixed. nginx
+  forwarded `/api/` and `/auth/` and not `/webhooks/`, so every Patreon and Resend
+  delivery fell to the SPA fallback and was answered by `index.html` — a 405 to the
+  sender. The dev server had the same gap, so it was consistent rather than a
+  drift, and consistently wrong.
+
+  Nothing looked broken from inside: memberships arrived at the next sync instead
+  of immediately, and the settings page correctly displayed a URL nothing was
+  listening on. Found by curling the URL that page shows rather than trusting it,
+  immediately after building the page that shows it.
+
+  Guarded by `e2e/tests/webhook-routing.spec.ts`, which distinguishes "the API
+  rejected it" from "nginx served the SPA" by status **and** content type, and then
+  delivers a correctly signed body for a 204 — that last one is also the check that
+  the proxy passes the raw bytes through unaltered, since the signature is an HMAC
+  over the body.
+
 - ~~**Web coverage is not wired.**~~ Both gates are live and **enforced in CI**,
   which `pnpm -r test` never did — each existed as a command nobody ran. Web
   sits at 90.2% lines / 85.8% branches with thresholds set just under, so it is
