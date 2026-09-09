@@ -1,8 +1,4 @@
-import {
-  PASSAGE_VERSION,
-  buildPassage,
-  embeddingSignature,
-} from '../src/embeddings/passage';
+import { PASSAGE_VERSION, buildPassage, embeddingSignature } from '../src/embeddings/passage';
 
 /**
  * The text that becomes a vector, and the version that forces a re-embed when it changes.
