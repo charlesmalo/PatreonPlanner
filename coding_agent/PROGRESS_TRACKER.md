@@ -114,10 +114,27 @@ suite is written from the same understanding that produced the gap.
    client that can no longer reach it), and splits on `@Controller` per class
    rather than per file. Verified by deleting every call to `/blocklist` and
    confirming it goes red.
-2. **Every enum value against what the client renders.** Found the ticket
-   notifications: the web's `Notification` type named three of the five types the
-   API emits, so the other two fell through to a branch that described them
-   wrongly and pointed them at the wrong page. Not yet a script.
+2. **Every response type against the enum it mirrors** — `pnpm audit:enums`.
+   Found the ticket notifications: `Notification.type` named three of the five
+   values of `NotificationType`, so the other two fell through to a branch that
+   described them wrongly and pointed them at the wrong page.
+
+   Scoped to `apps/web/src/api/types.ts` after two broader versions were built and
+   thrown away. Checking every SCREAMING*CASE union in the client reported four
+   findings on a clean tree and all four were noise: `submit-payload.ts` and
+   `WatchOrderEditor.tsx` narrow `RecommendationType` correctly because they
+   describe what is \_sent*; `FlagActions.tsx` omits `OPEN` because it is a state,
+   not an action; `Tickets.tsx` was matched against `FlagStatus` only because
+   `TicketStatus` shares two values with it. Checking every enum value against the
+   whole client was worse — four findings, four false positives, including two
+   write-only audit tables the API never sends and one enum the client renders as
+   `{value}` so no value appears in source at all.
+
+   The distinguishing question is **direction**: a union of things we send may
+   narrow freely, a union of things we receive may not. That is invisible in the
+   syntax and visible in the file, so the check is scoped rather than made
+   cleverer. It reports nothing on the current tree, and fails when the original
+   three-value union is put back.
 
 ## Known Debt
 
