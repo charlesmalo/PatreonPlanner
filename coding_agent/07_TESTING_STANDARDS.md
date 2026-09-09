@@ -16,6 +16,13 @@ Required form — state the command, state the observed result:
 **`pnpm -r test` transpiles without typechecking.** A green test run has passed
 a broken build in this project before. Run `pnpm -r typecheck` too, always.
 
+**And `pnpm format:check`.** CI gates on it and this file did not name it, so the
+verification routine described here was smaller than the one that actually
+decides. A branch was pushed with every test and typecheck green and failed on two
+files edited without prettier afterwards — formatted from memory rather than from
+the command. Run all three before pushing; `format:check` covers the whole
+repository, so it does not depend on remembering which files were touched.
+
 If verification fails, say so immediately with the actual output. A red build
 reported honestly is worth more than a green claim that is not true.
 
