@@ -4,6 +4,7 @@ import { EMBED_BATCH_SIZE, EmbedTitlesJob } from '../src/jobs/embed-titles.job';
 import { startDatabase, type TestDatabase } from './support/database';
 import { applyTestConfigDefaults } from './support/env';
 import { FakeEmbeddingProvider } from './support/fake-embedding.provider';
+import { embeddingSignature } from '../src/embeddings/passage';
 
 describe('Title embedding job (integration)', () => {
   let pg: TestDatabase;
@@ -61,7 +62,12 @@ describe('Title embedding job (integration)', () => {
   it('embeds a title that has never been embedded', async () => {
     const title = await makeTitle();
     expect(await job.runOnce()).toBe(1);
-    expect(await stored(title.id)).toEqual({ model: 'fake/model', dims: 384 });
+    // The signature, not the bare model id: the column has to record which *recipe* produced the
+    // vector as well as which model, or a recipe change leaves two spaces mixed in one column.
+    expect(await stored(title.id)).toEqual({
+      model: embeddingSignature('fake/model'),
+      dims: 384,
+    });
   });
 
   it('re-embeds a title whose model no longer matches the configured one', async () => {
@@ -71,7 +77,7 @@ describe('Title embedding job (integration)', () => {
     await prisma.title.update({ where: { id: title.id }, data: { embeddingModel: 'old/model' } });
 
     expect(await job.runOnce()).toBe(1);
-    expect((await stored(title.id)).model).toBe('fake/model');
+    expect((await stored(title.id)).model).toBe(embeddingSignature('fake/model'));
   });
 
   it('leaves an up-to-date title alone', async () => {

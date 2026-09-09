@@ -138,6 +138,19 @@ suite is written from the same understanding that produced the gap.
 
 ## Known Debt
 
+- ~~**Semantic search matches names, not meaning.**~~ Built. The embed job's passage is now
+  name, aliases **and** overview, and the column stores a signature — `model#v2` — so changing the
+  recipe re-embeds rather than mixing two vector spaces. Measured again afterwards: plot
+  descriptions moved from 0.219–0.221 to 0.138–0.199, and the floor moved to 0.205.
+
+  **The margin narrowed, and that is the cost.** 0.006 above the furthest true match, 0.009 below
+  the nearest false one, where the old gap was six times wider — because plot queries never matched
+  at all, and something that never matches is easy to separate from noise. It will narrow further
+  as the board grows. Treat a rise in wrong "already on the board?" prompts as the signal to
+  re-measure.
+
+  Original note follows.
+
 - **Semantic search matches names, not meaning.** `EmbedTitlesJob` builds its passage from
   `Title.name` plus aliases and never reads `overview`, so the vector arm buys cross-language
   surface forms and misspellings — real value — and cannot match a plot description at all.

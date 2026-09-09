@@ -1,6 +1,7 @@
 import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { EMBEDDING_PROVIDER, EmbeddingProvider } from '../embeddings/embedding.provider';
+import { embeddingSignature } from '../embeddings/passage';
 import type { StaffRoleValue } from '../access/capability';
 import { ConfigService } from '../config/config.module';
 import { PrismaService } from '../prisma/prisma.service';
@@ -143,7 +144,7 @@ export class SearchService {
         JOIN "Title" t ON t."id" = r."titleId"
         WHERE r."creatorId" = ${creatorId}::uuid
           AND t."embedding" IS NOT NULL
-          AND t."embeddingModel" = ${this.embeddings.modelId()}
+          AND t."embeddingModel" = ${embeddingSignature(this.embeddings.modelId())}
           -- A floor, not just an ordering. Without it this returns the nearest rows however far
           -- away they are, so every query matched everything on a small board.
           AND (t."embedding" <=> ${literal}::vector) < ${this.config.get('EMBEDDING_MAX_DISTANCE')}

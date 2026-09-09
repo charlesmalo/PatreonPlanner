@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '../config/config.module';
 import { EMBEDDING_PROVIDER, EmbeddingProvider } from '../embeddings/embedding.provider';
 import { PrismaService } from '../prisma/prisma.service';
+import { buildPassage, embeddingSignature } from '../embeddings/passage';
 
 /** One inference call per tick. Transformer cost amortises heavily across a batch. */
 export const EMBED_BATCH_SIZE = 32;
@@ -24,23 +25,28 @@ export class EmbedTitlesJob {
    */
   async runOnce(): Promise<number> {
     if (!this.embeddings.isConfigured()) return 0;
-    const model = this.embeddings.modelId();
+    // The signature, not the bare model id: a row embedded from a different *recipe* is as
+    // incomparable as one embedded by a different model, and bumping PASSAGE_VERSION is what
+    // makes a recipe change re-embed rather than mix two spaces in one column.
+    const model = embeddingSignature(this.embeddings.modelId());
 
     // Never embedded, or embedded by a model this deployment no longer uses. The second clause is
     // what makes rotation a re-embed rather than two incomparable vector spaces in one column.
     const pending = await this.prisma.title.findMany({
       where: { OR: [{ embeddingModel: null }, { embeddingModel: { not: model } }] },
       orderBy: { createdAt: 'asc' },
-      select: { id: true, name: true, aliases: { select: { text: true }, take: 8 } },
+      select: {
+        id: true,
+        name: true,
+        overview: true,
+        aliases: { select: { text: true }, take: 8 },
+      },
       take: EMBED_BATCH_SIZE,
     });
     if (pending.length === 0) return 0;
 
-    // Name plus aliases: the aliases are what carry the other-language surface forms, and
-    // embedding the name alone throws away the one piece of cross-language signal already stored.
-    const texts = pending.map((title) =>
-      [title.name, ...title.aliases.map((alias) => alias.text)].join(' — '),
-    );
+    // The recipe lives beside its version in `passage.ts`, so the two cannot drift apart.
+    const texts = pending.map((title) => buildPassage(title));
 
     let vectors: number[][];
     try {
