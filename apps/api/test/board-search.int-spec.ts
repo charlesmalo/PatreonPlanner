@@ -312,6 +312,32 @@ describe('Board search (integration)', () => {
       expect(ids((await search(patron, query).expect(200)).body)).toContain(bebopId);
     });
 
+    it('re-embeds a row left behind by an older recipe', async () => {
+      // Changing what is embedded without re-embedding leaves two kinds of vector in one column,
+      // and comparing across them produces a confident wrong answer rather than an error. The
+      // signature stored beside the vector is what makes the change self-correcting.
+      const title = await ctx.prisma.title.create({
+        data: { tmdbId: 9004, mediaType: 'TV', name: 'Texhnolyze' },
+      });
+      await entry('Texhnolyze', { titleId: title.id });
+      // Exactly what a v1 row looks like: the bare model id, no recipe version.
+      await ctx.prisma.$executeRawUnsafe(
+        `UPDATE "Title" SET embedding = $1::vector, "embeddingModel" = $2 WHERE id = $3::uuid`,
+        `[${Array.from({ length: 384 }, () => 0.05).join(',')}]`,
+        ctx.embeddings.modelId(),
+        title.id,
+      );
+
+      await embed();
+
+      const after = await ctx.prisma.title.findUniqueOrThrow({
+        where: { id: title.id },
+        select: { embeddingModel: true },
+      });
+      expect(after.embeddingModel).toContain('#');
+      expect(after.embeddingModel).not.toBe(ctx.embeddings.modelId());
+    });
+
     it('does not offer an unrelated entry just because it is the nearest one', async () => {
       // Nearest-neighbour with no floor returns the closest rows however far away they are, so on
       // a small board every query matched everything. That reaches the reader: this endpoint is

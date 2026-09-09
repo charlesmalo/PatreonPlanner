@@ -172,28 +172,27 @@ export const configSchema = z.object({
    * small board every query matched everything — including the submit form's "already on the
    * board — upvote instead?" prompt, which is worse wrong than missing.
    *
-   * 0.18 is measured against what the embed job actually stores — **name plus aliases**, not the
-   * overview — with the configured model:
+   * 0.205 is measured against what the embed job stores — name, aliases and overview — with the
+   * configured model:
    *
-   *   name-ish queries ("sprited away", "ghibli")     0.066 – 0.138   must match
-   *   plot descriptions ("a girl in a bathhouse…")    0.219 – 0.221   cannot match, see below
-   *   unrelated ("how to repair a bicycle chain")     0.204 – 0.265   must not match
+   *   name-ish ("sprited away", "ghibli")            0.107 – 0.138   must match
+   *   plot descriptions                              0.138 – 0.199   must match
+   *   unrelated ("how to repair a bicycle chain")    0.214 – 0.265   must not match
    *
-   * 0.18 sits in the gap: 0.042 above the furthest true match, 0.023 below the nearest false one.
+   * **The margin is thin, and that is the cost of matching by meaning.** 0.205 sits 0.006 above
+   * the furthest true match and 0.009 below the nearest false one. Under the previous recipe the
+   * gap was six times wider — because plot descriptions were not matching at all, and a thing that
+   * never matches is easy to separate from noise.
    *
-   * Note what the middle row means. A plot description is *further away than some nonsense* —
-   * "zzz nonsense query" measured 0.2035 — because the plot is never embedded. Semantic search
-   * here buys cross-language surface forms and misspellings, not matching by meaning, and no
-   * threshold can change that. Embedding `Title.overview` would; that is a retrieval decision, not
-   * a tuning one.
-   *
-   * The numbers belong to this model. Change `EMBEDDING_MODEL` and measure again rather than
-   * assuming they transfer.
+   * It will narrow further as the board grows: more titles means more chances for something
+   * unrelated to land close by. Expect to re-measure, and treat a rise in wrong "already on the
+   * board?" prompts as the signal. The numbers belong to this model — change `EMBEDDING_MODEL` and
+   * measure again rather than assuming they transfer.
    *
    * Recall is protected by the other arm: trigram runs independently and catches anything matching
    * by spelling, so a floor set slightly tight costs fuzzy matches, never exact duplicates.
    */
-  EMBEDDING_MAX_DISTANCE: z.coerce.number().positive().default(0.18),
+  EMBEDDING_MAX_DISTANCE: z.coerce.number().positive().default(0.205),
 
   SUBMIT_LIMIT_PER_HOUR: z.coerce.number().int().positive().default(1),
   // Design §6 item 3: a looser cap across all creators, so a patron of twenty creators cannot
