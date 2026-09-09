@@ -15,6 +15,7 @@ import { ReviewQueue } from './routes/ReviewQueue';
 import { StaffPage } from './routes/StaffPage';
 import { Support } from './routes/Support';
 import { Tickets } from './routes/Tickets';
+import { Themes } from './routes/Themes';
 
 export default function App() {
   const { user, loading, signOut } = useSession();
@@ -37,6 +38,7 @@ export default function App() {
           <Route path="/c/:slug/notifications" element={<NotificationSettings />} />
           <Route path="/c/:slug/staff" element={<StaffPage />} />
           <Route path="/c/:slug/settings" element={<BoardSettings />} />
+          <Route path="/c/:slug/themes" element={<Themes />} />
           <Route path="/c/:slug/tickets" element={<Tickets />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/carry-over" element={<CarryOver />} />

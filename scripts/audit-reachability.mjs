@@ -59,11 +59,6 @@ const EXPECTED = new Map([
       'patreonCampaignId the client has no way to learn. See PROGRESS_TRACKER.md.',
   ],
   [
-    'POST /creators/:slug/themes/:id/merge',
-    'KNOWN GAP: themes can be listed, renamed and deleted from the client but never merged, so ' +
-      'two themes that mean the same thing stay split. See PROGRESS_TRACKER.md.',
-  ],
-  [
     'PUT /creators/:creatorId/webhook-secret',
     'KNOWN GAP: no UI exists, and without a secret the signature guard rejects every delivery. ' +
       'Deliberately deferred — it is a credential from Patreon’s developer portal and needs a ' +

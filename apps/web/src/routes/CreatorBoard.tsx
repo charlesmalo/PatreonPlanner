@@ -118,6 +118,15 @@ export function CreatorBoard() {
             Settings
           </Link>
         ) : null}
+        {/* Same optional chaining as above, and for the same reason. */}
+        {capabilities.permissions?.includes('MANAGE_THEMES') ? (
+          <Link
+            to={`/c/${encodeURIComponent(slug)}/themes`}
+            className="text-sm text-sky-700 underline focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:text-sky-400"
+          >
+            Themes
+          </Link>
+        ) : null}
         {capabilities.upvote ? (
           <Link
             to={`/c/${encodeURIComponent(slug)}/my-votes`}

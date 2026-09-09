@@ -197,11 +197,16 @@ suite is written from the same understanding that produced the gap.
   Patreon campaign id. That is a new endpoint, so it is recorded rather than
   assumed.
 
-- **Two themes that mean the same thing cannot be merged.**
-  `POST /creators/:slug/themes/:id/merge` exists and nothing calls it. Themes can
-  be listed, renamed and deleted from the client, so the gap is narrow, but the
-  case it covers — a board that has accumulated "Anime" and "anime" — is exactly
-  the one merging is for.
+- ~~**Two themes that mean the same thing cannot be merged.**~~ Built, and it was
+  wider than first recorded. The note here said themes could be "listed, renamed
+  and deleted from the client" — they could not. The client only ever **read** the
+  list. Rename, delete and merge were all unreachable, so `MANAGE_THEMES` was a
+  permission a creator could grant for powers nobody could exercise.
+
+  That mistake is the audit script's own blind spot, written down: it checks the
+  deepest **literal** segment, so `/themes/:id` is tested only at `themes`, which
+  the client does use. A route ending in a parameter is therefore only as well
+  checked as its parent. Merge was caught because its deepest segment is `merge`.
 
 - **The per-creator webhook secret cannot be set from anywhere.** `PUT
 /creators/:creatorId/webhook-secret` exists, is `ADMINISTER`-gated, encrypts what
