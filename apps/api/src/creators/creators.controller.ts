@@ -98,6 +98,23 @@ export class CreatorsController {
     return this.creators.getPolicy(creator.id);
   }
 
+  /**
+   * Whether a secret is registered — never what it is.
+   *
+   * `PUT` below has existed since Phase 1 and nothing called it, so per-creator Patreon webhooks
+   * were dead in production: the signature guard rejects every delivery when no secret is set. A
+   * page that sets one has to say whether one is already there, and there was no way to ask.
+   *
+   * A boolean rather than a masked value. There is nothing safe to show — any prefix of a secret
+   * is a head start — and "configured" is the only fact a creator needs from it.
+   */
+  @Get(':creatorId/webhook-secret')
+  @RequireCapability('ADMINISTER')
+  @UseGuards(CreatorAccessGuard)
+  webhookSecretState(@CurrentCreator() creator: ResolvedCreator) {
+    return this.creators.webhookSecretState(creator.id);
+  }
+
   // ADMINISTER, not MODERATE: whoever holds this secret can forge membership events, minting
   // active-patron status at any pledge for anyone on the campaign.
   @Put(':creatorId/webhook-secret')

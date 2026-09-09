@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { useCreator } from '../api/hooks';
 import { Blocklist } from '../components/Blocklist';
+import { WebhookSecret } from '../components/WebhookSecret';
 
 type Visibility = 'PUBLIC' | 'ANY_PATREON_USER' | 'SUBSCRIBERS_ONLY';
 
@@ -260,10 +261,24 @@ export function BoardSettings() {
         MANAGE_POLICY would show them a section whose every request comes back 403.
       */}
       {capabilities.administer ? (
-        <fieldset className="mt-8">
-          <legend className="text-sm font-medium">Words this board will not accept</legend>
-          <Blocklist slug={slug} />
-        </fieldset>
+        <>
+          <fieldset className="mt-8">
+            <legend className="text-sm font-medium">Words this board will not accept</legend>
+            <Blocklist slug={slug} />
+          </fieldset>
+
+          {/*
+            Owner-only, like the blocklist above it and for a sharper reason: whoever holds this
+            secret can forge membership events, minting active-patron status at any pledge for
+            anyone on the campaign. A moderator holding MANAGE_POLICY must not see it.
+          */}
+          {creatorId ? (
+            <fieldset className="mt-8">
+              <legend className="text-sm font-medium">Patreon webhook</legend>
+              <WebhookSecret creatorId={creatorId} />
+            </fieldset>
+          ) : null}
+        </>
       ) : null}
 
       {saved ? (

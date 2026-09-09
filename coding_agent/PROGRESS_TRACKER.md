@@ -234,6 +234,22 @@ suite is written from the same understanding that produced the gap.
   the client does use. A route ending in a parameter is therefore only as well
   checked as its parent. Merge was caught because its deepest segment is `merge`.
 
+- ~~**The per-creator webhook secret cannot be set from anywhere.**~~ Built.
+  `GET :creatorId/webhook-secret` answers `{ configured }` — never the value, and
+  never a prefix of it, since any prefix is a head start. The settings page shows
+  the delivery URL alongside it, because the board id is in that URL and a creator
+  has no other way to learn it.
+
+  Writing it found a bug of exactly the kind the feature exists to prevent: the
+  first version showed `/api/v1/webhooks/patreon/:id`, and webhook routes are
+  **excluded from the global prefix** on purpose — the URL is registered with
+  Patreon and must not move when the API version does. A creator following it would
+  have had every delivery fail with nothing looking broken. The unit test matched a
+  substring and passed on the wrong URL; the integration test that posts a signed
+  body caught it.
+
+  Original note follows.
+
 - **The per-creator webhook secret cannot be set from anywhere.** `PUT
 /creators/:creatorId/webhook-secret` exists, is `ADMINISTER`-gated, encrypts what
   it stores and never echoes it back — and no page calls it. Without a secret

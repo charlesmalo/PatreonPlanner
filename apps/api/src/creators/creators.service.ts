@@ -215,6 +215,17 @@ export class CreatorsService {
    * creator rather than global: Patreon issues one secret per webhook, and a shared secret
    * would let any holder forge membership events for every other creator.
    */
+  /** Whether one is registered. Never the value, and never a prefix of it. */
+  async webhookSecretState(creatorId: string): Promise<{ configured: boolean }> {
+    const creator = await this.prisma.creator.findUniqueOrThrow({
+      where: { id: creatorId },
+      // Selected rather than counted so the column is read, not its existence inferred — but the
+      // boolean is what leaves this method.
+      select: { webhookSecretEncrypted: true },
+    });
+    return { configured: creator.webhookSecretEncrypted !== null };
+  }
+
   async setWebhookSecret(creatorId: string, secret: string): Promise<{ configured: true }> {
     await this.prisma.creator.update({
       where: { id: creatorId },

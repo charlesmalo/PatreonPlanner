@@ -244,4 +244,36 @@ describe('BoardSettings', () => {
     await screen.findByRole('radio', { name: /only my supporters/i });
     expect(screen.queryByText(/words this board will not accept/i)).not.toBeInTheDocument();
   });
+
+  it('offers the webhook secret to an owner', async () => {
+    withPolicy(
+      {},
+      {
+        'GET /api/v1/creators/ada-writes/blocklist': { items: [] },
+        'GET /api/v1/creators/creator-1/webhook-secret': { configured: false },
+      },
+    );
+    renderPage();
+
+    expect(await screen.findByText(/patreon webhook/i)).toBeInTheDocument();
+  });
+
+  it('hides the webhook secret from a moderator who only holds MANAGE_POLICY', async () => {
+    // Sharper than the blocklist: whoever holds this secret can forge membership events, minting
+    // active-patron status at any pledge for anyone on the campaign.
+    global.fetch = fakeApi({
+      'GET /api/v1/creators/ada-writes': creator,
+      'GET /api/v1/creators/ada-writes/capabilities': {
+        administer: false,
+        moderate: true,
+        permissions: ['MANAGE_POLICY'],
+      },
+      'GET /api/v1/creators/creator-1/policy': policy,
+    });
+    renderPage();
+
+    await screen.findByRole('radio', { name: /only my supporters/i });
+    expect(screen.queryByText(/patreon webhook/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/signing secret/i)).not.toBeInTheDocument();
+  });
 });

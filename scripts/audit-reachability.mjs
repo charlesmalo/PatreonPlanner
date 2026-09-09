@@ -29,6 +29,12 @@
  *
  * ## What it cannot see
  *
+ * This is not theoretical. `POST /billing/webhook` was on the allow list until a settings
+ * component that registers the *Patreon* webhook secret was added — the word `webhook` now
+ * appears in the client, so an unrelated inbound route stopped registering as unreachable and its
+ * entry had to be removed. Nothing about that route changed. Segment collisions cost visibility
+ * silently, and the only defence is that the check never claims the opposite.
+ *
  * A route whose deepest segment is a common word is invisible to this. `/auth/patreon/login` and
  * `/webhooks/patreon/:creatorId` never appear below, because `login` and `patreon` occur all over
  * the client for unrelated reasons — both happen to be fine, but a route named `/creators/:slug/list`
@@ -50,13 +56,6 @@ const EXPECTED = new Map([
   ['GET /healthz', 'Infrastructure'],
   ['GET /readyz', 'Infrastructure'],
   ['POST /webhooks/resend', 'Inbound from Resend'],
-  ['POST /billing/webhook', 'Inbound from the payment provider'],
-  [
-    'PUT /creators/:creatorId/webhook-secret',
-    'KNOWN GAP: no UI exists, and without a secret the signature guard rejects every delivery. ' +
-      'Deliberately deferred — it is a credential from Patreon’s developer portal and needs a ' +
-      '`webhookConfigured` flag to be useful. See PROGRESS_TRACKER.md.',
-  ],
 ]);
 
 function walk(dir, out = []) {
