@@ -76,6 +76,11 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+    volumes:
+      # The embedding model. Named rather than a bind mount so it is owned by the container's
+      # user; the bug this replaced was precisely a cache directory the `node` user could not
+      # write to.
+      - demo-models:/models
     environment:
       DATABASE_URL: postgresql://planner:planner@postgres:5432/planner
       REDIS_URL: redis://redis:6379
@@ -96,6 +101,14 @@ services:
       # is to look at, and a demo with the background work switched off shows a thinner product
       # than the one that exists.
       JOBS_ENABLED: 'true'
+      # The comment above claimed embeddings were part of this and they were not: the flag
+      # defaults to false, so the embed job ran every tick, found the provider unconfigured and
+      # did nothing. Zero titles carried an embedding and semantic search quietly fell back to
+      # fuzzy alone — the thinner product that comment exists to prevent.
+      EMBEDDINGS_ENABLED: 'true'
+      # Into the mounted volume below rather than the default under /tmp, so restarting the demo
+      # does not re-download ~120MB of model every time.
+      EMBEDDING_CACHE_DIR: /models
       # Seconds, not the deployed fifteen minutes: a carried-over suggestion that sits at
       # "waiting its turn" for a quarter of an hour reads as broken rather than as queued.
       JOB_TICK_MS: '15000'
@@ -150,3 +163,6 @@ services:
       retries: 20
     depends_on:
       api: { condition: service_healthy }
+
+volumes:
+  demo-models:

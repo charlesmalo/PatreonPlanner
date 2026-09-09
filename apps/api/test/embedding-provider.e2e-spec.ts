@@ -6,8 +6,12 @@ import { applyTestConfigDefaults } from './support/env';
 // in the native runtime. Mocking it here makes the failure path deterministic: the real thing
 // fetches ~120MB over the network, which is neither fast nor reliable enough to assert on.
 const loadModel = jest.fn();
+// `env` is part of the module's real surface and the provider writes to it. Without it here the
+// mock would throw on a property the production code legitimately sets.
+const transformersEnv: { cacheDir?: string; allowLocalModels?: boolean } = {};
 jest.mock('@huggingface/transformers', () => ({
   pipeline: (...args: unknown[]) => loadModel(...args),
+  env: transformersEnv,
 }));
 
 /**
@@ -94,5 +98,35 @@ describe('LocalEmbeddingProvider', () => {
       tolist: () => inputs.map(() => [0.3, 0.4]),
     }));
     await expect(instance.embedQuery('anything')).resolves.toEqual([0.3, 0.4]);
+  });
+
+  it('caches the model somewhere writable before loading it', async () => {
+    // The container runs as `node` and transformers defaults to caching inside its own package
+    // directory under node_modules, which is not writable. The result was an EACCES on every
+    // load, so semantic search degraded to trigram in **any** containerised deployment while
+    // looking exactly like a deployment that had embeddings switched off.
+    process.env.EMBEDDING_CACHE_DIR = '/tmp/pp-embeddings-test';
+    // The extractor has to return something shaped like a tensor, or the call fails after the
+    // cache directory has already been set and the assertion never runs.
+    loadModel.mockResolvedValue(jest.fn().mockResolvedValue({ tolist: () => [[0.1, 0.2]] }));
+    const p = provider();
+
+    await p.embedQuery('anything');
+
+    expect(transformersEnv.cacheDir).toBe('/tmp/pp-embeddings-test');
+    delete process.env.EMBEDDING_CACHE_DIR;
+  });
+
+  it('has a writable default, so a deployment that sets nothing still works', async () => {
+    // The bug was not a missing setting — nobody knew there was one to set. The default has to be
+    // right on its own.
+    delete process.env.EMBEDDING_CACHE_DIR;
+    loadModel.mockResolvedValue(jest.fn().mockResolvedValue({ tolist: () => [[0.1, 0.2]] }));
+    const p = provider();
+
+    await p.embedQuery('anything');
+
+    expect(transformersEnv.cacheDir).toBeTruthy();
+    expect(transformersEnv.cacheDir).not.toContain('node_modules');
   });
 });
