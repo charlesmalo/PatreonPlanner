@@ -102,20 +102,22 @@ unreachable or unrendered by the client.** The tier gates, the blocklist, and th
 ticket notifications. None of them failed a test, because every test covered the
 parts that existed.
 
-Two checks find this class, and both are worth re-running whenever a feature
-lands:
+Two checks find this class, and neither is a test, because neither can be: a test
+suite is written from the same understanding that produced the gap.
 
-1. **Every API route against every path the SPA calls.** Found the blocklist and
-   the webhook secret. Twelve of the fourteen misses were legitimate — OAuth
-   callback, health, webhooks, the fake checkout, the email unsubscribe link.
+1. **Every API route against the client.** Now a committed script —
+   `pnpm audit:reachability`. It is not a grep for `api.get('/literal')`: this
+   codebase routinely builds a path into a variable first, so that version reports
+   live features as unreachable. Written that way it claimed 14 misses, then 47,
+   then 20, none of them true. It compares **path segments**, strips comments
+   first (a component's own doc comment names the route it talks to, which hides a
+   client that can no longer reach it), and splits on `@Controller` per class
+   rather than per file. Verified by deleting every call to `/blocklist` and
+   confirming it goes red.
 2. **Every enum value against what the client renders.** Found the ticket
    notifications: the web's `Notification` type named three of the five types the
    API emits, so the other two fell through to a branch that described them
-   wrongly and pointed them at the wrong page.
-
-Neither is a test, and neither can be. They compare what exists against what is
-reachable, and a test suite is written from the same understanding that produced
-the gap.
+   wrongly and pointed them at the wrong page. Not yet a script.
 
 ## Known Debt
 
@@ -180,6 +182,26 @@ the gap.
   `identity.memberships` scope is absent — but that scope is requested in
   `http-patreon.client.ts`, so producing it would take a change to our own code
   rather than anything external.
+
+- **A creator cannot claim a board.** `POST /creators/claim` is complete — it
+  verifies ownership against the campaigns Patreon says the caller owns, generates
+  a unique slug, creates the policy row — and **nothing in the client calls it**.
+  Every board that exists was seeded by SQL or by a test. In production the product
+  has no front door for creators at all.
+
+  This is the largest instance of the pattern found so far, and the one the audit
+  script was worth writing for. It needs a decision before it can be built: `claim`
+  takes a `patreonCampaignId`, and there is **no endpoint that lists the caller's
+  owned campaigns** — the service fetches them internally to check ownership and
+  does not expose them. A usable page needs one, because nobody knows their own
+  Patreon campaign id. That is a new endpoint, so it is recorded rather than
+  assumed.
+
+- **Two themes that mean the same thing cannot be merged.**
+  `POST /creators/:slug/themes/:id/merge` exists and nothing calls it. Themes can
+  be listed, renamed and deleted from the client, so the gap is narrow, but the
+  case it covers — a board that has accumulated "Anime" and "anime" — is exactly
+  the one merging is for.
 
 - **The per-creator webhook secret cannot be set from anywhere.** `PUT
 /creators/:creatorId/webhook-secret` exists, is `ADMINISTER`-gated, encrypts what
