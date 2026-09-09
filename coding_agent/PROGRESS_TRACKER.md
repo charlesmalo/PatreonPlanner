@@ -138,6 +138,21 @@ suite is written from the same understanding that produced the gap.
 
 ## Known Debt
 
+- **24 vulnerability advisories against production dependencies** (9 high, no
+  critical; the two criticals are dev-only, via `testcontainers`). Found by
+  accident: a script named `audit` shadowed pnpm's own `pnpm audit`, which then ran
+  instead. The script is `audit:all` now, and the finding is real regardless of how
+  it arrived.
+
+  The high ones are `@remix-run/router` (XSS via open redirect), `multer` (two DoS),
+  `path-to-regexp` (two ReDoS), `sharp`/libvips and libheif, and `adm-zip`. Most are
+  transitive through Nest and React Router rather than direct choices.
+
+  **Not attempted.** Upgrading these is a dependency decision and a plausible source
+  of breakage across 1261 API tests, and this project's rule is that dependency
+  changes need the engineer. Recorded with the numbers so the choice can be made
+  rather than discovered. Re-check with `pnpm audit --prod`.
+
 - ~~**Webhooks never reached the API through the deployed origin.**~~ Fixed. nginx
   forwarded `/api/` and `/auth/` and not `/webhooks/`, so every Patreon and Resend
   delivery fell to the SPA fallback and was answered by `index.html` — a 405 to the
