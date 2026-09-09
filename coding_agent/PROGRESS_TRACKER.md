@@ -138,20 +138,25 @@ suite is written from the same understanding that produced the gap.
 
 ## Known Debt
 
-- **24 vulnerability advisories against production dependencies** (9 high, no
-  critical; the two criticals are dev-only, via `testcontainers`). Found by
-  accident: a script named `audit` shadowed pnpm's own `pnpm audit`, which then ran
-  instead. The script is `audit:all` now, and the finding is real regardless of how
-  it arrived.
+- **19 vulnerability advisories against production dependencies**, 7 high, down
+  from 24 and 9. The two **reachable** ones were fixed; the rest were traced and
+  left, which is the part worth reading.
 
-  The high ones are `@remix-run/router` (XSS via open redirect), `multer` (two DoS),
-  `path-to-regexp` (two ReDoS), `sharp`/libvips and libheif, and `adm-zip`. Most are
-  transitive through Nest and React Router rather than direct choices.
+  Fixed: `@remix-run/router` (XSS via open redirect) by moving `react-router-dom`
+  6.27.0 → 6.30.6, which pulls router 1.23.4; and `path-to-regexp` (ReDoS) by a
+  pnpm override 0.1.10 → 0.1.12. Both are in-major bumps of existing dependencies,
+  and both sit on paths every request or navigation crosses.
 
-  **Not attempted.** Upgrading these is a dependency decision and a plausible source
-  of breakage across 1261 API tests, and this project's rule is that dependency
-  changes need the engineer. Recorded with the numbers so the choice can be made
-  rather than discovered. Re-check with `pnpm audit --prod`.
+  Left, because our code cannot reach them:
+
+  | package   | source                      | why it does not apply                                      |
+  | --------- | --------------------------- | ---------------------------------------------------------- |
+  | `multer`  | `@nestjs/platform-express`  | no `FileInterceptor` anywhere; this API accepts no uploads |
+  | `sharp`   | `@huggingface/transformers` | image decoding the embeddings path never invokes           |
+  | `adm-zip` | `@huggingface/transformers` | model-archive extraction, same                             |
+
+  `multer` is the one to revisit: the fix is a major bump and the day this API takes
+  its first upload, the DoS becomes reachable. Re-check with `pnpm audit --prod`.
 
 - ~~**Webhooks never reached the API through the deployed origin.**~~ Fixed. nginx
   forwarded `/api/` and `/auth/` and not `/webhooks/`, so every Patreon and Resend
