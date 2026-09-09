@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 export const configSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -149,6 +151,18 @@ export const configSchema = z.object({
     .or(z.boolean())
     .default(false),
   EMBEDDING_MODEL: z.string().min(1).default('Xenova/multilingual-e5-small'),
+  /**
+   * Where the model is cached.
+   *
+   * Needs a default that is writable, because transformers' own default is not: it caches inside
+   * its package directory under `node_modules`, and the API image runs as `node`. Every load
+   * failed with EACCES, and the provider's graceful fallback meant semantic search degraded to
+   * trigram in any containerised deployment while looking exactly like one with embeddings off.
+   *
+   * A deployment that wants the model to survive a restart should point this at a mounted volume;
+   * the default re-downloads roughly 120MB after each one.
+   */
+  EMBEDDING_CACHE_DIR: z.string().min(1).default(join(tmpdir(), 'patreonplanner-embeddings')),
   // Must match the width of the `Title.embedding` column; changing it needs a migration.
   EMBEDDING_DIMENSIONS: z.coerce.number().int().positive().default(384),
 

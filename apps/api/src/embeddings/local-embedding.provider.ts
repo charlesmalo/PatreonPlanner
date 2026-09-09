@@ -63,7 +63,12 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
       try {
         // Imported dynamically so the package — and its native bits — are not pulled in at boot
         // by deployments that leave embeddings off.
-        const { pipeline } = await import('@huggingface/transformers');
+        const { pipeline, env } = await import('@huggingface/transformers');
+        // Set before the pipeline is built, because that is when the download happens.
+        // Transformers caches inside its own package directory by default, which is under
+        // node_modules and not writable by the `node` user the image runs as — so every load
+        // failed with EACCES and search silently fell back to trigram.
+        env.cacheDir = this.config.get('EMBEDDING_CACHE_DIR');
         const extractor = (await pipeline(
           'feature-extraction',
           this.modelId(),
