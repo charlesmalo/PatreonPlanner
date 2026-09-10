@@ -4,10 +4,27 @@ import { ConfigService } from '../config/config.module';
 import { CatalogNotConfiguredError, CatalogProvider } from './catalog.provider';
 import { CatalogResult, TitleStructure } from './catalog.types';
 
-class TitleNotFound extends Error {}
+/**
+ * Carries what was asked for.
+ *
+ * It was `extends Error {}` and constructed with no message, so a 404 reached the enrichment
+ * job's logger as "Enrichment failed for title <uuid>: " — a warning that repeated on every tick
+ * and named neither the title nor the reason. A title upstream has never heard of is a permanent,
+ * diagnosable condition, and the log is the only place anyone would find out.
+ */
+class TitleNotFound extends Error {
+  constructor(path: string) {
+    super(`The catalogue does not know ${path}`);
+  }
+}
 
-/** TMDB's similar list is long and weak; a cap keeps the relation table from bloating on noise. */
+/**
+ * A popular film carries dozens of near-duplicate alternative titles, and every one lands in the
+ * trigram index the search's lexical arm joins — uncapped, one title's aliases would crowd the
+ * results for everything else.
+ */
 const ALIAS_CAP = 8;
+/** TMDB's similar list is long and weak; a cap keeps the relation table from bloating on noise. */
 export const SIMILAR_CAP = 12;
 /** TMDB returns dozens of keywords for a popular film; each becomes a Theme row per creator. */
 export const LABEL_CAP = 20;
@@ -200,7 +217,7 @@ export class TmdbCatalogProvider implements CatalogProvider {
       headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' },
     });
     if (!response.ok) {
-      if (response.status === 404) throw new TitleNotFound();
+      if (response.status === 404) throw new TitleNotFound(path);
       // Status only: the body can echo the query and, on some errors, the key.
       this.logger.warn(`TMDB request failed with status ${response.status}`);
       throw new Error('Catalogue request failed');
