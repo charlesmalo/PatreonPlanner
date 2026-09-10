@@ -57,4 +57,20 @@ describe('RecommendationCard link candidates', () => {
 
     expect(screen.getByText('Spirited Away')).toBeInTheDocument();
   });
+
+  it('offers Move only to a moderator who may actually move things', async () => {
+    // The API requires MOVE_ENTRIES on every status endpoint. A moderator without it — which is
+    // what an invite grants until the creator says otherwise — saw the control, pressed it, and
+    // got a 403 with the entry silently staying put. The capabilities payload exists precisely so
+    // the client can tell these moderators apart; this control was not using it.
+    renderCard(recommendation(), ['HANDLE_REPORTS'], true);
+
+    expect(screen.queryByRole('button', { name: /^Move/ })).not.toBeInTheDocument();
+  });
+
+  it('offers Move to a moderator who holds MOVE_ENTRIES', async () => {
+    renderCard(recommendation(), ['MOVE_ENTRIES'], true);
+
+    expect(screen.getByRole('button', { name: /^Move/ })).toBeInTheDocument();
+  });
 });

@@ -225,7 +225,17 @@ export function RecommendationCard({
               isPick={recommendation.isCreatorPick ?? false}
             />
           ) : null}
-          {canModerate ? (
+          {/*
+            MOVE_ENTRIES, not merely MODERATE. The API requires the permission on every status
+            endpoint, so a moderator without it saw the control, pressed it, and got a 403 with
+            the entry silently staying put — which is what an invite grants until the creator
+            says otherwise, so it was the default experience for an invited moderator.
+
+            Optional chaining for the same reason as elsewhere: this runs inside render, and a
+            capabilities payload without `permissions` would blank the board rather than hide a
+            button.
+          */}
+          {canModerate && permissions?.includes('MOVE_ENTRIES') ? (
             <StatusControl
               slug={slug}
               recommendationId={recommendation.id}

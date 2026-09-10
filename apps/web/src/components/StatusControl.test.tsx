@@ -70,6 +70,9 @@ describe('StatusControl', () => {
     renderControl('PENDING');
     await userEvent.click(screen.getByRole('button', { name: /move “Spirited Away”/i }));
     await userEvent.click(screen.getByRole('menuitem', { name: 'Accepted' }));
-    expect(await screen.findByRole('status')).toHaveTextContent(/do not moderate/i);
+    // Names the permission rather than the role. A 403 here almost always means a moderator who
+    // *does* moderate this board and was never granted MOVE_ENTRIES — telling them they do not
+    // moderate it sends them looking for the wrong problem.
+    expect(await screen.findByRole('status')).toHaveTextContent(/not one of your permissions/i);
   });
 });
