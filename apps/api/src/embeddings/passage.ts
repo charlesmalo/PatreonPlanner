@@ -23,9 +23,15 @@ export function embeddingSignature(modelId: string): string {
 }
 
 /**
- * The aliases carry other-language surface forms — the one piece of cross-language signal already
- * stored — and the overview carries what the title is *about*. Joined with a separator rather than
- * concatenated so the model sees them as distinct fields rather than one run-on sentence.
+ * The overview carries what the title is *about*. Joined with a separator rather than concatenated
+ * so the model sees these as distinct fields rather than one run-on sentence.
+ *
+ * The aliases would carry other-language surface forms, and in a running system they are **always
+ * empty**: nothing in this codebase writes a `TitleAlias`. The table has a trigram index, the
+ * search query joins it, and this passage reads it — every part exists except a producer, and the
+ * tests that cover alias matching create the rows themselves. Kept in the recipe because the read
+ * side is correct and costs nothing on an empty relation; see PROGRESS_TRACKER.md for what
+ * building the producer would involve.
  */
 export function buildPassage(title: {
   name: string;
