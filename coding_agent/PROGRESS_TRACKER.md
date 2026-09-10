@@ -95,6 +95,45 @@ What remains needs access this repository does not have:
 | Should a reader be able to follow one entry?     | Yes, and a follow beats theme narrowing (plan 18)           |
 | Which permissions stay bundled under `MODERATE`? | The five that exist; nothing since has needed a sixth       |
 
+## Permissions: the sweep that is not a script
+
+Four changes came out of one question, asked after the first fix looked finished:
+**for every endpoint that names a permission, does the control reaching it check
+the same one?**
+
+| permission       | endpoints | state before                 |
+| ---------------- | --------- | ---------------------------- |
+| `MOVE_ENTRIES`   | 6         | one control gated, three not |
+| `HANDLE_REPORTS` | 4         | no client gate at all        |
+| `WRITE_NOTES`    | 1         | no client gate at all        |
+| `EDIT_ENTRIES`   | 2         | `LinkCandidates` only        |
+| `MANAGE_THEMES`  | 3         | correct                      |
+| `MANAGE_POLICY`  | 2         | correct                      |
+
+Every gap had the same shape: a control offered on `canModerate` alone, calling an
+endpoint that demands a named permission, answering 403 and leaving the entry where
+it was. An invite grants a staff row and nothing else, so this was the **default**
+experience for an invited moderator, not an edge case.
+
+**It is deliberately not a script.** The weak version — does the client mention
+each permission anywhere — reports all six as covered even when a permission is
+only named in `types.ts` and the grant checkboxes on the staff page. It said
+exactly that while `MOVE_ENTRIES` had no gate. Answering it properly needs the call
+graph from control to endpoint, which is not statically available here, and a check
+that cries wolf on a clean tree gets ignored or, worse, believed. Two audits were
+built and thrown away this session for that.
+
+Run it by hand when a permission is added or a control moved: list
+`@RequirePermission` by permission, find the client control that calls each
+endpoint, and check the gate names the same one. Two components rendering the same
+control are two answers — the queue's `StatusControl` and the card's are separate
+instances, and fixing one did nothing for the other.
+
+**Eight test fixtures had encoded the old behaviour**, and the API's own
+capabilities test is the one to remember: written _specifically_ so the client
+could avoid rendering controls the API refuses, it proved the payload correct and
+never that anything consumed it. A test written beside a bug tends to pin the bug.
+
 ## The sweep that keeps finding things
 
 Three defects in a row shared one shape: **complete server-side, tested, and
