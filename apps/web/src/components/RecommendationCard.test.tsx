@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { RecommendationCard } from './RecommendationCard';
 import { recommendation } from '../test-support';
@@ -72,5 +72,15 @@ describe('RecommendationCard link candidates', () => {
     renderCard(recommendation(), ['MOVE_ENTRIES'], true);
 
     expect(screen.getByRole('button', { name: /^Move/ })).toBeInTheDocument();
+  });
+
+  it('offers Pick only to a moderator who may move things', async () => {
+    // `pick` is a MOVE_ENTRIES endpoint like the status ones, so it is offered on the same terms.
+    renderCard(recommendation(), ['HANDLE_REPORTS'], true);
+    expect(screen.queryByRole('button', { name: /pick/i })).not.toBeInTheDocument();
+
+    cleanup();
+    renderCard(recommendation(), ['MOVE_ENTRIES'], true);
+    expect(screen.getByRole('button', { name: /pick/i })).toBeInTheDocument();
   });
 });

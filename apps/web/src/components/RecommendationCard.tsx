@@ -217,7 +217,8 @@ export function RecommendationCard({
             recommendationId={recommendation.id}
             title={recommendation.customTitle}
           />
-          {canModerate ? (
+          {/* `pick` requires MOVE_ENTRIES too, so the same gate as the Move control below. */}
+          {canModerate && permissions?.includes('MOVE_ENTRIES') ? (
             <PickButton
               slug={slug}
               recommendationId={recommendation.id}

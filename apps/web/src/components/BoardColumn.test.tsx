@@ -37,7 +37,10 @@ describe('BoardColumn', () => {
           theme={null}
           canUpvote={false}
           canModerate={false}
-          permissions={[]}
+          // Dragging is a MOVE_ENTRIES action, so a case about dragging has to grant it. A
+          // moderator holding only the capability is offered no drag at all — which is its own
+          // case, on the card.
+          permissions={['MOVE_ENTRIES']}
           isPremium={false}
           onMoved={vi.fn()}
           {...props}
