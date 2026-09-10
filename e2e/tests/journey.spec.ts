@@ -327,10 +327,13 @@ test('an owner narrows what a moderator may do, and the board obeys', async ({ p
 
   await signIn(page, 500, 'patreon-limited-e2e');
   await page.goto(`/c/${CREATOR.slug}`);
-  // Still a moderator — the queue is still theirs to open.
-  await expect(page.getByRole('link', { name: /review queue/i })).toBeVisible();
-  // But the one power that was taken away is gone: moving entries still works.
+  // The power that was taken away is gone from the board, not merely refused after a click. The
+  // queue and the tickets list both sit behind HANDLE_REPORTS, so offering either would be a link
+  // into a 403 — this used to assert the opposite, and the comment beside it claimed "the queue is
+  // still theirs to open", which the API had never agreed with.
   await expect(page.getByRole('button', { name: /move “Laputa”/i })).toBeVisible();
+  await expect(page.getByRole('link', { name: /review queue/i })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: /^Messages$/ })).toHaveCount(0);
 });
 
 test('a moderator looks at their own board as a patron sees it', async ({ page }) => {

@@ -21,7 +21,7 @@ const REASON_LABELS: Record<string, string> = {
 
 export function ReviewQueue() {
   const { slug = '' } = useParams();
-  const { creator } = useCreator(slug);
+  const { creator, capabilities } = useCreator(slug);
   const queue = useReviewQueue(slug);
 
   if (queue.loading) {
@@ -31,11 +31,17 @@ export function ReviewQueue() {
   if (queue.error) {
     return (
       <p role="status" className="text-slate-600 dark:text-slate-300">
+        {/*
+          Which 403 this is decides the sentence, and the client already knows: the same
+          capabilities payload that gates the link says whether this reader moderates the board at
+          all. Somebody removed from staff genuinely does not moderate it; somebody who moderates
+          it and lacks HANDLE_REPORTS does, and telling them otherwise sends them looking for a
+          staff row they already have. One message for both cases is wrong for one of them.
+        */}
         {queue.error.status === 403 || queue.error.status === 401
-          ? // Names the permission, not the role. A 403 here almost always means somebody who
-            // *does* moderate this board and was never granted HANDLE_REPORTS — telling them
-            // they do not moderate it sends them looking for the wrong problem.
-            'Handling reports is not one of your permissions on this board.'
+          ? capabilities.moderate
+            ? 'Handling reports is not one of your permissions on this board.'
+            : 'You do not moderate this board.'
           : 'Could not load the review queue. Try again.'}
       </p>
     );
