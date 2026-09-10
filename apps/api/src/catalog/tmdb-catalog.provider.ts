@@ -7,6 +7,7 @@ import { CatalogResult, TitleStructure } from './catalog.types';
 class TitleNotFound extends Error {}
 
 /** TMDB's similar list is long and weak; a cap keeps the relation table from bloating on noise. */
+const ALIAS_CAP = 8;
 export const SIMILAR_CAP = 12;
 /** TMDB returns dozens of keywords for a popular film; each becomes a Theme row per creator. */
 export const LABEL_CAP = 20;
@@ -38,6 +39,50 @@ interface TmdbItem {
   first_air_date?: string;
   poster_path?: string | null;
   overview?: string | null;
+}
+
+/**
+ * TMDB answers `titles` for a film and `results` for a series, under the same path — the same
+ * split the keywords endpoint has.
+ */
+interface TmdbAlternativeTitles {
+  titles?: Array<{ iso_3166_1?: string; title?: string; type?: string }>;
+  results?: Array<{ iso_3166_1?: string; title?: string; type?: string }>;
+}
+
+/**
+ * TMDB's `type` is free text typed by contributors — "romaji", "English title", "working title",
+ * and often empty. It is read for the one distinction worth making and otherwise ignored: guessing
+ * further would invent precision the data does not have.
+ *
+ * The cap is not decoration. A popular film carries dozens of alternative titles, most of them
+ * near-duplicates, and every one lands in a trigram index the lexical arm joins — so an uncapped
+ * list would let one title's aliases crowd the results for everything else.
+ */
+function toAliases(
+  payload: TmdbAlternativeTitles | null,
+  mediaType: MediaType,
+): TitleStructure['aliases'] {
+  const rows = payload?.titles ?? payload?.results ?? [];
+  const seen = new Set<string>();
+  const aliases: TitleStructure['aliases'] = [];
+  for (const row of rows) {
+    const text = row.title?.trim();
+    if (!text || seen.has(text.toLowerCase())) continue;
+    seen.add(text.toLowerCase());
+    aliases.push({
+      // TMDB gives a region, not a language; storing it as-is would claim a precision it does not
+      // have. Lower-cased so the unique index treats "JP" and "jp" as one.
+      language: (row.iso_3166_1 ?? 'xx').toLowerCase(),
+      kind: /romaji/i.test(row.type ?? '') ? 'ROMAJI' : 'ALTERNATIVE',
+      text,
+    });
+    if (aliases.length >= ALIAS_CAP) break;
+  }
+  // Mentioned so the parameter is not mistaken for dead weight: the caller passes it, and the
+  // split between `titles` and `results` above is exactly the media-type difference it stands for.
+  void mediaType;
+  return aliases;
 }
 
 @Injectable()
@@ -109,13 +154,17 @@ export class TmdbCatalogProvider implements CatalogProvider {
         })),
         similar: [],
         labels: dedupeLabels((detail.genres ?? []).map((g) => g.name)),
+        // A collection is our own container rather than a released work; it has no alternative
+        // titles upstream, so asking for them would spend a request to learn nothing.
+        aliases: [],
       };
     }
 
     // Each degrades on its own: one failing endpoint must not cost the title its collection.
-    const [keywords, similar] = await Promise.all([
+    const [keywords, similar, alternatives] = await Promise.all([
       this.getOrNull<TmdbKeywords>(`/${path}/${tmdbId}/keywords`),
       this.getOrNull<{ results?: Array<{ id: number }> }>(`/${path}/${tmdbId}/similar`),
+      this.getOrNull<TmdbAlternativeTitles>(`/${path}/${tmdbId}/alternative_titles`),
     ]);
 
     // TMDB returns `keywords` for a film and `results` for a series, under the same path.
@@ -130,6 +179,7 @@ export class TmdbCatalogProvider implements CatalogProvider {
         .slice(0, SIMILAR_CAP)
         .map((item) => ({ tmdbId: item.id, mediaType })),
       labels: dedupeLabels([...(detail.genres ?? []).map((g) => g.name), ...keywordNames]),
+      aliases: toAliases(alternatives, mediaType),
     };
   }
 

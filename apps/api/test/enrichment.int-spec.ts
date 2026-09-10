@@ -67,6 +67,7 @@ describe('Relation and theme enrichment (integration)', () => {
         parts: [],
         similar: [],
         labels: [],
+        aliases: [],
       });
 
       await relations.enrich(film.id);
@@ -90,6 +91,7 @@ describe('Relation and theme enrichment (integration)', () => {
         ],
         similar: [],
         labels: [],
+        aliases: [],
       });
 
       await relations.enrich(collection.id);
@@ -112,6 +114,7 @@ describe('Relation and theme enrichment (integration)', () => {
         parts: [{ tmdbId: 999, mediaType: 'MOVIE', ordinal: 0 }],
         similar: [],
         labels: [],
+        aliases: [],
       });
       await relations.enrich(collection.id);
       expect(await prisma.titleRelation.count()).toBe(0);
@@ -126,6 +129,7 @@ describe('Relation and theme enrichment (integration)', () => {
         parts: [],
         similar: [{ tmdbId: 8392, mediaType: 'MOVIE' }],
         labels: [],
+        aliases: [],
       });
       await relations.enrich(film.id);
       const relation = await prisma.titleRelation.findFirstOrThrow({ where: { fromId: film.id } });
@@ -139,6 +143,7 @@ describe('Relation and theme enrichment (integration)', () => {
         parts: [],
         similar: [],
         labels: [],
+        aliases: [],
       });
       await relations.enrich(film.id);
       await relations.enrich(film.id);
@@ -153,6 +158,7 @@ describe('Relation and theme enrichment (integration)', () => {
         parts: [],
         similar: [{ tmdbId: 129, mediaType: 'MOVIE' }],
         labels: [],
+        aliases: [],
       });
       await relations.enrich(film.id);
       expect(await prisma.titleRelation.count()).toBe(0);
@@ -310,6 +316,7 @@ describe('Relation and theme enrichment (integration)', () => {
         parts: [],
         similar: [],
         labels: ['Animation'],
+        aliases: [],
       });
 
       await relations.enrich(film.id);
@@ -335,6 +342,7 @@ describe('Relation and theme enrichment (integration)', () => {
         parts: [],
         similar: [],
         labels: ['Animation'],
+        aliases: [],
       });
 
       await suggest(film.id);
@@ -373,6 +381,7 @@ describe('Relation and theme enrichment (integration)', () => {
         parts: [],
         similar: [],
         labels: ['anime'],
+        aliases: [],
       });
 
       await relations.enrich(film.id);

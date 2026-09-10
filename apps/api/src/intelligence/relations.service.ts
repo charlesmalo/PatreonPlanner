@@ -52,6 +52,25 @@ export class RelationsService {
       if (member) await this.link(member.id, title.id, 'SAME_FRANCHISE', part.ordinal);
     }
 
+    // Idempotent, because enrichment runs again every time a title is re-bound to another board.
+    // Duplicating the aliases on each pass would grow the row set without bound and skew the
+    // lexical arm toward whichever title had been suggested most often — it joins TitleAlias, so
+    // more rows for one title means more chances for it to match anything.
+    for (const alias of structure.aliases) {
+      await this.prisma.titleAlias.upsert({
+        where: {
+          titleId_language_kind_text: {
+            titleId: title.id,
+            language: alias.language,
+            kind: alias.kind,
+            text: alias.text,
+          },
+        },
+        create: { titleId: title.id, ...alias },
+        update: {},
+      });
+    }
+
     for (const similar of structure.similar) {
       const other = await this.findTitle(similar.tmdbId, similar.mediaType);
       if (other) await this.link(title.id, other.id, 'RELATED', null);

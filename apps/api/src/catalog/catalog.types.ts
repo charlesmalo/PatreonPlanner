@@ -1,3 +1,4 @@
+import type { AliasKind } from '@prisma/client';
 import { MediaType } from '@prisma/client';
 
 export interface CatalogResult {
@@ -19,4 +20,12 @@ export interface TitleStructure {
   similar: Array<{ tmdbId: number; mediaType: MediaType }>;
   /** Genre and keyword labels, for theme seeding. De-duplicated case-insensitively. */
   labels: string[];
+  /**
+   * The names this title is known by elsewhere.
+   *
+   * `TitleAlias` had a schema, a trigram index, a join in the search query and a place in the
+   * embedding passage, and nothing produced a row — so cross-language matching was covered by
+   * tests that made their own fixtures and inert everywhere else.
+   */
+  aliases: Array<{ language: string; kind: AliasKind; text: string }>;
 }

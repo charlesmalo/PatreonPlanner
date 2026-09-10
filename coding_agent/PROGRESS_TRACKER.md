@@ -138,6 +138,24 @@ suite is written from the same understanding that produced the gap.
 
 ## Known Debt
 
+- ~~**Cross-language alias matching has no producer.**~~ Built. `fetchStructure` now returns
+  aliases from TMDB's `alternative_titles`, and enrichment upserts them — idempotently, because a
+  title is re-enriched every time it is bound to another board and duplicate rows would skew the
+  lexical arm toward whichever title had been suggested most often.
+
+  Capped at 8 per title. A popular film carries dozens of near-duplicate alternative titles, and
+  every one lands in a trigram index the search joins, so an uncapped list would let one title's
+  aliases crowd the results for everything else.
+
+  **A title enriched before this change does not gain aliases on its own.** The job only looks at
+  `enrichedAt: null`. In a deployment that resolves itself — re-binding a title clears the stamp —
+  but a title nobody suggests again stays without. Unlike the embedding recipe, this needs no
+  version marker: missing aliases are incomplete, not _wrong_, so there is nothing to invalidate.
+
+  Verified in the demo: searching **千と千尋の神隠し** finds an entry titled "Spirited Away".
+
+  Original note follows.
+
 - **Cross-language alias matching has no producer.** `TitleAlias` has a schema, a dedicated
   trigram index, a join in the search query's lexical arm, and a place in the embedding passage.
   **Nothing writes a row.** The only references outside the read path are two test files, and both

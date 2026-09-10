@@ -239,10 +239,7 @@ const server = createServer(async (req, res) => {
   // A plain index, so the demo needs no cheat sheet open beside it.
   if (url.pathname === '/__be') {
     const rows = Object.entries(PERSONAS)
-      .map(
-        ([key, p]) =>
-          `<li><a href="/__be/${key}">${p.identity.full_name}</a> — ${p.note}</li>`,
-      )
+      .map(([key, p]) => `<li><a href="/__be/${key}">${p.identity.full_name}</a> — ${p.note}</li>`)
       .join('');
     res.writeHead(200, { 'Content-Type': 'text/html' });
     return res.end(
@@ -286,7 +283,9 @@ const server = createServer(async (req, res) => {
       );
     }
 
-    res.writeHead(302, { Location: `${redirect}?code=stub-code&state=${encodeURIComponent(state)}` });
+    res.writeHead(302, {
+      Location: `${redirect}?code=stub-code&state=${encodeURIComponent(state)}`,
+    });
     return res.end();
   }
 
@@ -359,7 +358,9 @@ const server = createServer(async (req, res) => {
   if (url.pathname === '/3/search/multi') {
     const query = (url.searchParams.get('query') ?? '').toLowerCase();
     return json(res, {
-      results: catalog.filter((item) => (item.title ?? item.name ?? '').toLowerCase().includes(query)),
+      results: catalog.filter((item) =>
+        (item.title ?? item.name ?? '').toLowerCase().includes(query),
+      ),
     });
   }
 
@@ -384,6 +385,21 @@ const server = createServer(async (req, res) => {
   const keywords = url.pathname.match(/^\/3\/(movie|tv)\/(\d+)\/keywords$/);
   if (keywords) {
     return json(res, { keywords: [{ name: 'anime' }] });
+  }
+
+  // Alternative titles, so the demo has something in TitleAlias — the table the search's lexical
+  // arm joins for cross-language matching. Spirited Away carries its Japanese name and a romaji
+  // form; everything else answers an empty list, which is also what TMDB does for most titles.
+  const alternatives = url.pathname.match(/^\/3\/(movie|tv)\/(\d+)\/alternative_titles$/);
+  if (alternatives) {
+    const byId = {
+      129: [
+        { iso_3166_1: 'JP', title: '千と千尋の神隠し', type: '' },
+        { iso_3166_1: 'JP', title: 'Sen to Chihiro no Kamikakushi', type: 'romaji' },
+      ],
+      10494: [{ iso_3166_1: 'JP', title: 'パーフェクトブルー', type: '' }],
+    };
+    return json(res, { titles: byId[Number(alternatives[2])] ?? [] });
   }
 
   const similar = url.pathname.match(/^\/3\/(movie|tv)\/(\d+)\/similar$/);

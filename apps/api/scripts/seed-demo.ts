@@ -380,7 +380,12 @@ async function main() {
       create: { tmdbId, mediaType: 'MOVIE', name: title, overview },
       // Set on an existing row too, so a demo seeded before this carries it after a reseed
       // rather than staying null until somebody happens to suggest the title again.
-      update: { overview },
+      //
+      // `enrichedAt` is cleared for the same reason: the job only looks at titles that have never
+      // been enriched, so a demo whose titles were enriched before aliases existed would never
+      // acquire them. In a deployment the equivalent happens on its own — re-binding a title sets
+      // this to null — but a demo is reseeded rather than re-suggested.
+      update: { overview, enrichedAt: null },
       select: { id: true },
     });
     for (const name of names) {
