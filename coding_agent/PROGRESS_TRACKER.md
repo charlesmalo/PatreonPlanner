@@ -138,6 +138,26 @@ suite is written from the same understanding that produced the gap.
 
 ## Known Debt
 
+- **Cross-language alias matching has no producer.** `TitleAlias` has a schema, a dedicated
+  trigram index, a join in the search query's lexical arm, and a place in the embedding passage.
+  **Nothing writes a row.** The only references outside the read path are two test files, and both
+  create the rows they then match against — so the feature is covered by tests and inert in every
+  running system.
+
+  Found by asking why the demo had zero aliases, after the same question about embeddings turned
+  out to be five bugs deep. The comment claiming aliases were "the one piece of cross-language
+  signal already stored" has been corrected; it was not true.
+
+  **Not built, because it is an integration decision rather than a gap.** The producer would be a
+  new upstream call — TMDB's `alternative_titles` endpoint — meaning a provider method, a fake and
+  a demo-stub fixture, wiring into enrichment, and one more request per title enriched. Everything
+  else closed this session made an existing capability reachable; this one adds a capability. The
+  read side stays as it is: correct, and free against an empty relation.
+
+  Worth knowing what it costs to leave: a board whose patrons search in another language gets
+  nothing from the lexical arm, and the semantic arm only helps once `Title.overview` is populated
+  in the language they searched in — which it is not.
+
 - ~~**Semantic search matches names, not meaning.**~~ Built. The embed job's passage is now
   name, aliases **and** overview, and the column stores a signature — `model#v2` — so changing the
   recipe re-embeds rather than mixing two vector spaces. Measured again afterwards: plot
