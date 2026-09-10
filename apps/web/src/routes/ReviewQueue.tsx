@@ -8,6 +8,7 @@ import { NoteEditor } from '../components/NoteEditor';
 import { NoteList } from '../components/NoteList';
 import { WatchOrderList } from '../components/WatchOrderList';
 import { FlagActions } from './FlagActions';
+import type { StaffPermission } from '../api/types';
 import { RedactForm } from './RedactForm';
 
 const REASON_LABELS: Record<string, string> = {
@@ -68,6 +69,7 @@ export function ReviewQueue() {
               key={item.id}
               slug={slug}
               item={item}
+              permissions={capabilities.permissions ?? []}
               onUpdate={queue.update}
               onFlagResolved={queue.dropFlag}
             />
@@ -95,13 +97,22 @@ export function ReviewQueue() {
 }
 
 interface QueueRowProps {
+  /**
+   * What this moderator may actually do here.
+   *
+   * Loading the queue takes HANDLE_REPORTS and nothing more, so a moderator can reach this page
+   * and hold none of the permissions the controls on it require — which is precisely what an owner
+   * narrowing a moderator produces. Each control below is offered on the same terms the endpoint
+   * behind it demands.
+   */
+  permissions: StaffPermission[];
   slug: string;
   item: ReviewQueueItem;
   onUpdate: (id: string, changes: Partial<ReviewQueueItem>) => void;
   onFlagResolved: (recommendationId: string, flagId: string) => void;
 }
 
-function QueueRow({ slug, item, onUpdate, onFlagResolved }: QueueRowProps) {
+function QueueRow({ slug, item, permissions, onUpdate, onFlagResolved }: QueueRowProps) {
   const [redacting, setRedacting] = useState(false);
 
   return (
@@ -138,27 +149,33 @@ function QueueRow({ slug, item, onUpdate, onFlagResolved }: QueueRowProps) {
               }
             }}
           />
-          <NoteEditor
-            slug={slug}
-            recommendationId={item.id}
-            onWritten={(note) => onUpdate(item.id, { notes: [...(item.notes ?? []), note] })}
-          />
+          {permissions.includes('WRITE_NOTES') ? (
+            <NoteEditor
+              slug={slug}
+              recommendationId={item.id}
+              onWritten={(note) => onUpdate(item.id, { notes: [...(item.notes ?? []), note] })}
+            />
+          ) : null}
         </div>
         <div className="flex items-start gap-2">
-          <button
-            type="button"
-            onClick={() => setRedacting((value) => !value)}
-            className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-slate-700 dark:hover:bg-slate-800"
-          >
-            Redact
-          </button>
-          <StatusControl
-            slug={slug}
-            recommendationId={item.id}
-            title={item.customTitle}
-            status={item.status}
-            onChanged={(id, status) => onUpdate(id, { status })}
-          />
+          {permissions.includes('EDIT_ENTRIES') ? (
+            <button
+              type="button"
+              onClick={() => setRedacting((value) => !value)}
+              className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-slate-700 dark:hover:bg-slate-800"
+            >
+              Redact
+            </button>
+          ) : null}
+          {permissions.includes('MOVE_ENTRIES') ? (
+            <StatusControl
+              slug={slug}
+              recommendationId={item.id}
+              title={item.customTitle}
+              status={item.status}
+              onChanged={(id, status) => onUpdate(id, { status })}
+            />
+          ) : null}
         </div>
       </div>
 

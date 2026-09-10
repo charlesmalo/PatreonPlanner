@@ -36,7 +36,16 @@ describe('ReviewQueue', () => {
     global.fetch = originalFetch;
   });
 
-  const moderator = { view: true, upvote: true, submit: true, moderate: true };
+  // Holding everything, because these cases exercise the controls on the queue and each one
+  // requires its own permission. A moderator with only HANDLE_REPORTS can load this page and use
+  // none of them — that is its own case below.
+  const moderator = {
+    view: true,
+    upvote: true,
+    submit: true,
+    moderate: true,
+    permissions: ['MOVE_ENTRIES', 'EDIT_ENTRIES', 'WRITE_NOTES', 'HANDLE_REPORTS'],
+  };
 
   it('shows each entry with its flag reasons and notes', async () => {
     global.fetch = fakeApi({
@@ -214,5 +223,31 @@ describe('ReviewQueue', () => {
     expect(await screen.findByText('<img src=x onerror=alert(1)>')).toBeInTheDocument();
     expect(container.querySelector('img[src="x"]')).toBeNull();
     expect(container.querySelector('script')).toBeNull();
+  });
+
+  it('offers no control a moderator cannot use', async () => {
+    // Loading the queue takes HANDLE_REPORTS and nothing more, so this is exactly what an owner
+    // narrowing a moderator produces: someone who can read the queue and act on none of it. Every
+    // control here was offered anyway, and every one answered 403.
+    global.fetch = fakeApi({
+      'GET /api/v1/creators/ada-writes': creator,
+      'GET /api/v1/creators/ada-writes/capabilities': {
+        view: true,
+        upvote: false,
+        submit: false,
+        moderate: true,
+        permissions: ['HANDLE_REPORTS'],
+      },
+      'GET /api/v1/creators/ada-writes/review-queue': {
+        items: [queueItem()],
+        nextOffset: null,
+      },
+    });
+    renderQueue();
+
+    await screen.findByText('Spirited Away');
+    expect(screen.queryByRole('button', { name: /redact/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Move/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: /note/i })).not.toBeInTheDocument();
   });
 });
