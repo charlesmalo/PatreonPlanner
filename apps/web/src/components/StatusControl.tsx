@@ -62,7 +62,10 @@ export function StatusControl({
         status === 409
           ? 'That move is not allowed from here.'
           : status === 403
-            ? 'You do not moderate this board.'
+            ? // Not "you do not moderate this board": the likeliest 403 here is a moderator who
+              // does moderate it and was never granted MOVE_ENTRIES, and telling them otherwise
+              // sends them looking for the wrong problem.
+              'Moving entries is not one of your permissions on this board.'
             : status === 401
               ? 'Sign in to moderate.'
               : 'Could not move that entry. Try again.',

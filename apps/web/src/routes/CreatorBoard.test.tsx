@@ -159,7 +159,16 @@ describe('CreatorBoard columns', () => {
     window.localStorage.clear();
   });
 
-  const moderator = { view: true, upvote: true, submit: true, moderate: true };
+  // With MOVE_ENTRIES, because these cases are about a moderator who can move things. The
+  // capability alone is not enough: the API requires the permission on every status endpoint, so
+  // a moderator without it is offered no Move control — which is its own test on the card.
+  const moderator = {
+    view: true,
+    upvote: true,
+    submit: true,
+    moderate: true,
+    permissions: ['MOVE_ENTRIES'],
+  };
 
   function boardWith(items: Array<{ status?: string }>, capabilities: unknown = viewOnly) {
     global.fetch = fakeApi({
