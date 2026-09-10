@@ -185,7 +185,14 @@ export interface CreatorProfile {
   slug: string;
   displayName: string;
   baseUrl: string | null;
-  tiers: Array<{ id: string; title: string; amountCents: number; order: number }>;
+  tiers: Array<{
+    id: string;
+    title: string;
+    amountCents: number;
+    order: number;
+    /** What one vote from this tier counts for. 1 unless the creator has changed it. */
+    voteWeight: number;
+  }>;
 }
 
 export interface SubmitResult {

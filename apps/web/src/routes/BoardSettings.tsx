@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { useCreator } from '../api/hooks';
 import { Blocklist } from '../components/Blocklist';
+import { TierWeights } from '../components/TierWeights';
 import { WebhookSecret } from '../components/WebhookSecret';
 
 type Visibility = 'PUBLIC' | 'ANY_PATREON_USER' | 'SUBSCRIBERS_ONLY';
@@ -262,6 +263,16 @@ export function BoardSettings() {
       */}
       {capabilities.administer ? (
         <>
+          {/*
+            Owner-only, matching the API: deciding what a pledge is worth in the ranking is not a
+            moderation power. Placed above the blocklist because it is the one setting here that
+            changes what the board *shows* rather than what it accepts.
+          */}
+          <fieldset className="mt-8">
+            <legend className="text-sm font-medium">What a vote from each tier counts for</legend>
+            <TierWeights slug={slug} tiers={tiers} />
+          </fieldset>
+
           <fieldset className="mt-8">
             <legend className="text-sm font-medium">Words this board will not accept</legend>
             <Blocklist slug={slug} />

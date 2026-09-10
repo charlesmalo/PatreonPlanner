@@ -161,7 +161,11 @@ export class CreatorsService {
         displayName: true,
         baseUrl: true,
         tiers: {
-          select: { id: true, title: true, amountCents: true, order: true },
+          // `voteWeight` alongside the price: it is how this board counts a vote from that tier,
+          // and a patron can already read it for their own tier on the my-votes page. The
+          // settings page needs it to show what it is editing, and a reader deciding whether to
+          // pledge is entitled to know what the pledge is worth here.
+          select: { id: true, title: true, amountCents: true, order: true, voteWeight: true },
           orderBy: { amountCents: 'asc' },
         },
       },

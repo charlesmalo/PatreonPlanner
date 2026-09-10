@@ -80,8 +80,11 @@ describe('Creator read and policy endpoints (integration)', () => {
       displayName: 'Policy Co',
       baseUrl: 'https://policy.example.com',
       tiers: [
-        { id: tierIds.lo, title: 'Bronze', amountCents: 300, order: 0 },
-        { id: tierIds.hi, title: 'Gold', amountCents: 1000, order: 1 },
+        // `voteWeight` travels with the tier: it is how this board counts a vote, and a patron can
+        // already read it for their own tier on the my-votes page. Nothing is disclosed by saying
+        // it beside the price, and the settings page needs it to show what it is editing.
+        { id: tierIds.lo, title: 'Bronze', amountCents: 300, order: 0, voteWeight: 1 },
+        { id: tierIds.hi, title: 'Gold', amountCents: 1000, order: 1, voteWeight: 1 },
       ],
     });
   });
