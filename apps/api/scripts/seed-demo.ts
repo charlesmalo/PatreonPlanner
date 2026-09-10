@@ -373,6 +373,22 @@ async function main() {
       ['Anime'],
       'A pop idol turns actress and loses her grip on which of her selves is real.',
     ],
+    // Two more so the walkthrough's §7 can actually be followed. Folding is per reader per type,
+    // so a reader narrowed to Anime needs *three* Anime entries to move before they see one item
+    // saying "and 2 other changes" — with a single themed entry there is nothing to fold, and the
+    // instruction reads as a broken feature rather than a thin fixture.
+    [
+      'Princess Mononoke',
+      128,
+      ['Anime'],
+      'A prince cursed by a dying god walks into a war between a forest and an iron town.',
+    ],
+    [
+      'My Neighbor Totoro',
+      8392,
+      ['Anime'],
+      'Two sisters move to the country and meet the spirit who lives in the camphor tree.',
+    ],
   ];
   for (const [title, tmdbId, names, overview] of themed) {
     const catalogTitle = await prisma.title.upsert({

@@ -103,9 +103,14 @@ answer there is.
 
 ### 7. Tidying is one piece of news
 
-Move three entries to Now Playing in a row. Bea gets **one** bell item saying "and 2 other
-changes", not three. A creator tidying a board is one act, not eight notifications in everybody's
-evening.
+As **Ada**, move **Perfect Blue** and **My Neighbor Totoro** to Now Playing, one after the other.
+Bea gets **one** bell item — "…and 1 other change" — not two. A creator tidying a board is one
+act, not eight notifications in everybody's evening.
+
+Both are Cal's suggestions on purpose. Folding is per reader and per kind of news, and a reader
+hears about their *own* suggestion moving as a different kind — so moving Bea's own **Princess
+Mononoke** produces a separate item beside the folded one rather than joining it. That is correct,
+and it is why this step names the entries instead of saying "move some".
 
 ### 8. Carrying a list across boards
 
