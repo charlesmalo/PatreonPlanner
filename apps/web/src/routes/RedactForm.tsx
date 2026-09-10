@@ -47,7 +47,9 @@ export function RedactForm({
         status === 400
           ? 'That text was rejected. Try rewording it.'
           : status === 403
-            ? 'You do not moderate this board.'
+            ? // Names the permission, not the role: a 403 here is somebody who moderates this
+              // board and lacks EDIT_ENTRIES.
+              'Editing entries is not one of your permissions on this board.'
             : 'Could not save that redaction. Try again.',
       );
     } finally {

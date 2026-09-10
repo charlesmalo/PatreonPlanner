@@ -110,7 +110,7 @@ describe('ReviewQueue', () => {
       'GET /api/v1/creators/ada-writes/review-queue': new Error('403'),
     });
     renderQueue();
-    expect(await screen.findByText(/do not moderate this board/i)).toBeInTheDocument();
+    expect(await screen.findByText(/not one of your permissions/i)).toBeInTheDocument();
   });
 
   it('dismisses a flag and drops it from the list', async () => {

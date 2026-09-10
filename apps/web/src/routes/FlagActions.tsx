@@ -29,7 +29,10 @@ export function FlagActions({
     } catch (error) {
       setMessage(
         error instanceof ApiError && error.status === 403
-          ? 'You do not moderate this board.'
+          ? // Names the permission, not the role. A 403 here almost always means somebody who
+            // *does* moderate this board and was never granted HANDLE_REPORTS — telling them
+            // they do not moderate it sends them looking for the wrong problem.
+            'Handling reports is not one of your permissions on this board.'
           : 'Could not update that report. Try again.',
       );
     } finally {

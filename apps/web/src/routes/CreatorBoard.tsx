@@ -135,7 +135,12 @@ export function CreatorBoard() {
             Your votes
           </Link>
         ) : null}
-        {capabilities.moderate ? (
+        {/*
+          HANDLE_REPORTS, not merely MODERATE: the tickets list and the review queue are on a
+          controller that demands the permission, so a moderator without it followed either link
+          into a refusal — the queue claiming they did not moderate a board they do moderate.
+        */}
+        {capabilities.moderate && capabilities.permissions?.includes('HANDLE_REPORTS') ? (
           <Link
             to={`/c/${encodeURIComponent(slug)}/tickets`}
             className="text-sm text-sky-700 underline focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:text-sky-400"
@@ -143,7 +148,7 @@ export function CreatorBoard() {
             Messages
           </Link>
         ) : null}
-        {capabilities.moderate ? (
+        {capabilities.moderate && capabilities.permissions?.includes('HANDLE_REPORTS') ? (
           <Link
             to={`/c/${encodeURIComponent(slug)}/review`}
             className="text-sm text-sky-700 underline focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:text-sky-400"

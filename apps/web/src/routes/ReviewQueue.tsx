@@ -32,7 +32,10 @@ export function ReviewQueue() {
     return (
       <p role="status" className="text-slate-600 dark:text-slate-300">
         {queue.error.status === 403 || queue.error.status === 401
-          ? 'You do not moderate this board.'
+          ? // Names the permission, not the role. A 403 here almost always means somebody who
+            // *does* moderate this board and was never granted HANDLE_REPORTS — telling them
+            // they do not moderate it sends them looking for the wrong problem.
+            'Handling reports is not one of your permissions on this board.'
           : 'Could not load the review queue. Try again.'}
       </p>
     );
