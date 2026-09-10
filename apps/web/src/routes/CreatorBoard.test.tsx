@@ -167,7 +167,10 @@ describe('CreatorBoard columns', () => {
     upvote: true,
     submit: true,
     moderate: true,
-    permissions: ['MOVE_ENTRIES'],
+    // Both permissions: these cases cover a moderator who can move things *and* work the queue,
+    // which is what the links and controls they assert on require. A moderator holding neither is
+    // its own case below.
+    permissions: ['MOVE_ENTRIES', 'HANDLE_REPORTS'],
   };
 
   function boardWith(items: Array<{ status?: string }>, capabilities: unknown = viewOnly) {
@@ -517,7 +520,10 @@ describe('CreatorBoard admin link', () => {
     // swapping the gate to `moderate` — or deleting it — left the suite green.
     boardWith({ ...viewOnly, moderate: true, administer: false });
     renderBoard();
-    await screen.findByRole('link', { name: /review queue/i });
+    // Waits on the board itself. This used to wait on the review-queue link, which is no longer
+    // offered to a moderator without HANDLE_REPORTS — and this case is about the Moderators link,
+    // not about which other links happen to be present.
+    await screen.findByRole('heading', { name: creator.displayName });
     expect(screen.queryByRole('link', { name: 'Moderators' })).not.toBeInTheDocument();
   });
 
@@ -559,5 +565,28 @@ describe('CreatorBoard admin link', () => {
 
       expect(await screen.findByLabelText(/message the moderators/i)).toBeInTheDocument();
     });
+  });
+
+  it('offers Messages and the review queue only with HANDLE_REPORTS', async () => {
+    // Both destinations require the permission — `review-queue` and the tickets list are on a
+    // controller that demands it. A moderator without it followed either link and met a refusal:
+    // the queue said "You do not moderate this board", which they do, and Messages said the load
+    // had failed.
+    global.fetch = fakeApi({
+      'GET /api/v1/creators/ada-writes': creator,
+      'GET /api/v1/creators/ada-writes/capabilities': {
+        view: true,
+        moderate: true,
+        permissions: ['MOVE_ENTRIES'],
+      },
+      'GET /api/v1/creators/ada-writes/themes': { items: [] },
+      'GET /api/v1/creators/ada-writes/recommendations': { items: [], nextCursor: null },
+      'GET /api/v1/creators/ada-writes/view-settings': { mode: 'MODERATOR' },
+    });
+    renderBoard();
+
+    await screen.findByRole('heading', { name: creator.displayName });
+    expect(screen.queryByRole('link', { name: /messages/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /review queue/i })).not.toBeInTheDocument();
   });
 });

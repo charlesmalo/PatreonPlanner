@@ -98,7 +98,7 @@ describe('ReviewQueue', () => {
     expect(await screen.findByText(/nothing to review/i)).toBeInTheDocument();
   });
 
-  it('explains a refusal rather than crashing', async () => {
+  it('tells somebody who does not moderate the board exactly that', async () => {
     global.fetch = fakeApi({
       'GET /api/v1/creators/ada-writes': creator,
       'GET /api/v1/creators/ada-writes/capabilities': {
@@ -111,6 +111,25 @@ describe('ReviewQueue', () => {
     });
     renderQueue();
     expect(await screen.findByText(/do not moderate this board/i)).toBeInTheDocument();
+  });
+
+  it('tells a moderator without the permission that it is the permission', async () => {
+    // The same 403, and a different sentence, because the two are different problems: one person
+    // needs a staff row and the other already has one. Saying "you do not moderate this board" to
+    // a moderator sends them looking for something they already have.
+    global.fetch = fakeApi({
+      'GET /api/v1/creators/ada-writes': creator,
+      'GET /api/v1/creators/ada-writes/capabilities': {
+        view: true,
+        upvote: false,
+        submit: false,
+        moderate: true,
+        permissions: ['MOVE_ENTRIES'],
+      },
+      'GET /api/v1/creators/ada-writes/review-queue': new Error('403'),
+    });
+    renderQueue();
+    expect(await screen.findByText(/not one of your permissions/i)).toBeInTheDocument();
   });
 
   it('dismisses a flag and drops it from the list', async () => {
