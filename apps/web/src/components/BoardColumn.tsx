@@ -52,6 +52,10 @@ export function BoardColumn({
   onMoved,
   emptyText = 'Nothing here yet.',
 }: BoardColumnProps) {
+  // `rank` requires MOVE_ENTRIES, exactly as the status endpoints do — so dragging a card is
+  // offered on the same terms as the Move control beside it. Gated on the capability alone, a
+  // moderator without the permission could drag a card and watch it spring back on a 403.
+  const canMove = canModerate && (permissions ?? []).includes('MOVE_ENTRIES');
   const [sort, setSort] = useState(() => localSort(slug, status));
   const [dragOver, setDragOver] = useState(false);
 
@@ -125,7 +129,7 @@ export function BoardColumn({
     <section
       aria-label={label}
       onDragOver={(event) => {
-        if (!canModerate) return;
+        if (!canMove) return;
         // Preventing the default is what marks this a valid drop target; without it the browser
         // refuses the drop and nothing happens.
         event.preventDefault();
@@ -134,7 +138,7 @@ export function BoardColumn({
       }}
       onDragLeave={() => setDragOver(false)}
       onDrop={(event) => {
-        if (!canModerate) return;
+        if (!canMove) return;
         event.preventDefault();
         setDragOver(false);
         const dragged = readDrag(event.dataTransfer);
@@ -204,7 +208,7 @@ export function BoardColumn({
                   onDragOver={(event) => {
                     // Only in manual sort: anywhere else the order is computed, so a hand-placed
                     // position would not survive the next render.
-                    if (canModerate && sort === 'manual') event.preventDefault();
+                    if (canMove && sort === 'manual') event.preventDefault();
                   }}
                   onDrop={(event) => {
                     if (!canModerate || sort !== 'manual') return;
