@@ -17,6 +17,7 @@ export class FakeCatalogProvider implements CatalogProvider {
     parts: [],
     similar: [],
     labels: [],
+    aliases: [],
   };
 
   isConfigured(): boolean {
