@@ -40,6 +40,18 @@ let catalog = [
     genres: [{ name: 'Animation' }],
   },
   {
+    // Seeded onto the demo board, so the stub has to know it: without an entry here its detail
+    // lookup 404s and enrichment fails on every tick, for ever, for a title sitting in plain
+    // sight on the board.
+    id: 10494,
+    media_type: 'movie',
+    title: 'Perfect Blue',
+    release_date: '1997-08-05',
+    poster_path: '/perfectblue.jpg',
+    overview: 'A pop idol turns actress and loses her grip on which of her selves is real.',
+    genres: [{ name: 'Animation' }, { name: 'Thriller' }],
+  },
+  {
     id: 8392,
     media_type: 'movie',
     title: 'My Neighbor Totoro',

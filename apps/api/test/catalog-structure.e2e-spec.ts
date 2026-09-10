@@ -132,4 +132,51 @@ describe('TmdbCatalogProvider structure', () => {
     });
     expect((await provider.fetchStructure(129, 'MOVIE')).labels).toEqual(['Anime']);
   });
+
+  it('says which title upstream does not know, rather than throwing a blank error', async () => {
+    // `class TitleNotFound extends Error {}` was constructed with no message, so every 404 reached
+    // the enrichment job's logger as "Enrichment failed for title <uuid>: " — a warning that
+    // repeats on every tick and says nothing. A title upstream has never heard of is a permanent,
+    // diagnosable condition and the log has to name it.
+    stubRoutes({});
+
+    await expect(provider.fetchStructure(999999, 'MOVIE')).rejects.toThrow(/999999/);
+    await expect(provider.fetchStructure(999999, 'MOVIE')).rejects.toThrow(/not know|not found/i);
+  });
+
+  it('reads the names a title is known by elsewhere', async () => {
+    stubRoutes({
+      '/movie/129': { body: { id: 129 } },
+      '/movie/129/alternative_titles': {
+        body: {
+          titles: [
+            { iso_3166_1: 'JP', title: '千と千尋の神隠し', type: '' },
+            { iso_3166_1: 'JP', title: 'Sen to Chihiro', type: 'romaji' },
+            // A duplicate differing only in case, which the unique index would reject.
+            { iso_3166_1: 'jp', title: 'SEN TO CHIHIRO', type: '' },
+          ],
+        },
+      },
+    });
+
+    const structure = await provider.fetchStructure(129, 'MOVIE');
+
+    expect(structure.aliases).toEqual([
+      { language: 'jp', kind: 'ALTERNATIVE', text: '千と千尋の神隠し' },
+      { language: 'jp', kind: 'ROMAJI', text: 'Sen to Chihiro' },
+    ]);
+  });
+
+  it('keeps its collection when the alias endpoint fails', async () => {
+    // Aliases are garnish. One failing sub-call must not cost a title the thing it nests under.
+    stubRoutes({
+      '/movie/129': { body: { id: 129, belongs_to_collection: { id: 10, name: 'Ghibli' } } },
+      '/movie/129/alternative_titles': { status: 500 },
+    });
+
+    const structure = await provider.fetchStructure(129, 'MOVIE');
+
+    expect(structure.collection).toEqual({ tmdbId: 10, name: 'Ghibli' });
+    expect(structure.aliases).toEqual([]);
+  });
 });
