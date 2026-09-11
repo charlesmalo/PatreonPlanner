@@ -286,8 +286,19 @@ suite is written from the same understanding that produced the gap.
   | `sharp`   | `@huggingface/transformers` | image decoding the embeddings path never invokes           |
   | `adm-zip` | `@huggingface/transformers` | model-archive extraction, same                             |
 
-  `multer` is the one to revisit: the fix is a major bump and the day this API takes
-  its first upload, the DoS becomes reachable. Re-check with `pnpm audit --prod`.
+  `multer` was revisited and taken. The fix is a major bump, which is why it was left
+  the first time — but "risky" was an assertion, and testing it is cheap: multer 2.3.0
+  under an override, 1276 API tests, 91 e2e journeys through the whole HTTP stack, and
+  a clean container boot. Nothing referenced it, because nothing ever did.
+
+  `path-to-regexp` was pinned to exactly `0.1.12` and **went stale**: a second advisory
+  was published against `<0.1.13`, and an exact pin cannot float forward. It is
+  `~0.1.13` now, so the next patch arrives without being asked. Worth remembering when
+  writing the next override.
+
+  Production advisories stand at 15, 3 high — `sharp` and `adm-zip` from
+  `@huggingface/transformers`, whose image and archive paths the embedding job never
+  invokes. Re-check with `pnpm audit --prod`.
 
 - ~~**Webhooks never reached the API through the deployed origin.**~~ Fixed. nginx
   forwarded `/api/` and `/auth/` and not `/webhooks/`, so every Patreon and Resend
