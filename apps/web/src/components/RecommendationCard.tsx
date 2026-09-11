@@ -5,8 +5,8 @@ import type { Recommendation, StaffPermission } from '../api/types';
 const POSTER_BASE = 'https://image.tmdb.org/t/p/w92';
 
 import { AvailabilityBadges } from './AvailabilityBadges';
-import { isSafeHttpUrl } from './safe-url';
 import { LinkCandidates } from './LinkCandidates';
+import { PublishedLinks } from './PublishedLinks';
 import { FlagButton } from './FlagButton';
 import { FollowButton } from './FollowButton';
 import { NoteList } from './NoteList';
@@ -135,26 +135,12 @@ export function RecommendationCard({
             {recommendation.description}
           </p>
         ) : null}
-        {recommendation.links.length > 0 ? (
-          <ul className="mt-2 flex flex-wrap gap-3">
-            {recommendation.links
-              .filter((link) => isSafeHttpUrl(link.url))
-              .map((link, index) => (
-                <li key={`${link.url}-${index}`}>
-                  <a
-                    href={link.url}
-                    target="_blank"
-                    // The URL is entirely submitter-chosen, so the opened page must not get a
-                    // handle on this one.
-                    rel="noopener noreferrer"
-                    className="break-all text-sm text-sky-700 underline focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:text-sky-400"
-                  >
-                    {link.label ?? link.url}
-                  </a>
-                </li>
-              ))}
-          </ul>
-        ) : null}
+        <PublishedLinks
+          slug={slug}
+          links={recommendation.links ?? []}
+          canModerate={canModerate}
+          permissions={permissions ?? []}
+        />
         {/* Defensive `?? []` for the reason `themes` and `notes` carry one: a card renders from
             both the board projection and a submit response, and a shape mismatch between them
             should cost this strip, not the page. */}

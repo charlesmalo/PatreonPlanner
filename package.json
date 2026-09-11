@@ -10,7 +10,8 @@
     "audit:reachability": "node scripts/audit-reachability.mjs",
     "audit:enums": "node scripts/audit-enum-coverage.mjs",
     "audit:proxy": "node scripts/audit-proxy-paths.mjs",
-    "audit:all": "pnpm audit:reachability && pnpm audit:enums && pnpm audit:proxy",
+    "audit:dto": "node scripts/audit-dto-reach.mjs",
+    "audit:all": "pnpm audit:reachability && pnpm audit:enums && pnpm audit:proxy && pnpm audit:dto",
     "test": "pnpm -r test",
     "format": "prettier --write \"**/*.{ts,tsx,json,md,yaml,yml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,json,md,yaml,yml}\""
