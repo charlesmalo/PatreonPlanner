@@ -3,14 +3,11 @@ import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import type { Notification } from '../api/types';
 import { describeResolution } from '../api/ticket-wording';
+import { NOTIFICATION_FILTERS } from '../api/notification-wording';
 
-type Filter =
-  | ''
-  | 'ENTRY_STATUS_CHANGED'
-  | 'ENTRY_FLAGGED'
-  | 'ENTRY_MOVED'
-  | 'TICKET_RAISED'
-  | 'TICKET_RESOLVED';
+// Derived, never restated: a second copy of this union is a second thing to keep in step, and
+// the one that used to live here was already the kind of drift the enum audit was written for.
+type Filter = '' | Notification['type'];
 type Sort = '' | 'oldest' | 'severity';
 
 /**
@@ -66,11 +63,11 @@ export function NotificationsPage() {
             className="mt-1 rounded border border-slate-300 px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-slate-700 dark:bg-slate-950"
           >
             <option value="">Everything</option>
-            <option value="ENTRY_FLAGGED">Reports</option>
-            <option value="ENTRY_STATUS_CHANGED">Status changes</option>
-            <option value="ENTRY_MOVED">Boards you follow</option>
-            <option value="TICKET_RAISED">Messages to moderators</option>
-            <option value="TICKET_RESOLVED">Answers to your messages</option>
+            {NOTIFICATION_FILTERS.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
           </select>
         </div>
 

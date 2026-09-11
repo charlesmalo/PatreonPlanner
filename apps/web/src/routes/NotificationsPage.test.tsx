@@ -1,8 +1,9 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { NotificationsPage } from './NotificationsPage';
 import type { Notification } from '../api/types';
+import { NOTIFICATION_FILTERS } from '../api/notification-wording';
 
 const report = (id: string, title: string, reason = 'SPAM'): Notification => ({
   id,
@@ -94,6 +95,23 @@ describe('NotificationsPage', () => {
     await userEvent.click(screen.getByLabelText(/unread only/i));
 
     await waitFor(() => expect(queries.at(-1)).toMatch(/unreadOnly=true/));
+  });
+
+  it('offers a filter for every kind of notification the API can send', async () => {
+    // The gap this closes: the enum audit compares api/types.ts to the Prisma enum and stops
+    // there, and this page used to keep its own copy of the union plus a hand-written option per
+    // value. A sixth kind therefore typechecked cleanly and arrived unfilterable — the exact bug
+    // the audit exists for, one file further along. The options are generated from an exhaustive
+    // Record now, so the same mistake is a compile error instead.
+    stubApi();
+    setup();
+    await screen.findByRole('heading', { name: /notifications/i });
+
+    const select = screen.getByLabelText(/show/i);
+    const values = within(select)
+      .getAllByRole('option')
+      .map((option) => (option as HTMLOptionElement).value);
+    expect(values).toEqual(['', ...NOTIFICATION_FILTERS.map(([value]) => value)]);
   });
 
   it('says so when there is nothing to show', async () => {
