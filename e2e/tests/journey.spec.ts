@@ -600,6 +600,27 @@ test('an entry opens on its own page, and that page can be shared', async ({ pag
   await page.waitForURL((url) => url.pathname === `/c/${CREATOR.slug}`);
 });
 
+test('an entry page knows the reader already follows it', async ({ page }) => {
+  // The entry page was rendering a card from a response that hardcoded `following: false`, so a
+  // reader who followed something opened its own page — the URL notifications point at — and read
+  // "Follow". Pressing it followed again; there was no way to stop following from there. The
+  // integration tests cover the payload, and this covers the only thing a reader actually sees:
+  // the control, on the page, seeded from it.
+  seedEntryFrom('patreon-other-e2e', 'Kiki', 'ACCEPTED');
+  await signIn(page, 500, 'patreon-follows-e2e');
+  await page.goto(`/c/${CREATOR.slug}`);
+  await showColumn(page, 'Accepted');
+
+  await page.getByRole('button', { name: /^Follow .Kiki./ }).click();
+  await expect(page.getByRole('button', { name: /^Stop following .Kiki./ })).toBeVisible();
+
+  await page.getByRole('link', { name: 'Kiki' }).click();
+  await page.waitForURL((url) => /\/e\/[0-9a-f-]+$/.test(url.pathname));
+
+  await expect(page.getByRole('heading', { level: 1, name: 'Kiki' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Stop following .Kiki./ })).toBeVisible();
+});
+
 test('a shared link to an entry nobody can see says so rather than breaking', async ({ page }) => {
   await signIn(page, 500, 'patreon-detail-e2e');
   await page.goto(`/c/${CREATOR.slug}/e/11111111-1111-4111-8111-111111111111`);
