@@ -252,6 +252,18 @@ suite is written from the same understanding that produced the gap.
   floor is 0.208 now, set toward recall because missing a duplicate is the failure this feature
   exists to prevent.
 
+  The claim that justifies setting it toward recall — that the trigram arm independently catches
+  anything matching by spelling — was repeated in several commit messages before anybody checked
+  it. Checked now, with the provider switched off so the vector arm returns nothing at all:
+  `sprited away`, `perfect blu` and `totoro` all still find their entries; the two plot
+  descriptions find nothing, which is correct, because matching those is the other arm's job. So a
+  floor set slightly tight costs meaning-matches and never spelling-matches, as claimed.
+
+  A first attempt at that measurement was wrong and worth recording: clearing the `embedding`
+  column looked like it disabled the vector arm, and the embed job refilled every row within
+  seconds. The queries that then "proved" trigram could match a plot description were running
+  against a live vector index. Disabling the provider is the only way to hold that arm still.
+
   The lesson is about the sample, not the constant: a threshold chosen from a handful of examples
   will look comfortable, because a handful of examples rarely contains the awkward case. It will
   narrow further as a board grows. Treat a rise in wrong "already on the board?" prompts as the
