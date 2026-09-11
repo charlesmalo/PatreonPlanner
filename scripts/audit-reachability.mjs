@@ -35,11 +35,19 @@
  * entry had to be removed. Nothing about that route changed. Segment collisions cost visibility
  * silently, and the only defence is that the check never claims the opposite.
  *
- * A route whose deepest segment is a common word is invisible to this. `/auth/patreon/login` and
- * `/webhooks/patreon/:creatorId` never appear below, because `login` and `patreon` occur all over
- * the client for unrelated reasons — both happen to be fine, but a route named `/creators/:slug/list`
- * would be missed the same way and would not be. The check is one-sided on purpose: silence here
- * is weak evidence, while a name that appears is strong evidence.
+ * A route is reachable here only if *every* literal segment appears in the client, not just the
+ * deepest one. Matching on the deepest alone missed
+ * `GET /creators/:slug/catalog/titles/:id/availability`: `availability` is all over the client
+ * because `AvailabilityBadges` renders the field of that name, while nothing ever built a path
+ * containing `catalog/titles`. The route had no caller and the check said nothing. Requiring
+ * every segment was measured against a clean tree before being adopted — it produced exactly one
+ * new finding, that route, and no false alarms.
+ *
+ * It is still one-sided. `/auth/patreon/login` and `/webhooks/patreon/:creatorId` do not appear
+ * below because every one of their segments occurs in the client for unrelated reasons — the
+ * second because a settings component prints the delivery URL for a creator to paste into
+ * Patreon, which is a mention and not a call. Silence here remains weak evidence; a name that
+ * appears is strong evidence.
  *
  * Run: `node scripts/audit-reachability.mjs`
  * Exits non-zero if anything is unreachable that is not on the allow list below.
@@ -55,6 +63,11 @@ const EXPECTED = new Map([
   ['GET /email/unsubscribe', 'A link in an email, opened outside the app'],
   ['GET /healthz', 'Infrastructure'],
   ['GET /readyz', 'Infrastructure'],
+  [
+    'GET /creators/:slug/catalog/titles/:id/availability',
+    'The per-region form of a question the board and the entry page both already answer inline; ' +
+      'nothing in the client asks for a region yet',
+  ],
   ['POST /webhooks/resend', 'Inbound from Resend'],
 ]);
 
@@ -103,8 +116,8 @@ const unreachable = [];
 for (const route of [...routes].sort()) {
   const [, path] = route.split(' ');
   const segments = path.split('/').filter((s) => s && !s.startsWith(':'));
-  const deepest = segments.at(-1);
-  if (deepest && !client.includes(deepest)) unreachable.push(route);
+  if (segments.length && !segments.every((segment) => client.includes(segment)))
+    unreachable.push(route);
 }
 
 const unexpected = unreachable.filter((r) => !EXPECTED.has(r));

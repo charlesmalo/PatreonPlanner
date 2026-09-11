@@ -210,6 +210,70 @@ describe('Entry detail (integration)', () => {
     expect((await get(ids.visible, author).expect(200)).body.hasUpvoted).toBe(false);
   });
 
+  it('reports whether the reader follows it', async () => {
+    // The sibling of hasUpvoted above, and it was missing. FollowButton seeds its state from this
+    // field, so a reader who follows an entry opened its own page, read "Follow", and pressing it
+    // followed again — there was no way to stop following from the page the notification links to.
+    await ctx.prisma.entryFollow.create({
+      data: { recommendationId: ids.visible, userId: patronUserId },
+    });
+
+    expect((await get(ids.visible, patron).expect(200)).body.following).toBe(true);
+    expect((await get(ids.visible, author).expect(200)).body.following).toBe(false);
+  });
+
+  it('carries the reactions the board card shows', async () => {
+    await ctx.prisma.reaction.create({
+      data: { recommendationId: ids.visible, userId: patronUserId, emote: '🍿' },
+    });
+
+    const res = await get(ids.visible, patron).expect(200);
+    expect(res.body.reactions).toEqual([expect.objectContaining({ emote: '🍿', count: 1 })]);
+  });
+
+  it('honours the board switch that turns reactions off', async () => {
+    // Not fetched and hidden — not fetched. A count nobody may see is a query nobody needs, which
+    // is the rule the board list already follows.
+    await ctx.prisma.reaction.create({
+      data: { recommendationId: ids.visible, userId: patronUserId, emote: '🍿' },
+    });
+    await ctx.prisma.creatorPolicy.update({
+      where: { creatorId },
+      data: { allowReactions: false },
+    });
+
+    expect((await get(ids.visible, patron).expect(200)).body.reactions).toEqual([]);
+
+    await ctx.prisma.creatorPolicy.update({
+      where: { creatorId },
+      data: { allowReactions: true },
+    });
+  });
+
+  it('carries the themes the board card shows', async () => {
+    const title = await ctx.prisma.title.create({
+      data: { tmdbId: 4141, mediaType: 'MOVIE', name: 'Themed' },
+    });
+    const theme = await ctx.prisma.theme.create({
+      data: { creatorId, name: 'Comfort watches', slug: 'comfort-watches' },
+    });
+    await ctx.prisma.titleTheme.create({ data: { titleId: title.id, themeId: theme.id } });
+    const bound = await ctx.prisma.recommendation.create({
+      data: {
+        creatorId,
+        submittedByUserId: authorUserId,
+        type: 'MOVIE',
+        customTitle: 'Themed',
+        normalizedTitle: 'themed',
+        status: 'ACCEPTED',
+        titleId: title.id,
+      },
+    });
+
+    const res = await get(bound.id, patron).expect(200);
+    expect(res.body.themes).toEqual([{ id: theme.id, name: 'Comfort watches' }]);
+  });
+
   it('carries the notes a reader is allowed to see', async () => {
     await ctx.prisma.creatorNote.create({
       data: {

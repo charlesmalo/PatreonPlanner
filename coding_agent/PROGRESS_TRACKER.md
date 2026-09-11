@@ -87,7 +87,27 @@ What remains needs access this repository does not have:
 
 ## Open Questions Blocking Work
 
-**None.** All three that stood here were answered and built:
+**One, and it does not block anything shipped.**
+
+**Availability is answered for one region, server-wide.** The board and the entry page both
+embed `availability` for `AVAILABILITY_REGION_DEFAULT`, so a patron in France reads "Where to
+watch (US)" and a list of US offers. `GET /creators/:slug/catalog/titles/:id/availability` takes
+a `region` and is the only thing that can answer otherwise; nothing in the client passes one,
+which is why it sat unreachable. Three ways out, and the choice is the engineer's because each
+costs something different:
+
+| Option                                      | Cost                                                                         |
+| ------------------------------------------- | ---------------------------------------------------------------------------- |
+| Leave it                                    | Wrong answer for every reader outside the default region                     |
+| Reader picks a region, stored as preference | One more setting; the refresh job gains a row per region asked for, forever  |
+| Infer from the request                      | Needs geo-IP — a dependency, and a privacy question this project has avoided |
+
+The refresh obligation is the part worth weighing: `AvailabilityQuery` already refuses regions
+the deployment does not serve, with the comment that an open region set lets one caller create a
+permanent row and a permanent refresh obligation for every country on earth. Whichever way this
+goes, the bounded set stays bounded.
+
+All three questions that previously stood here were answered and built:
 
 | Question                                         | Answer                                                      |
 | ------------------------------------------------ | ----------------------------------------------------------- |

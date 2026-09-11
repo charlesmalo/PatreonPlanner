@@ -94,9 +94,67 @@ export class RecommendationsService {
     });
     if (!entry) throw new NotFoundException();
 
-    return viewer.userId
-      ? withUpvoted(this.prisma, entry, viewer.userId)
+    const card = viewer.userId
+      ? await withUpvoted(this.prisma, entry, viewer.userId)
       : { ...present(entry), hasUpvoted: false, ...BOARD_ONLY_DEFAULTS };
+
+    // BOARD_ONLY_DEFAULTS is right where a value is genuinely unknown — a fresh submission has no
+    // reactions and nobody has looked its availability up — and wrong here, where every one of
+    // these is a fact about an entry the board has been rendering in full. A reader following a
+    // link to an entry's own page, which is the URL notifications point at, saw strictly less than
+    // the summary card they came from.
+    //
+    // `following` was the one that did more than omit: FollowButton seeds its state from it, so a
+    // reader who followed an entry read "Follow" on its page and pressing it followed again. There
+    // was no way to stop following from the page the notification links to.
+    const titleId = entry.title?.id ?? null;
+    const [availability, themes, reactions, following] = await Promise.all([
+      this.availabilityFor(titleId),
+      titleId ? this.themesFor([titleId], creator.id) : null,
+      // Empty when the board has reactions off, rather than fetched and hidden — the rule the
+      // board list already follows: a count nobody may see is a query nobody needs.
+      creator.allowReactions ? this.reactions.forRecommendations([entry.id], viewer.userId) : null,
+      this.followsEntry(entry.id, viewer.userId),
+    ]);
+
+    // `parentId` stays null, and that is not the same omission. Nesting is a projection over
+    // whatever else is on the board right now, so there is no answer for one entry read alone.
+    return {
+      ...card,
+      availability,
+      themes: (titleId && themes?.get(titleId)) || [],
+      reactions: reactions?.get(entry.id) ?? [],
+      following,
+    };
+  }
+
+  /** Whether *this* reader asked to hear about this entry; false for a signed-out one. */
+  private async followsEntry(recommendationId: string, userId: string | null): Promise<boolean> {
+    if (!userId) return false;
+    const follow = await this.prisma.entryFollow.findUnique({
+      where: { userId_recommendationId: { userId, recommendationId } },
+      select: { userId: true },
+    });
+    return follow !== null;
+  }
+
+  /**
+   * The same bargain the board makes, for one title.
+   *
+   * Never blocks on the upstream and never fails the read: a cold entry renders without badges
+   * and the refresh this queues lands before the next one. `forTitles` rather than `forTitle`
+   * precisely because `forTitle` waits for the provider — right for the endpoint a caller asks
+   * with, wrong for a page render.
+   */
+  private async availabilityFor(titleId: string | null): Promise<StoredAvailability | null> {
+    if (!titleId) return null;
+    try {
+      const region = this.config.get('AVAILABILITY_REGION_DEFAULT');
+      return (await this.availability.forTitles([titleId], region)).get(titleId) ?? null;
+    } catch (error) {
+      this.logger.warn(`Availability lookup failed for entry title ${titleId}: ${String(error)}`);
+      return null;
+    }
   }
 
   async setCreatorPick(creatorId: string, id: string, isCreatorPick: boolean): Promise<void> {
