@@ -50,6 +50,32 @@ describe('PublishedLinks', () => {
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
   });
 
+  it('shows a link the board gained while the card stayed mounted', async () => {
+    // A card is keyed by its entry id, so it survives a board refetch. Holding the list in state
+    // would freeze it at mount: publishing a link elsewhere and refreshing the board would leave
+    // it missing here until a full reload. Only the optimistic override is held locally.
+    const { rerender } = render(
+      <PublishedLinks
+        slug="ada-writes"
+        links={[link('l1', 'https://one.example')]}
+        canModerate={false}
+        permissions={[]}
+      />,
+    );
+    expect(screen.queryByRole('link', { name: 'https://two.example' })).not.toBeInTheDocument();
+
+    rerender(
+      <PublishedLinks
+        slug="ada-writes"
+        links={[link('l1', 'https://one.example'), link('l2', 'https://two.example')]}
+        canModerate={false}
+        permissions={[]}
+      />,
+    );
+
+    expect(screen.getByRole('link', { name: 'https://two.example' })).toBeInTheDocument();
+  });
+
   it('lets a moderator choose which link readers see first', async () => {
     // The whole feature: `isPreferred` had a DTO, a single-preferred invariant kept in a
     // transaction, and a read path that orders by it — and no client ever sent it, so it was

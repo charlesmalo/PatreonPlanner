@@ -25,20 +25,29 @@ interface PublishedLinksProps {
  * else "shown first" describes a decision they cannot make and cannot see the alternative to.
  */
 export function PublishedLinks({ slug, links, canModerate, permissions }: PublishedLinksProps) {
-  // Seeded and then owned, like the candidate list next door: preferring is the creator's own
-  // change and is applied here rather than by refetching the board behind them.
-  const [rows, setRows] = useState(links);
+  // Only the override is held here; the links themselves are read from props every render.
+  //
+  // Seeding them into state instead — the pattern the candidate list next door uses — would have
+  // frozen this list at mount, and a card stays mounted across a board refetch because its key is
+  // the entry id. Publishing a link elsewhere and then refreshing the board would have left it
+  // missing here until a full reload. The candidate list can afford that because it owns the rows
+  // it is drawing; this one is drawing the board's.
+  const [preferredId, setPreferredId] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
-  const visible = rows.filter((link) => isSafeHttpUrl(link.url));
+  const visible = links.filter((link) => isSafeHttpUrl(link.url));
   if (visible.length === 0) return null;
+
+  // The override wins while it is set, and is dropped on refusal so the server's answer shows
+  // through again.
+  const preferred = (link: RecommendationLink) =>
+    preferredId === null ? link.isPreferred : link.id === preferredId;
 
   const mayDecide = canModerate && (permissions ?? []).includes('EDIT_ENTRIES');
 
   async function prefer(link: RecommendationLink) {
-    const previous = rows;
     setBusy(link.id);
-    setRows((current) => current.map((row) => ({ ...row, isPreferred: row.id === link.id })));
+    setPreferredId(link.id);
     try {
       await api.patch(`/creators/${encodeURIComponent(slug)}/links/${link.id}`, {
         isPreferred: true,
@@ -46,7 +55,7 @@ export function PublishedLinks({ slug, links, canModerate, permissions }: Publis
     } catch {
       // Back to exactly what the server still holds. A marker that stays put after a refusal
       // tells the creator they made a choice the board has not got.
-      setRows(previous);
+      setPreferredId(null);
     } finally {
       setBusy(null);
     }
@@ -66,12 +75,12 @@ export function PublishedLinks({ slug, links, canModerate, permissions }: Publis
           >
             {link.label ?? link.url}
           </a>
-          {mayDecide && link.isPreferred ? (
+          {mayDecide && preferred(link) ? (
             <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
               Shown first
             </span>
           ) : null}
-          {mayDecide && !link.isPreferred ? (
+          {mayDecide && !preferred(link) ? (
             <button
               type="button"
               onClick={() => prefer(link)}
