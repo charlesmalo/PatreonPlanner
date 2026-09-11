@@ -293,8 +293,15 @@ suite is written from the same understanding that produced the gap.
 
   `path-to-regexp` was pinned to exactly `0.1.12` and **went stale**: a second advisory
   was published against `<0.1.13`, and an exact pin cannot float forward. It is
-  `~0.1.13` now, so the next patch arrives without being asked. Worth remembering when
-  writing the next override.
+  `~0.1.13` now, so the next patch arrives without being asked.
+
+  **A security override is a floor, not a pin.** Its meaning is "at least this
+  version", and writing it as an exact version gives it an expiry date nobody is
+  watching — this one expired inside a day. Both overrides are ranges now (`^2.3.0`,
+  `~0.1.13`). Note this is the opposite of the convention for _direct_ dependencies,
+  which are pinned exactly on purpose and held still by the lockfile: those are
+  choices about what to build against, and an override is a repair to something
+  underneath.
 
   Production advisories stand at 15, 3 high — `sharp` and `adm-zip` from
   `@huggingface/transformers`, whose image and archive paths the embedding job never
