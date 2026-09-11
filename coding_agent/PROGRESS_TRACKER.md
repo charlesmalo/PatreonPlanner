@@ -220,6 +220,38 @@ suite is written from the same understanding that produced the gap.
    cleverer. It reports nothing on the current tree, and fails when the original
    three-value union is put back.
 
+### Then the checks themselves turned out to have the shape they hunt
+
+Both audits passed on a tree where the thing they existed to catch was absent.
+Neither could tell "no drift" from "nothing to check", which is the same defect
+they were written to find, one level up.
+
+- **`audit:enums` matched unions, so a field typed `string` was skipped in
+  silence.** Replacing `Notification.type` — the union the script was written to
+  protect — with `type: string` left it printing "every union covers the enum it
+  mirrors" and exiting 0. The six mirrored enums are pinned in `MIRRORED` now, and
+  the success line counts what it checked rather than reading identically whether
+  it examined six unions or none. `types.ts` types four server-owned enums as bare
+  `string` today, so the shape was never hypothetical.
+
+- **`audit:reachability` matched the deepest path segment only.**
+  `GET /creators/:slug/catalog/titles/:id/availability` counted as reached because
+  `availability` occurs all over the client — `AvailabilityBadges` renders a field
+  of that name — while nothing had ever built a path containing `catalog/titles`.
+  Requiring every literal segment was measured against a clean tree before being
+  adopted: exactly one new finding, and no false alarms.
+
+  That one finding was a live defect. `findOne` returned `BOARD_ONLY_DEFAULTS`, so
+  an entry's own page — the URL notifications point at — carried
+  `availability: null`, `themes: []`, `reactions: []` and `following: false` for
+  an entry the board renders in full. `following` did more than omit:
+  `FollowButton` seeds its state from it, so a reader who followed something read
+  "Follow" on its page and pressing it followed again.
+
+**The lesson generalises past these two.** A check that only reports what it finds
+wrong cannot distinguish a clean tree from an empty one. Every one of these should
+say how much it examined, and pin what it expects to examine.
+
 ## Known Debt
 
 - ~~**Cross-language alias matching has no producer.**~~ Built. `fetchStructure` now returns
