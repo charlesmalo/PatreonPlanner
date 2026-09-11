@@ -52,6 +52,21 @@ describe('ReactionBar', () => {
     expect(await screen.findByRole('button', { name: /🔥 4 on Akira/ })).toBeInTheDocument();
   });
 
+  it('says so when the server refuses, rather than doing nothing visible', async () => {
+    // The count is taken from the server rather than guessed, so a refusal leaves the row exactly
+    // as it was — which from the reader's side is indistinguishable from a dead button. Upvoting
+    // already answers this: "the server is what actually decides, so its refusal has to be shown
+    // rather than assumed impossible." Reacting is rate limited, so the refusal is reachable.
+    global.fetch = vi.fn(
+      async () => ({ ok: false, status: 429, json: async () => ({}) }) as Response,
+    );
+    setup({ reactions: [] });
+
+    await userEvent.click(screen.getByRole('button', { name: /👍 0 on Akira/ }));
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/did not count/i));
+  });
+
   it('drops an emote nobody is left using', async () => {
     stub({ emote: '🔥', count: 0, reacted: false });
     setup({ reactions: [{ emote: '🔥', count: 1, reacted: true }], canReact: false });
