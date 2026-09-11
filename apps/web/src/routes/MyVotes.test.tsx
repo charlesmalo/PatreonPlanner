@@ -89,4 +89,13 @@ describe('MyVotes', () => {
 
     expect(await screen.findByText(/have not voted here yet/i)).toBeInTheDocument();
   });
+
+  it('says "one … was" rather than "1 … were"', async () => {
+    // One is the commonest case here: a patron upgrades and has a single stale vote. A count
+    // glued to a fixed plural verb reads as a bug in the sentence.
+    setup({ 'GET /api/v1/creators/ada-writes/my-votes': payload({ couldImprove: 1 }) });
+
+    expect(await screen.findByText(/One of your votes was cast/i)).toBeInTheDocument();
+    expect(screen.queryByText(/1 of your votes were/i)).not.toBeInTheDocument();
+  });
 });
