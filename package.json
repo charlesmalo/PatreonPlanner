@@ -21,7 +21,8 @@
   },
   "pnpm": {
     "overrides": {
-      "path-to-regexp@<0.1.12": "0.1.12"
+      "multer": "2.3.0",
+      "path-to-regexp@0.1": "~0.1.13"
     }
   }
 }
