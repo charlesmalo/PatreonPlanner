@@ -53,12 +53,13 @@ jobs:
       - run: pnpm --filter @app/api prisma:generate
       - run: pnpm -r typecheck
       - run: pnpm format:check
-      # The three reachability audits. Each exists because that exact defect shipped at least
+      # The four reachability audits. Each exists because that exact defect shipped at least
       # once — a route no page called, a response type omitting values the API sends, a proxy
-      # dropping paths the API deliberately mounts at the root. None of them is a test, because
-      # none of them can be: a test suite is written from the same understanding that produced
-      # the gap. Run here so they are not three more commands nobody executes, which is how the
-      # coverage gates below were lost the first time.
+      # dropping paths the API deliberately mounts at the root, and a field the API accepts that
+      # no client ever sent. None of them is a test, because none of them can be: a test suite is
+      # written from the same understanding that produced the gap. Run here so they are not four
+      # more commands nobody executes, which is how the coverage gates below were lost the first
+      # time.
       - run: pnpm audit:all
       # `coverage` rather than `test`: the same suites, with each package's thresholds enforced.
       # Running `test` here meant both gates existed as commands nobody executed, so a component
