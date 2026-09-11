@@ -172,27 +172,28 @@ export const configSchema = z.object({
    * small board every query matched everything — including the submit form's "already on the
    * board — upvote instead?" prompt, which is worse wrong than missing.
    *
-   * 0.205 is measured against what the embed job stores — name, aliases and overview — with the
-   * configured model:
+   * 0.208, measured against 28 queries over six titles carrying name, aliases and overview:
    *
-   *   name-ish ("sprited away", "ghibli")            0.107 – 0.138   must match
-   *   plot descriptions                              0.138 – 0.199   must match
-   *   unrelated ("how to repair a bicycle chain")    0.214 – 0.265   must not match
+   *   should match    16 queries   worst 0.2060
+   *   should not      12 queries   best  0.2118
    *
-   * **The margin is thin, and that is the cost of matching by meaning.** 0.205 sits 0.006 above
-   * the furthest true match and 0.009 below the nearest false one. Under the previous recipe the
-   * gap was six times wider — because plot descriptions were not matching at all, and a thing that
-   * never matches is easy to separate from noise.
+   * **The usable gap is 0.006 wide**, and 0.208 sits inside it with roughly 0.002 either side.
+   * That is not a comfortable margin and should not be described as one — an earlier version of
+   * this comment claimed 0.015 from eleven measurements over three titles, and widening the set
+   * both shrank the gap and showed the old value of 0.205 rejecting a fair query ("a child working
+   * to rescue her parents", 0.2060).
    *
-   * It will narrow further as the board grows: more titles means more chances for something
-   * unrelated to land close by. Expect to re-measure, and treat a rise in wrong "already on the
-   * board?" prompts as the signal. The numbers belong to this model — change `EMBEDDING_MODEL` and
-   * measure again rather than assuming they transfer.
+   * Set toward recall on purpose. Missing a duplicate is the failure this feature exists to
+   * prevent; showing a stray suggestion merely annoys, and trigram runs independently and catches
+   * anything matching by spelling — so a floor set slightly loose costs a little noise and a floor
+   * set slightly tight costs the thing itself.
    *
-   * Recall is protected by the other arm: trigram runs independently and catches anything matching
-   * by spelling, so a floor set slightly tight costs fuzzy matches, never exact duplicates.
+   * Expect it to narrow further as a board grows, since more titles means more chances for
+   * something unrelated to land close. A rise in wrong "already on the board?" prompts is the
+   * signal to measure again, and the numbers belong to this model: change `EMBEDDING_MODEL` and
+   * none of them transfer.
    */
-  EMBEDDING_MAX_DISTANCE: z.coerce.number().positive().default(0.205),
+  EMBEDDING_MAX_DISTANCE: z.coerce.number().positive().default(0.208),
 
   SUBMIT_LIMIT_PER_HOUR: z.coerce.number().int().positive().default(1),
   // Design §6 item 3: a looser cap across all creators, so a patron of twenty creators cannot

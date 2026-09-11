@@ -245,11 +245,17 @@ suite is written from the same understanding that produced the gap.
   recipe re-embeds rather than mixing two vector spaces. Measured again afterwards: plot
   descriptions moved from 0.219–0.221 to 0.138–0.199, and the floor moved to 0.205.
 
-  **The margin narrowed, and that is the cost.** 0.006 above the furthest true match, 0.009 below
-  the nearest false one, where the old gap was six times wider — because plot queries never matched
-  at all, and something that never matches is easy to separate from noise. It will narrow further
-  as the board grows. Treat a rise in wrong "already on the board?" prompts as the signal to
-  re-measure.
+  **The margin is 0.006 wide, and the first number published for it was wrong.** It was measured
+  from eleven queries over three titles and reported as roughly 0.015. Widening the set to 28
+  queries over six titles both shrank the gap — should-match worst 0.2060, should-not best 0.2118 —
+  and showed the chosen 0.205 rejecting a fair query ("a child working to rescue her parents"). The
+  floor is 0.208 now, set toward recall because missing a duplicate is the failure this feature
+  exists to prevent.
+
+  The lesson is about the sample, not the constant: a threshold chosen from a handful of examples
+  will look comfortable, because a handful of examples rarely contains the awkward case. It will
+  narrow further as a board grows. Treat a rise in wrong "already on the board?" prompts as the
+  signal to re-measure.
 
   Original note follows.
 
