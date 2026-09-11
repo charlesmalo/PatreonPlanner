@@ -67,16 +67,34 @@ openspec init --tools claude,agents
 This project carries a playtest stack that is part of the workflow, not a toy:
 
 ```
-docker compose -f docker-compose.demo.yml up -d --build   # ports 8081 / 4001
-docker compose -f docker-compose.e2e.yml  up -d --build   # ports 8080 / 4000
+docker-compose -p patreonplanner-demo -f docker-compose.demo.yml up -d --build   # 8081 / 4001
+docker-compose -p patreonplanner-e2e  -f docker-compose.e2e.yml  up -d --build   # 8080 / 4000
 ```
 
-They run side by side on purpose. Two rules learned the hard way:
+**`docker-compose`, hyphenated.** This machine has the standalone binary and no
+`compose` subcommand at all — `docker compose` fails with `unknown command`. CI
+runs on runners that have the plugin and uses the spaced form, so the workflow
+file is not a guide to what works here. This file previously documented the
+spaced form, and following it produced a test result that was pure noise.
+
+They run side by side on purpose. Three rules learned the hard way:
 
 - **Tear the stacks down when not testing.** Six idle containers and a few
   rebuilds have cost gigabytes of disk and noticeable memory here.
 - **A failed rebuild leaves the previous image serving.** Any conclusion drawn
-  from a stack that did not rebuild is worthless — check the build exit code.
+  from a stack that did not rebuild is worthless.
+- **Check the build, not a pipeline that contains it.** `up --build ... | tail`
+  reports `tail`'s exit code, so a build that never ran looks like a build that
+  succeeded. Redirect to a file and check the exit code, then confirm the
+  _running_ image carries the change before trusting anything it serves:
+
+  ```
+  docker-compose -p patreonplanner-e2e -f docker-compose.e2e.yml exec -T api \
+    sh -c 'grep -c myNewFunction dist/some/file.js'
+  ```
+
+  An e2e test run against a stale stack once failed on exactly the assertion the
+  fix was written for, which reads identically to the fix not working.
 
 ## 4. Version Control
 
