@@ -95,6 +95,31 @@ What remains needs access this repository does not have:
 | Should a reader be able to follow one entry?     | Yes, and a follow beats theme narrowing (plan 18)           |
 | Which permissions stay bundled under `MODERATE`? | The five that exist; nothing since has needed a sixth       |
 
+## A demo too uniform to show a feature
+
+Three parts of M10 — tier weights, weighted ranking, the upward-only ratchet — were
+built, tested, reachable and **invisible in the demo**, for one reason: the personas
+declared `amountCents` and no `tierIds`, so no membership bound to a `Tier`. A vote
+with no tier is worth one whatever the weights say, so `weightedScore` equalled
+`upvoteCount` on every entry, no weight could change anything, and `couldImprove`
+was always zero.
+
+That is a different failure from an unreachable route. Nothing was missing and
+nothing was wrong; the data was simply too uniform for any difference to appear. A
+reader could use every control and conclude the feature did nothing.
+
+The question that finds it: **for each mechanic, is there data in the demo where it
+would visibly differ from its absence?** Uniform weights, votes all cast at the
+current tier, zero reactions — each looks like working software and demonstrates
+nothing. Producer is seeded at 3, one of Cal's votes is deliberately stale, and two
+entries carry reactions including one premium, precisely so each mechanic differs
+from its own absence.
+
+Worth knowing the limits of it. The same question asked about reactions produced a
+marginal change and a false premise — §10 already covered them and its steps
+already worked. The method finds the cases where a feature _cannot_ be shown; it
+says little about ones merely needing a step first.
+
 ## Permissions: the sweep that is not a script
 
 Four changes came out of one question, asked after the first fix looked finished:
