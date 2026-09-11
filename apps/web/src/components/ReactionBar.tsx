@@ -63,9 +63,15 @@ export function ReactionBar({
     } catch {
       // The count is taken from the server rather than guessed, so there is nothing to put back —
       // and that is exactly the problem. A refusal left the row identical to how it started, which
-      // from the reader's side is a button that does nothing. Reacting is rate limited, so this is
-      // reachable by anyone enthusiastic enough to press four in a row. Upvoting already settled
-      // the principle: the server is what decides, so its refusal has to be shown.
+      // from the reader's side is a button that does nothing. Upvoting already settled the
+      // principle: the server is what decides, so its refusal has to be shown.
+      //
+      // What gets here is an expired session, a dropped connection, a 500, or an entry removed
+      // while the page was open. Not the rate limiter: COARSE_LIMIT_BURST is 60 refilling at
+      // 120/minute, and the config comment beside it is explicit that a person using the product
+      // normally must never reach it. An earlier version of this comment said four presses in a
+      // row would do it, which was wrong by a factor of fifteen and made a routine error path
+      // sound like the main one.
       setFailed(true);
     } finally {
       setBusy(false);

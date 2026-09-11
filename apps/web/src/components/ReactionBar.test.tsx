@@ -56,7 +56,11 @@ describe('ReactionBar', () => {
     // The count is taken from the server rather than guessed, so a refusal leaves the row exactly
     // as it was — which from the reader's side is indistinguishable from a dead button. Upvoting
     // already answers this: "the server is what actually decides, so its refusal has to be shown
-    // rather than assumed impossible." Reacting is rate limited, so the refusal is reachable.
+    // rather than assumed impossible."
+    //
+    // 429 stands in for the whole family here. The realistic members are an expired session, a
+    // dropped connection and an entry removed while the page was open; the rate limiter is the
+    // least likely of them, whatever an earlier version of this comment claimed.
     global.fetch = vi.fn(
       async () => ({ ok: false, status: 429, json: async () => ({}) }) as Response,
     );
