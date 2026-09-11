@@ -39,6 +39,7 @@ export function ReactionBar({
 }: ReactionBarProps) {
   const [counts, setCounts] = useState(reactions);
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   const countFor = (emote: string) => counts.find((row) => row.emote === emote);
 
@@ -58,8 +59,14 @@ export function ReactionBar({
         const rest = current.filter((row) => row.emote !== emote);
         return result.count > 0 ? [...rest, result] : rest;
       });
+      setFailed(false);
     } catch {
-      // The count stays as it was; the next load corrects it.
+      // The count is taken from the server rather than guessed, so there is nothing to put back —
+      // and that is exactly the problem. A refusal left the row identical to how it started, which
+      // from the reader's side is a button that does nothing. Reacting is rate limited, so this is
+      // reachable by anyone enthusiastic enough to press four in a row. Upvoting already settled
+      // the principle: the server is what decides, so its refusal has to be shown.
+      setFailed(true);
     } finally {
       setBusy(false);
     }
@@ -84,33 +91,40 @@ export function ReactionBar({
   if (shown.length === 0) return null;
 
   return (
-    <div className="mt-2 flex flex-wrap gap-1">
-      {shown.map((emote) => {
-        const row = countFor(emote);
-        return (
-          <button
-            key={emote}
-            type="button"
-            disabled={!canReact || busy || locked(emote)}
-            onClick={() => toggle(emote)}
-            aria-pressed={row?.reacted ?? false}
-            aria-label={
-              locked(emote)
-                ? `${emote} ${row?.count ?? 0} on ${title} — premium palette`
-                : `${emote} ${row?.count ?? 0} on ${title}`
-            }
-            title={locked(emote) ? 'Part of the premium palette' : undefined}
-            className={`rounded border px-1.5 py-0.5 text-xs disabled:opacity-60 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 ${
-              row?.reacted
-                ? 'border-sky-500 bg-sky-50 dark:bg-sky-950/40'
-                : 'border-slate-300 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800'
-            }`}
-          >
-            <span aria-hidden="true">{emote}</span>
-            {row ? <span className="ml-1">{row.count}</span> : null}
-          </button>
-        );
-      })}
+    <div className="mt-2">
+      <div className="flex flex-wrap gap-1">
+        {shown.map((emote) => {
+          const row = countFor(emote);
+          return (
+            <button
+              key={emote}
+              type="button"
+              disabled={!canReact || busy || locked(emote)}
+              onClick={() => toggle(emote)}
+              aria-pressed={row?.reacted ?? false}
+              aria-label={
+                locked(emote)
+                  ? `${emote} ${row?.count ?? 0} on ${title} — premium palette`
+                  : `${emote} ${row?.count ?? 0} on ${title}`
+              }
+              title={locked(emote) ? 'Part of the premium palette' : undefined}
+              className={`rounded border px-1.5 py-0.5 text-xs disabled:opacity-60 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 ${
+                row?.reacted
+                  ? 'border-sky-500 bg-sky-50 dark:bg-sky-950/40'
+                  : 'border-slate-300 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800'
+              }`}
+            >
+              <span aria-hidden="true">{emote}</span>
+              {row ? <span className="ml-1">{row.count}</span> : null}
+            </button>
+          );
+        })}
+      </div>
+      {failed ? (
+        <p role="status" aria-live="polite" className="mt-1 text-xs text-red-600 dark:text-red-400">
+          That did not count. Try again.
+        </p>
+      ) : null}
     </div>
   );
 }
