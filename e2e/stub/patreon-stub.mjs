@@ -187,7 +187,15 @@ const PERSONAS = {
     // this list omits is silently dropped the first time the persona logs in. Carrying a list
     // across boards needs somewhere to carry it to.
     memberships: [
-      { campaignId: 'demo-campaign', amountCents: 500, isActivePatron: true },
+      // `tierIds` matters as much as the amount. Without it a membership binds to no Tier row, so
+      // an upvote records no tier, and `weightedScore` can never differ from the raw count — the
+      // whole of weighted voting becomes invisible however the weights are set.
+      {
+        campaignId: 'demo-campaign',
+        amountCents: 500,
+        isActivePatron: true,
+        tierIds: ['demo-tier-basic'],
+      },
       { campaignId: 'demo-campaign-two', amountCents: 500, isActivePatron: true },
     ],
     campaigns: [],
@@ -196,7 +204,12 @@ const PERSONAS = {
   cal: {
     identity: { id: 'demo-cal', full_name: 'Cal Nguyen', email: 'cal@example.com' },
     memberships: [
-      { campaignId: 'demo-campaign', amountCents: 1500, isActivePatron: true },
+      {
+        campaignId: 'demo-campaign',
+        amountCents: 1500,
+        isActivePatron: true,
+        tierIds: ['demo-tier-plus'],
+      },
       { campaignId: 'demo-campaign-two', amountCents: 500, isActivePatron: true },
     ],
     campaigns: [],
