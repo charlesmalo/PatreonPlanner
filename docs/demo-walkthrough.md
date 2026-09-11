@@ -198,6 +198,15 @@ rather than waiting for somebody to vote again.
 
 Zero is allowed, and means votes from that tier are counted but carry no weight in the order.
 
+### 11b3. A vote already cast can be brought up to date
+
+Sign in as **Cal** and open **Your votes**. One of them — *Princess Mononoke* — is marked
+**worth 1, below your tier**: he upvoted it while he was a Sidekick and has since become a
+Producer. **Bring them up to date** lifts it to what his tier is worth now, and the board re-ranks.
+
+Only upward. A vote already worth more than the reader's current tier is left alone: somebody who
+downgrades does not have their past support quietly taken back.
+
 ### 11c. Words a board will not accept
 
 As **Ada**, open **Settings**. Below the tier gates is the blocklist, and the demo already has two

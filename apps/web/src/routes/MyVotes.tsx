@@ -84,7 +84,12 @@ export function MyVotes() {
       {data.couldImprove > 0 ? (
         <div className="mt-4 rounded border border-sky-200 bg-sky-50 p-3 dark:border-sky-900 dark:bg-sky-950/40">
           <p className="text-sm">
-            {data.couldImprove} of your votes were cast at a lower tier than you hold now.
+            {/* "1 of your votes were cast" is the sentence a count-plus-fixed-verb always
+                produces eventually, and one is the commonest case here — a patron upgrades and
+                has a single stale vote. */}
+            {data.couldImprove === 1
+              ? 'One of your votes was cast at a lower tier than you hold now.'
+              : `${data.couldImprove} of your votes were cast at a lower tier than you hold now.`}
           </p>
           <button
             type="button"

@@ -151,7 +151,16 @@ async function main() {
       description: 'Gentler than the others. Good palate cleanser.',
       upvotes: ['bea'],
     },
-    { title: 'Princess Mononoke', by: 'bea', status: 'PENDING', upvotes: ['cal', 'dee'] },
+    {
+      title: 'Princess Mononoke',
+      by: 'bea',
+      status: 'PENDING',
+      upvotes: ['cal', 'dee'],
+      // Cal upvoted this one before he upgraded, so it is still worth what a Sidekick vote is
+      // worth. That is the whole case the ratchet exists for, and without a single stale vote
+      // anywhere the my-votes page has nothing to offer and the feature cannot be seen.
+      votedBefore: ['cal'],
+    },
     { title: 'Perfect Blue', by: 'cal', status: 'PENDING', upvotes: ['bea'] },
     { title: 'Paprika', by: 'dee', status: 'PENDING' },
     { title: 'Grave of the Fireflies', by: 'bea', status: 'COMPLETED' },
@@ -199,6 +208,11 @@ async function main() {
         where: { userId_creatorId: { userId: users[voter], creatorId } },
         select: { currentTierId: true },
       });
+      // A vote cast before this patron upgraded keeps the cheaper tier it was cast at. Nothing
+      // backfills it — that is the point of the ratchet, which offers to lift it on request.
+      const castAt = (entry.votedBefore ?? []).includes(voter)
+        ? (tierByTitle.get('Sidekick') ?? null)
+        : (membership?.currentTierId ?? null);
       await prisma.upvote.upsert({
         where: {
           recommendationId_userId: { recommendationId: row.id, userId: users[voter] },
@@ -206,9 +220,9 @@ async function main() {
         create: {
           recommendationId: row.id,
           userId: users[voter],
-          tierId: membership?.currentTierId ?? null,
+          tierId: castAt,
         },
-        update: { tierId: membership?.currentTierId ?? null },
+        update: { tierId: castAt },
       });
     }
     /*
