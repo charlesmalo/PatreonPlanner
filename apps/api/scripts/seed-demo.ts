@@ -418,6 +418,35 @@ async function main() {
   // Overviews match what the catalogue stub serves for the same ids, so a title reached by
   // suggesting it and one seeded here describe themselves the same way. They are for reading:
   // the embed job builds its passage from the name and aliases and never touches `overview`.
+  // A few reactions, and one of them from the premium palette on purpose.
+  //
+  // With none at all, two real states of this control are invisible: a card carrying a count, and
+  // the premium emotes appearing to a reader who cannot use them. The bar only shows an emote
+  // somebody has used *or* one the reader could add — so a board with no reactions shows a
+  // non-premium reader six greys and nothing else, and the difference premium makes is a thing
+  // they have to be told rather than one they can see.
+  const reactions: Array<[keyof typeof users, string, string]> = [
+    ['cal', 'Spirited Away', '🍿'],
+    ['bea', 'Spirited Away', '👍'],
+    ['bea', 'Perfect Blue', '🔥'],
+  ];
+  for (const [who, title, emote] of reactions) {
+    const target = await prisma.recommendation.findFirst({
+      where: { creatorId, customTitle: title },
+      select: { id: true },
+    });
+    if (!target) continue;
+    const existing = await prisma.reaction.findFirst({
+      where: { userId: users[who], recommendationId: target.id, emote },
+      select: { id: true },
+    });
+    if (!existing) {
+      await prisma.reaction.create({
+        data: { userId: users[who], recommendationId: target.id, emote },
+      });
+    }
+  }
+
   const themed: Array<[string, number, string[], string]> = [
     [
       'Spirited Away',
