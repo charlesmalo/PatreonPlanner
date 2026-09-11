@@ -55,13 +55,32 @@ async function main() {
 
   const tiers = [
     { patreonTierId: 'demo-tier-basic', title: 'Sidekick', amountCents: 500, order: 0 },
-    { patreonTierId: 'demo-tier-plus', title: 'Producer', amountCents: 1500, order: 1 },
+    // Worth three votes, so the demo shows weighted voting rather than merely containing it: with
+    // every tier at the default of 1 the weighted score equals the raw count and "Top rated" is a
+    // popularity sort, which is the one thing this mechanic exists not to be.
+    {
+      patreonTierId: 'demo-tier-plus',
+      title: 'Producer',
+      amountCents: 1500,
+      order: 1,
+      voteWeight: 3,
+    },
   ];
   for (const tier of tiers) {
     await prisma.tier.upsert({
       where: { creatorId_patreonTierId: { creatorId, patreonTierId: tier.patreonTierId } },
       create: { ...tier, creatorId },
-      update: { title: tier.title, amountCents: tier.amountCents, order: tier.order },
+      // `voteWeight` included deliberately, and only because this is the demo seed: reseeding is
+      // how the demo returns to the state the walkthrough describes, so a weight a play-tester
+      // changed should go back. Anywhere else, overwriting a creator's own tuning on a routine
+      // sync would be the bug — which is exactly what omitting a field from an update branch
+      // caused for `overview`, in the other direction.
+      update: {
+        title: tier.title,
+        amountCents: tier.amountCents,
+        order: tier.order,
+        voteWeight: tier.voteWeight ?? 1,
+      },
     });
   }
 
@@ -73,16 +92,41 @@ async function main() {
 
   // Dee is deliberately a former patron: the read/upvote/submit split is one of the things worth
   // playing with, and it is invisible if everyone can do everything.
+  // Bound to a Tier, not merely to an amount. A membership with no `currentTierId` makes every
+  // upvote record no tier, and `weightedScore` then equals the raw count no matter how the weights
+  // are set — so weighted voting, which is a shipped mechanic, was invisible in this demo whatever
+  // anyone did. Signing in binds it from Patreon; the seed has to do the same or the entries it
+  // creates carry votes worth nothing in particular.
+  const tierByTitle = new Map(
+    (await prisma.tier.findMany({ where: { creatorId }, select: { id: true, title: true } })).map(
+      (tier) => [tier.title, tier.id],
+    ),
+  );
   const memberships = [
-    { userId: users.bea, amountCents: 500, isActivePatron: true },
-    { userId: users.cal, amountCents: 1500, isActivePatron: true },
-    { userId: users.dee, amountCents: 0, isActivePatron: false },
+    {
+      userId: users.bea,
+      amountCents: 500,
+      isActivePatron: true,
+      currentTierId: tierByTitle.get('Sidekick') ?? null,
+    },
+    {
+      userId: users.cal,
+      amountCents: 1500,
+      isActivePatron: true,
+      currentTierId: tierByTitle.get('Producer') ?? null,
+    },
+    // No tier, because there is no pledge: a lapsed patron is entitled to nothing.
+    { userId: users.dee, amountCents: 0, isActivePatron: false, currentTierId: null },
   ];
   for (const membership of memberships) {
     await prisma.membership.upsert({
       where: { userId_creatorId: { userId: membership.userId, creatorId } },
       create: { ...membership, creatorId },
-      update: { amountCents: membership.amountCents, isActivePatron: membership.isActivePatron },
+      update: {
+        amountCents: membership.amountCents,
+        isActivePatron: membership.isActivePatron,
+        currentTierId: membership.currentTierId,
+      },
     });
   }
 

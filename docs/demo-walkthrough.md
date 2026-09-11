@@ -180,6 +180,24 @@ says Patreon lists none for the account rather than showing an empty box.
 A new board starts visible to **only your supporters**, and the page says so before you make one —
 a board the whole internet can read is a list of what you are watching.
 
+### 11b2. A vote is worth what the tier is worth
+
+On **Settings**, above the blocklist: **what a vote from each tier counts for**. Sidekick is 1 and
+Producer is 3, so the board is not ranked by how many people upvoted — it is ranked by what those
+upvotes are worth here.
+
+You can see it on the board without changing anything. *Spirited Away* and *Princess Mononoke* each
+have **2** upvotes and a weighted score of **4**, because one of those votes is Cal's and Cal is a
+Producer. *Perfect Blue* has 1 and 1, because Bea is a Sidekick. **Top rated** sorts on the second
+number.
+
+Set Producer back to 1 and the two scores collapse to 2: every tier at 1 is a plain popularity
+sort, which is the one thing this mechanic exists not to be. The change reaches votes already cast
+— a vote stores which tier it came from, not a copied number — so the board re-ranks immediately
+rather than waiting for somebody to vote again.
+
+Zero is allowed, and means votes from that tier are counted but carry no weight in the order.
+
 ### 11c. Words a board will not accept
 
 As **Ada**, open **Settings**. Below the tier gates is the blocklist, and the demo already has two
