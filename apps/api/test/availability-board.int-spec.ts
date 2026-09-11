@@ -167,6 +167,39 @@ describe('Availability on the board (integration)', () => {
     expect(bound.availability.offers[0].providerName).toBe('Netflix');
   });
 
+  it('attaches availability to an entry on its own page', async () => {
+    // The same entry, the same question. A board card said where to watch and the entry's own
+    // page — the URL a patron is sent — said nothing, because findOne returned
+    // BOARD_ONLY_DEFAULTS, where `availability: null` means "not looked up" and is the right
+    // answer for a fresh submission and the wrong one here.
+    await board(patron).expect(200);
+    await ctx.availabilityService.drainRefreshes();
+
+    const res = await get(`/creators/availability-co/recommendations/${boundId}`, patron).expect(
+      200,
+    );
+    expect(res.body.availability.offers[0].providerName).toBe('Netflix');
+  });
+
+  it('does not make an entry page wait on the provider either', async () => {
+    // Same bargain the board makes: a cold read renders without badges rather than blocking on
+    // a third party, and queues the refresh that the next read serves.
+    const res = await get(`/creators/availability-co/recommendations/${boundId}`, patron).expect(
+      200,
+    );
+    expect(res.body.availability).toBeNull();
+  });
+
+  it('leaves an external-link entry null on its own page', async () => {
+    await board(patron).expect(200);
+    await ctx.availabilityService.drainRefreshes();
+
+    const res = await get(`/creators/availability-co/recommendations/${unboundId}`, patron).expect(
+      200,
+    );
+    expect(res.body.availability).toBeNull();
+  });
+
   it('leaves external-link entries with null availability', async () => {
     // Nothing to look up: an external link has no canonical identity.
     const res = await board(patron).expect(200);

@@ -94,9 +94,35 @@ export class RecommendationsService {
     });
     if (!entry) throw new NotFoundException();
 
-    return viewer.userId
-      ? withUpvoted(this.prisma, entry, viewer.userId)
+    const card = viewer.userId
+      ? await withUpvoted(this.prisma, entry, viewer.userId)
       : { ...present(entry), hasUpvoted: false, ...BOARD_ONLY_DEFAULTS };
+
+    // `availability` in BOARD_ONLY_DEFAULTS is a stand-in for "nobody has looked this up", which
+    // is the truth for a fresh submission and a lie here: this entry has a catalogue id and the
+    // board card for the very same entry shows where to watch. A reader following a link to an
+    // entry's own page — the URL notifications point at — saw strictly less than the summary they
+    // came from.
+    return { ...card, availability: await this.availabilityFor(entry.title?.id ?? null) };
+  }
+
+  /**
+   * The same bargain the board makes, for one title.
+   *
+   * Never blocks on the upstream and never fails the read: a cold entry renders without badges
+   * and the refresh this queues lands before the next one. `forTitles` rather than `forTitle`
+   * precisely because `forTitle` waits for the provider — right for the endpoint a caller asks
+   * with, wrong for a page render.
+   */
+  private async availabilityFor(titleId: string | null): Promise<StoredAvailability | null> {
+    if (!titleId) return null;
+    try {
+      const region = this.config.get('AVAILABILITY_REGION_DEFAULT');
+      return (await this.availability.forTitles([titleId], region)).get(titleId) ?? null;
+    } catch (error) {
+      this.logger.warn(`Availability lookup failed for entry title ${titleId}: ${String(error)}`);
+      return null;
+    }
   }
 
   async setCreatorPick(creatorId: string, id: string, isCreatorPick: boolean): Promise<void> {
