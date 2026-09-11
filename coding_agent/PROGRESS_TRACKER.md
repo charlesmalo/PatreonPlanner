@@ -254,6 +254,37 @@ say how much it examined, and pin what it expects to examine.
 
 ## Known Debt
 
+- **A board has no search, though the API has one.**
+  `GET /creators/:slug/recommendations/similar` is VIEW-gated, rate limited, fuses a trigram arm
+  with a semantic one, and returns entries from the board. Its only caller is `SimilarEntries`,
+  the duplicate hint inside the submit form — so the capability is reachable only by starting to
+  type a submission, and there is no input anywhere on a board.
+
+  The endpoint's own comments are written for a reader using it directly: _"returns only entries
+  the caller could already read on the board"_, and gating it higher _"would deny a reader the
+  ability to search a board they are allowed to read"_.
+
+  **Not built, because it is a new reader surface rather than a missing entry point.** Everything
+  else closed this week wired up a control the API already implemented for a decision somebody
+  could already make. This one invents a screen: where results appear, what happens to the column
+  tabs while searching, and whether a search result is a card or a row. The Phase 2 design lists
+  "searching" among the things never withheld from free users, which settles the pricing and not
+  the surface.
+
+  Worth knowing what it costs to leave: a board can be narrowed by column and by theme, and by
+  nothing else. That is fine at ten entries and not at three hundred.
+
+- **A ticket notification knows which ticket, and still lands the reader on the list.**
+  `NotificationPayload.ticketId` is sent on every `TICKET_RAISED` and `TICKET_RESOLVED` and read
+  by nothing. `destinationFor` sends both to `/c/:slug/tickets`, and that route takes only
+  `:slug` — there is no way to address one ticket.
+
+  **Not built, because it needs navigation that does not exist.** Either a `/c/:slug/tickets/:id`
+  route, or an anchor plus a scroll-into-view once the list loads, since the hash lands before the
+  tickets arrive. Both are product decisions about what a reader sees, not wiring.
+
+  Cost of leaving it: a moderator told about one message opens a page of them and looks for it.
+
 - ~~**Cross-language alias matching has no producer.**~~ Built. `fetchStructure` now returns
   aliases from TMDB's `alternative_titles`, and enrichment upserts them — idempotently, because a
   title is re-enriched every time it is bound to another board and duplicate rows would skew the
