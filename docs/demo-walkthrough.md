@@ -131,6 +131,10 @@ As **Cal**, react to anything with 🍿. As **Bea**, try the same emote: the con
 says why. Then look at an emote somebody has already used — it still shows, **with its count**,
 for everyone.
 
+Spirited Away carries one of each already, so the second half is true before you do anything: Bea
+sees 🍿 1 greyed out and titled "part of the premium palette", beside 👍 1 she can use. A board with
+no reactions at all shows her six emotes and no evidence the other six exist.
+
 Reading is never gated. Otherwise a count would vanish the day somebody stopped paying, which is a
 lie about the data rather than a locked feature.
 
