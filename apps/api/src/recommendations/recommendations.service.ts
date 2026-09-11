@@ -98,12 +98,44 @@ export class RecommendationsService {
       ? await withUpvoted(this.prisma, entry, viewer.userId)
       : { ...present(entry), hasUpvoted: false, ...BOARD_ONLY_DEFAULTS };
 
-    // `availability` in BOARD_ONLY_DEFAULTS is a stand-in for "nobody has looked this up", which
-    // is the truth for a fresh submission and a lie here: this entry has a catalogue id and the
-    // board card for the very same entry shows where to watch. A reader following a link to an
-    // entry's own page — the URL notifications point at — saw strictly less than the summary they
-    // came from.
-    return { ...card, availability: await this.availabilityFor(entry.title?.id ?? null) };
+    // BOARD_ONLY_DEFAULTS is right where a value is genuinely unknown — a fresh submission has no
+    // reactions and nobody has looked its availability up — and wrong here, where every one of
+    // these is a fact about an entry the board has been rendering in full. A reader following a
+    // link to an entry's own page, which is the URL notifications point at, saw strictly less than
+    // the summary card they came from.
+    //
+    // `following` was the one that did more than omit: FollowButton seeds its state from it, so a
+    // reader who followed an entry read "Follow" on its page and pressing it followed again. There
+    // was no way to stop following from the page the notification links to.
+    const titleId = entry.title?.id ?? null;
+    const [availability, themes, reactions, following] = await Promise.all([
+      this.availabilityFor(titleId),
+      titleId ? this.themesFor([titleId], creator.id) : null,
+      // Empty when the board has reactions off, rather than fetched and hidden — the rule the
+      // board list already follows: a count nobody may see is a query nobody needs.
+      creator.allowReactions ? this.reactions.forRecommendations([entry.id], viewer.userId) : null,
+      this.followsEntry(entry.id, viewer.userId),
+    ]);
+
+    // `parentId` stays null, and that is not the same omission. Nesting is a projection over
+    // whatever else is on the board right now, so there is no answer for one entry read alone.
+    return {
+      ...card,
+      availability,
+      themes: (titleId && themes?.get(titleId)) || [],
+      reactions: reactions?.get(entry.id) ?? [],
+      following,
+    };
+  }
+
+  /** Whether *this* reader asked to hear about this entry; false for a signed-out one. */
+  private async followsEntry(recommendationId: string, userId: string | null): Promise<boolean> {
+    if (!userId) return false;
+    const follow = await this.prisma.entryFollow.findUnique({
+      where: { userId_recommendationId: { userId, recommendationId } },
+      select: { userId: true },
+    });
+    return follow !== null;
   }
 
   /**
