@@ -90,6 +90,7 @@ const source = readFileSync(TYPES, 'utf8')
 
 const problems = [];
 const found = new Set();
+const excused = new Set();
 for (const m of source.matchAll(/((?:'[A-Z][A-Z0-9_]*'\s*\|\s*)+'[A-Z][A-Z0-9_]*')/g)) {
   const used = new Set([...m[1].matchAll(/'([A-Z][A-Z0-9_]*)'/g)].map((x) => x[1]));
   // The enum this union mirrors: every member must belong to it, and of those, the one it covers
@@ -104,15 +105,28 @@ for (const m of source.matchAll(/((?:'[A-Z][A-Z0-9_]*'\s*\|\s*)+'[A-Z][A-Z0-9_]*
   if (!best) continue;
   found.add(best.name);
   const missing = [...best.values].filter((v) => !used.has(v));
-  if (missing.length && !EXPECTED.has(best.name)) {
-    problems.push({ name: best.name, missing, covered: used.size, total: best.values.size });
+  if (missing.length) {
+    // Recorded even when excused, so an excuse that has stopped applying can be noticed. An
+    // allow-list nothing ever checks is a list of claims about a tree nobody re-read.
+    if (EXPECTED.has(best.name)) excused.add(best.name);
+    else problems.push({ name: best.name, missing, covered: used.size, total: best.values.size });
   }
 }
+
+const staleExcuses = [...EXPECTED.keys()].filter((name) => !excused.has(name));
 
 const vanished = [...MIRRORED].filter((name) => !found.has(name));
 const unpinned = [...found].filter((name) => !MIRRORED.has(name));
 
-if (vanished.length || unpinned.length) {
+if (vanished.length || unpinned.length || staleExcuses.length) {
+  if (staleExcuses.length) {
+    console.log(`${TYPES} has excuses that no longer apply:\n`);
+    for (const name of staleExcuses) console.log(`  ${name}`);
+    console.log(
+      '\nEach names a union that covers its enum completely now, so the reason recorded beside it' +
+        '\nis describing a tree that has moved. Drop the entry.',
+    );
+  }
   if (vanished.length) {
     console.log(`${TYPES} no longer mirrors:\n`);
     for (const name of vanished) console.log(`  ${name}`);
