@@ -32,13 +32,41 @@
  * and `LinkStatus`. Four findings, four false positives. A tool that cries wolf on a clean tree
  * gets ignored, or worse, believed.
  *
+ * ## Why it also pins which enums are mirrored
+ *
+ * The first version of this check could not tell "no drift" from "nothing to check". It finds
+ * unions of SCREAMING_CASE literals and matches each to an enum, so a field typed plainly as
+ * `string` produces no union, matches nothing, and is silently skipped. Replacing
+ * `Notification.type` — the union this script was written to protect — with `type: string` left
+ * it printing "every union covers the enum it mirrors" and exiting 0.
+ *
+ * So the enums that are mirrored today are pinned below. Weakening a union to `string`, or
+ * dropping it, now fails with the name of the enum that lost its mirror. The cost is that a new
+ * union has to be added to the list; that is the same bargain `scripts/audit-reachability.mjs`
+ * makes, and it is what keeps the list a statement about the tree rather than a wish.
+ *
  * Run: `node scripts/audit-enum-coverage.mjs`
- * Verified by putting the original three-value `NotificationType` union back and watching it fail.
+ * Verified twice by mutation: putting the original three-value `NotificationType` union back and
+ * watching it fail, and replacing that same union with `string` and watching the pin catch it.
  */
 import { readFileSync } from 'node:fs';
 
 const SCHEMA = 'apps/api/prisma/schema.prisma';
 const TYPES = 'apps/web/src/api/types.ts';
+
+/**
+ * The enums `api/types.ts` mirrors with a union. Membership is the assertion: each of these must
+ * still be matched by a union in the file, or the union was weakened to `string` and every value
+ * of that enum stopped being checked.
+ */
+const MIRRORED = new Set([
+  'MediaType',
+  'NoteKind',
+  'NotificationType',
+  'OfferKind',
+  'RecommendationStatus',
+  'StaffPermission',
+]);
 
 /** Unions the client narrows on purpose, with the reason. */
 const EXPECTED = new Map([
@@ -61,6 +89,7 @@ const source = readFileSync(TYPES, 'utf8')
   .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
 
 const problems = [];
+const found = new Set();
 for (const m of source.matchAll(/((?:'[A-Z][A-Z0-9_]*'\s*\|\s*)+'[A-Z][A-Z0-9_]*')/g)) {
   const used = new Set([...m[1].matchAll(/'([A-Z][A-Z0-9_]*)'/g)].map((x) => x[1]));
   // The enum this union mirrors: every member must belong to it, and of those, the one it covers
@@ -73,14 +102,36 @@ for (const m of source.matchAll(/((?:'[A-Z][A-Z0-9_]*'\s*\|\s*)+'[A-Z][A-Z0-9_]*
     }
   }
   if (!best) continue;
+  found.add(best.name);
   const missing = [...best.values].filter((v) => !used.has(v));
   if (missing.length && !EXPECTED.has(best.name)) {
     problems.push({ name: best.name, missing, covered: used.size, total: best.values.size });
   }
 }
 
+const vanished = [...MIRRORED].filter((name) => !found.has(name));
+const unpinned = [...found].filter((name) => !MIRRORED.has(name));
+
+if (vanished.length || unpinned.length) {
+  if (vanished.length) {
+    console.log(`${TYPES} no longer mirrors:\n`);
+    for (const name of vanished) console.log(`  ${name}`);
+    console.log(
+      '\nA union replaced by `string` accepts every value and describes none of them, so nothing' +
+        '\nhere checks that enum any more. Restore the union, or drop the name from MIRRORED with' +
+        '\na reason if the field is genuinely gone.',
+    );
+  }
+  if (unpinned.length) {
+    console.log(`\n${TYPES} mirrors enums that are not pinned:\n`);
+    for (const name of unpinned) console.log(`  ${name}`);
+    console.log('\nAdd each to MIRRORED so that losing the union later is caught.');
+  }
+  process.exit(1);
+}
+
 if (problems.length === 0) {
-  console.log(`${TYPES}: every union covers the enum it mirrors.`);
+  console.log(`${TYPES}: ${found.size} unions checked, each covering the enum it mirrors.`);
   process.exit(0);
 }
 console.log(`${TYPES} omits values the API can send:\n`);
