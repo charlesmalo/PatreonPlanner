@@ -329,7 +329,91 @@ every `Tickets.tsx` test and re-measuring for real makes the floor fire at 8.91%
 aggregate gate still passes at 92.63%**. That is the whole argument for the second gate, run
 rather than asserted.
 
+## 409 means "trying again cannot work", and three screens said "Try again"
+
+The last of the sweep ideas: **for each error the API returns, can the reader tell what to do
+from what the client shows them?**
+
+The client discards the server's body on purpose — `ApiError` carries the status and nothing else,
+with three comments citing design §9. That is not the defect, and §9 is not what it first looks
+like: its rule is **no user-enumeration** and no stack traces, SQL or secrets. Refusing a
+moderator's action because somebody else got there first enumerates nobody. The design already
+admits one carve-out on exactly this ground — `retryAt`, "for the one case where the status alone
+cannot say enough".
+
+So the question is narrower: where does the status alone leave the reader unable to act? 409 is
+where, because **409 is the one status that means trying again cannot work**, and three handlers
+answered it with "Try again".
+
+| where           | the API says (409)                         | the client said                         | why it was wrong                                                                                                                   |
+| --------------- | ------------------------------------------ | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `StatusControl` | entry changed while you were looking at it | _"That move is not allowed from here."_ | **Actively misdirecting** — the move may be perfectly legal from where the entry now is                                            |
+| `RedactForm`    | entry changed while you were editing it    | _"…Try again."_                         | The update is conditional on the text shown, so retrying fails identically — and would redact text the moderator can no longer see |
+| `FlagActions`   | that report has already been handled       | _"…Try again."_                         | Already resolved; no number of retries changes that                                                                                |
+| `Themes` rename | a theme with that name already exists      | _"That did not save."_                  | Silent about the clash, so the creator retypes the same taken name                                                                 |
+
+**The pattern was already established and simply not applied.** Four other places get it right —
+`NoteEditor`, the staff invite limit, `Blocklist`, `ClaimBoard` — each naming the actual reason.
+The misses are all in moderation, which is the one surface where two people act on the same object
+at once, so conflicts there are ordinary rather than exotic.
+
+### The one that needed more than wording
+
+`POST /recommendations/:id/status` answers 409 for **two** reasons needing opposite remedies: an
+illegal transition (pick a different move) and a lost race (reload, because the move you asked
+for may be fine from where it is now). The status cannot carry that, so the conflict now sends a
+machine-readable `reason: 'STALE'` and `ApiError` reads it, exactly as it reads `retryAt` — a
+short code the client turns into its own wording, never the server's prose. An illegal transition
+deliberately carries no code, so a bare 409 still means what it always meant and every existing
+handler keeps working untouched.
+
+**It cannot be asserted over HTTP.** The guard fires only when two requests genuinely overlap: if
+they serialize, the second re-reads the new status and either transitions legally or fails the
+map with a reasonless 409. The existing concurrency test asserts `[200, 409]` for precisely that
+reason. So the two conflicts are driven directly against the service with a stubbed client, which
+is the only deterministic way to assert _which_ 409 comes back.
+
+### Two claims withdrawn before they were written down
+
+`StaffPage` looked like two more of the same — "An owner already holds every permission" and
+"A creator must keep an owner", both answered with "Try again". **Neither is reachable.** The page
+already hides the checkboxes and the remove button on an owner's row ("a button that cannot work
+is a lie"), and no endpoint promotes a moderator to owner, so the staff list cannot go stale in
+the way that would expose them. They are defence in depth, and the fix written for them was
+reverted rather than shipped as an invented finding.
+
+That is the same error this tracker records once already, with the reaction limit that was
+"four presses away" and was actually sixty.
+
+## Grouping has no client, and the route audit cannot see it
+
+Found while tracing which endpoints return which errors, and **not an error-path finding at all**:
+`POST /creators/:slug/recommendations/:id/group` and its `DELETE` have **no caller anywhere in the
+client, and no e2e coverage.** M13 is a shipped milestone that is reachable only from a test.
+
+`audit:reachability` does not report it, and is not broken: its header already names this exact
+limitation. The route's segments are `creators`, `recommendations` and `group`, and `group`
+appears in the client inside `groupCount` — a notification field. A segment collision, silent by
+construction, which the script says plainly it cannot defend against.
+
+**Not built**, for the reason the board-search debt gives: grouping is a new reader surface — what
+a group looks like on a board, how you make one, what happens to the cards — rather than a control
+missing for a decision somebody can already make. Recorded in _Known Debt_.
+
 ## Known Debt
+
+- **Grouping is built, tested, and unreachable.** `POST :id/group` and `DELETE :id/group` are
+  MOVE_ENTRIES-gated, enforce one level of nesting in both directions, recompute a de-duplicated
+  sum, and have their own integration suite. **Nothing in the client calls either**, and no e2e
+  journey touches them.
+
+  Not a missing link this time: there is no control anywhere, because there is no grouping
+  surface. Building one decides what a group looks like on a board, how a reader makes one, what
+  happens to the grouped cards, and how it interacts with the column tabs and drag-and-drop —
+  product questions, not wiring.
+
+  Worth knowing what it costs to leave: a board with five posts about one series shows five cards,
+  and the de-duplicated sum that exists to fix exactly that is uncomputable from the UI.
 
 - **A board has no search, though the API has one.**
   `GET /creators/:slug/recommendations/similar` is VIEW-gated, rate limited, fuses a trigram arm
