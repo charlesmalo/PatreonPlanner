@@ -27,13 +27,19 @@ export function FlagActions({
       await api.patch(`/creators/${encodeURIComponent(slug)}/flags/${flagId}`, { status });
       onResolved();
     } catch (error) {
+      const status = error instanceof ApiError ? error.status : 0;
       setMessage(
-        error instanceof ApiError && error.status === 403
-          ? // Names the permission, not the role. A 403 here almost always means somebody who
-            // *does* moderate this board and was never granted HANDLE_REPORTS — telling them
-            // they do not moderate it sends them looking for the wrong problem.
-            'Handling reports is not one of your permissions on this board.'
-          : 'Could not update that report. Try again.',
+        status === 409
+          ? // Another moderator resolved it first, or this was a double click. "Try again" was
+            // the wrong advice: 409 is exactly the status where retrying cannot work, because
+            // the report is already resolved and no number of retries changes that.
+            'That report has already been handled. Refresh to see how.'
+          : status === 403
+            ? // Names the permission, not the role. A 403 here almost always means somebody who
+              // *does* moderate this board and was never granted HANDLE_REPORTS — telling them
+              // they do not moderate it sends them looking for the wrong problem.
+              'Handling reports is not one of your permissions on this board.'
+            : 'Could not update that report. Try again.',
       );
     } finally {
       setBusy(false);

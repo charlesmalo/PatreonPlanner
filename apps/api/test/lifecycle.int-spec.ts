@@ -133,6 +133,15 @@ describe('Submission lifecycle (integration)', () => {
     expect(after.status).toBe('PENDING');
   });
 
+  it('marks an illegal transition without a reason code, so it reads as the default 409', async () => {
+    // The two 409s this endpoint returns need opposite remedies, so the client branches on
+    // `reason`. An illegal transition deliberately carries none: "that move is not allowed from
+    // here" is the right thing to say, and is what a bare 409 already means.
+    const rec = await makeEntry();
+    const response = await changeStatus(staff, rec.id, { status: 'COMPLETED' }).expect(409);
+    expect(response.body.reason).toBeUndefined();
+  });
+
   it('refuses a patron, however much they pledge', async () => {
     const rec = await makeEntry();
     await changeStatus(patron, rec.id, { status: 'ACCEPTED' }).expect(403);

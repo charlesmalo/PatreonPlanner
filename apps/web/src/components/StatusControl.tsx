@@ -58,9 +58,15 @@ export function StatusControl({
       onChanged(result.id, result.status);
     } catch (error) {
       const status = error instanceof ApiError ? error.status : 0;
+      const conflict = error instanceof ApiError ? error.conflict : undefined;
       setMessage(
         status === 409
-          ? 'That move is not allowed from here.'
+          ? conflict === 'STALE'
+            ? // Somebody else moved it while this menu was open. Saying "not allowed from here"
+              // was wrong: the move asked for may be perfectly legal from where the entry now
+              // is, and it sent moderators hunting for a rule that was never the problem.
+              'Someone else moved this entry. Reload to see where it is now.'
+            : 'That move is not allowed from here.'
           : status === 403
             ? // Not "you do not moderate this board": the likeliest 403 here is a moderator who
               // does moderate it and was never granted MOVE_ENTRIES, and telling them otherwise

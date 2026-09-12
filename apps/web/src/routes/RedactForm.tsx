@@ -46,11 +46,17 @@ export function RedactForm({
       setMessage(
         status === 400
           ? 'That text was rejected. Try rewording it.'
-          : status === 403
-            ? // Names the permission, not the role: a 403 here is somebody who moderates this
-              // board and lacks EDIT_ENTRIES.
-              'Editing entries is not one of your permissions on this board.'
-            : 'Could not save that redaction. Try again.',
+          : status === 409
+            ? // The API's update is conditional on the content this form was shown, so a 409
+              // means somebody edited the entry in between. "Try again" was the wrong advice
+              // twice over: the same conditional update fails identically, and a redaction
+              // written against text the moderator can no longer see is worse than none.
+              'Someone changed this entry while you were editing. Reload the queue to see it.'
+            : status === 403
+              ? // Names the permission, not the role: a 403 here is somebody who moderates this
+                // board and lacks EDIT_ENTRIES.
+                'Editing entries is not one of your permissions on this board.'
+              : 'Could not save that redaction. Try again.',
       );
     } finally {
       setBusy(false);
