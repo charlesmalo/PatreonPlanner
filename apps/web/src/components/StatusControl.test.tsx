@@ -63,6 +63,29 @@ describe('StatusControl', () => {
     expect(onChanged).not.toHaveBeenCalled();
   });
 
+  it('tells a moderator to reload when someone else moved the entry first', async () => {
+    // The same 409 as above, and the opposite remedy. Without the reason code the client called
+    // this "not allowed from here", which is false — the move asked for may be perfectly legal
+    // from wherever the entry actually is now — and sent moderators looking for a rule problem
+    // instead of pressing reload.
+    global.fetch = vi.fn(
+      async () =>
+        ({
+          ok: false,
+          status: 409,
+          json: async () => ({ message: 'changed', reason: 'STALE' }),
+        }) as unknown as Response,
+    );
+    const onChanged = renderControl('PENDING');
+    await userEvent.click(screen.getByRole('button', { name: /move “Spirited Away”/i }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Accepted' }));
+
+    const message = await screen.findByRole('status');
+    expect(message).toHaveTextContent(/someone else moved/i);
+    expect(message).not.toHaveTextContent(/not allowed/i);
+    expect(onChanged).not.toHaveBeenCalled();
+  });
+
   it('reports a refusal by the server distinctly from a rejected move', async () => {
     global.fetch = fakeApi({
       'POST /api/v1/creators/ada-writes/recommendations/rec-1/status': new Error('403'),

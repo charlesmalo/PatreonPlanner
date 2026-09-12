@@ -58,7 +58,16 @@ export class ModerationActionsService {
         data: { status: to },
       });
       if (count === 0) {
-        throw new ConflictException('That entry changed while you were looking at it');
+        // Carries a machine-readable reason, the way the submit timeout carries `retryAt`: this
+        // endpoint answers 409 for two things needing opposite remedies. An illegal transition
+        // means pick a different move; this means somebody else already moved it, and the move
+        // you asked for may be perfectly legal from where it is now. A client that cannot tell
+        // them apart has to guess, and guessing "not allowed" sends a moderator looking for the
+        // wrong problem. The prose stays unread by the client — only `reason` is.
+        throw new ConflictException({
+          message: 'That entry changed while you were looking at it',
+          reason: 'STALE',
+        });
       }
       const updated = { id: recommendationId, status: to };
       await tx.moderationAction.create({

@@ -6,15 +6,29 @@ export class ApiError extends Error {
    */
   retryAt?: string;
 
+  /**
+   * Which of an endpoint's conflicts this is, for the one case where the status alone cannot say
+   * enough: `POST /recommendations/:id/status` answers 409 both for an illegal transition and
+   * for a move lost to another moderator, and those need **opposite** remedies — pick a different
+   * move, versus reload because somebody already moved it. A client that cannot tell them apart
+   * has to guess, and guessing sent moderators looking for the wrong problem.
+   *
+   * A short machine-readable code, never the server's prose: design §9's rule is about not
+   * enumerating users and not leaking internals, and a code the client turns into its own wording
+   * does neither.
+   */
+  conflict?: string;
+
   constructor(
     readonly status: number,
-    retryAt?: string,
+    extra: { retryAt?: string; conflict?: string } = {},
   ) {
-    // The server's body is deliberately not surfaced: design §9 wants generic messages, and the
-    // status is the only part the UI branches on.
+    // The server's body is otherwise deliberately not surfaced: design §9 wants generic messages,
+    // and the status is the only other part the UI branches on.
     super(`Request failed with status ${status}`);
     this.name = 'ApiError';
-    this.retryAt = retryAt;
+    this.retryAt = extra.retryAt;
+    this.conflict = extra.conflict;
   }
 }
 
@@ -75,17 +89,21 @@ async function request<T>(
     if (response.status === 401) {
       for (const listener of unauthorizedListeners) listener();
     }
-    // Only `retryAt`, and only on a 403: everything else about the body is deliberately ignored.
+    // Two named fields, each on one status; everything else about the body stays ignored.
     let retryAt: string | undefined;
-    if (response.status === 403) {
+    let conflict: string | undefined;
+    if (response.status === 403 || response.status === 409) {
       try {
-        const body = (await response.json()) as { retryAt?: unknown };
-        if (typeof body?.retryAt === 'string') retryAt = body.retryAt;
+        const body = (await response.json()) as { retryAt?: unknown; reason?: unknown };
+        if (response.status === 403 && typeof body?.retryAt === 'string') retryAt = body.retryAt;
+        // Absent on purpose for the ordinary conflict: a bare 409 still means what it always
+        // meant, so every existing handler keeps working untouched.
+        if (response.status === 409 && typeof body?.reason === 'string') conflict = body.reason;
       } catch {
-        // A 403 with no JSON body is the ordinary "not allowed" case.
+        // A 403 or 409 with no JSON body is the ordinary "not allowed" / "conflict" case.
       }
     }
-    throw new ApiError(response.status, retryAt);
+    throw new ApiError(response.status, { retryAt, conflict });
   }
   // 204 has no body; calling json() on it throws.
   if (response.status === 204) return undefined as T;
