@@ -25,6 +25,17 @@
  * name that is missing is strong evidence. That is the same bargain the other route audit makes,
  * and it is why this reports how many fields it checked rather than only what it disliked.
  *
+ * **An inherited field.** Fields are read with `^ {2}(\w+):` against each class body, so a DTO
+ * written `class UpdateFooDto extends BaseFooDto {}` contributes its own fields and none of the
+ * ones it inherits — and the inherited ones would be missing from `checked` without anything
+ * saying so. Same for NestJS `PartialType`/`PickType`/`OmitType`, which produce a base class to
+ * extend.
+ *
+ * That is the defect this whole family of checks is written to find, so it is **detected rather
+ * than described**: a DTO class with an `extends` clause makes the run print what it could not
+ * see and exit 1. Nothing in `apps/api/src` uses either form today — measured, not assumed — so
+ * the warning is inert, and it stops being a silent gap the day somebody writes one.
+ *
  * Run: `node scripts/audit-dto-reach.mjs`
  * Verified by mutation: removing the client that sends `isPreferred` makes it report exactly that
  * field, and no others.
@@ -69,6 +80,8 @@ const client = walk('apps/web/src')
 const dtoFiles = walk('apps/api/src').filter((f) => /\/dto\/.*\.ts$/.test(f) && !INBOUND.test(f));
 const unsent = [];
 const stale = [];
+/** DTO classes whose fields this script can only partly see. See "What it cannot see". */
+const inherited = [];
 let checked = 0;
 
 for (const file of dtoFiles) {
@@ -79,6 +92,10 @@ for (const file of dtoFiles) {
   for (const part of source.split(/(?=export class )/)) {
     const found = /export class (\w+)/.exec(part);
     if (!found) continue;
+    // Reported, never skipped: the class's own fields are still worth checking, and the point is
+    // that the count below stops being the whole story.
+    const base = /export class \w+\s+extends\s+([\w.]+(?:\([^)]*\))?)/.exec(part);
+    if (base) inherited.push(`${found[1]} extends ${base[1]}`);
     for (const match of part.matchAll(/^ {2}(\w+)[?!]?:/gm)) {
       const field = match[1];
       const key = `${found[1]}.${field}`;
@@ -96,9 +113,19 @@ for (const file of dtoFiles) {
   }
 }
 
-if (unsent.length === 0 && stale.length === 0) {
+if (unsent.length === 0 && stale.length === 0 && inherited.length === 0) {
   console.log(`${dtoFiles.length} DTO files: ${checked} fields checked, every one reachable.`);
   process.exit(0);
+}
+
+if (inherited.length) {
+  console.log('DTO classes that inherit fields this script cannot read:\n');
+  for (const key of inherited) console.log(`  ${key}`);
+  console.log(
+    `\nThe ${checked} fields counted are the ones declared in each class body. Teach the parser to` +
+      '\nfollow the base class before trusting that number again — an inherited field that no' +
+      '\nclient sends is exactly what this audit exists to catch, and is invisible until then.',
+  );
 }
 
 if (unsent.length) {
