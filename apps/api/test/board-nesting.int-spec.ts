@@ -167,6 +167,7 @@ describe('Board nesting and theme filtering (integration)', () => {
   const entry = (body: { items: Array<{ id: string }> }, id: string) =>
     body.items.find((i) => i.id === id) as unknown as {
       parentId: string | null;
+      parentSource: 'STAFF' | 'CATALOGUE' | null;
       themes: Array<{ id: string; name: string }>;
     };
 
@@ -178,6 +179,14 @@ describe('Board nesting and theme filtering (integration)', () => {
   it('nests a film under its franchise', async () => {
     const res = await board(patron).expect(200);
     expect(entry(res.body, filmId).parentId).toBe(collectionId);
+  });
+
+  it('says a nesting the catalogue implied came from the catalogue, not from staff', async () => {
+    // The other half of the distinction `parentSource` exists for. Nobody chose this one, so
+    // there is no group to undo — and a control that offered to undo it would do nothing.
+    const res = await board(patron).expect(200);
+    expect(entry(res.body, seasonId).parentSource).toBe('CATALOGUE');
+    expect(entry(res.body, showId).parentSource).toBeNull();
   });
 
   it('picks the container, never the member, as the parent', async () => {

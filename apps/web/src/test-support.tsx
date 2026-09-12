@@ -45,6 +45,7 @@ export function recommendation(overrides: Partial<Recommendation> = {}): Recomme
     watchOrderItems: [],
     notes: [],
     parentId: null,
+    parentSource: null,
     themes: [],
     links: [],
     submittedBy: { id: 'user-1', fullName: 'Grace', avatarUrl: null },

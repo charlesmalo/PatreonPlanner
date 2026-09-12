@@ -162,6 +162,13 @@ export interface Recommendation {
   notes: CreatorNote[];
   /** The entry on this page that contains this one, if any. A per-board projection. */
   parentId: string | null;
+  /**
+   * Why it nests, which `parentId` cannot say: `STAFF` is a group somebody chose and can undo,
+   * `CATALOGUE` is one TMDB implies and nobody can. Only a `STAFF` nesting has anything to
+   * ungroup — `DELETE :id/group` changes nothing for the other, so a control offered on
+   * `parentId` alone would do nothing on half the cards it appeared on.
+   */
+  parentSource: 'STAFF' | 'CATALOGUE' | null;
   themes: Array<{ id: string; name: string }>;
   links: RecommendationLink[];
   /**

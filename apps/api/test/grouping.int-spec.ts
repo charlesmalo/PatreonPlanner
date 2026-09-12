@@ -288,5 +288,47 @@ describe('Grouping (integration)', () => {
       const childRow = res.body.items.find((i: { id: string }) => i.id === child);
       expect(childRow.parentId).toBe(head);
     });
+
+    it('says a staff-chosen head came from staff, so a control can offer to undo it', async () => {
+      // `parentId` answers *whether* an entry nests; it cannot say *why*, because the projection
+      // merges a staff group with a parent TMDB implies. That was harmless while nothing acted
+      // on it. An "Ungroup" control has to: `DELETE :id/group` on a catalogue-implied child
+      // returns early and changes nothing, so a control offered on `parentId` alone would be a
+      // button that silently does nothing for half the cards it appears on.
+      await group(mover, child, head).expect(204);
+
+      const res = await request(ctx.app.getHttpServer())
+        .get('/api/v1/creators/group-co/recommendations')
+        .set('Cookie', [patron.session, patron.csrf])
+        .expect(200);
+
+      const childRow = res.body.items.find((i: { id: string }) => i.id === child);
+      expect(childRow.parentSource).toBe('STAFF');
+    });
+
+    it('leaves an entry that nests under nothing with no source at all', async () => {
+      const res = await request(ctx.app.getHttpServer())
+        .get('/api/v1/creators/group-co/recommendations')
+        .set('Cookie', [patron.session, patron.csrf])
+        .expect(200);
+
+      const headRow = res.body.items.find((i: { id: string }) => i.id === head);
+      expect(headRow.parentId).toBeNull();
+      expect(headRow.parentSource).toBeNull();
+    });
+
+    it('drops both back to null when the group is undone', async () => {
+      await group(mover, child, head).expect(204);
+      await ungroup(mover, child).expect(204);
+
+      const res = await request(ctx.app.getHttpServer())
+        .get('/api/v1/creators/group-co/recommendations')
+        .set('Cookie', [patron.session, patron.csrf])
+        .expect(200);
+
+      const childRow = res.body.items.find((i: { id: string }) => i.id === child);
+      expect(childRow.parentId).toBeNull();
+      expect(childRow.parentSource).toBeNull();
+    });
   });
 });
