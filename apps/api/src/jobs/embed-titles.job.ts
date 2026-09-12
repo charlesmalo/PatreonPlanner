@@ -58,6 +58,22 @@ export class EmbedTitlesJob {
       return 0;
     }
 
+    // Checked once, before any write. Without this a model of the wrong width produced a warning
+    // per row — a uuid and a Postgres error, every tick, forever — while the product symptom was
+    // silence: no vectors stored, so the semantic arm returns nothing and search degrades to
+    // spelling alone without saying so. EMBEDDING_DIMENSIONS records the column's width and was
+    // read by nothing that runs; it is the contract, so it is what the model is measured against.
+    const expected = this.config.get('EMBEDDING_DIMENSIONS');
+    const actual = vectors[0]?.length;
+    if (actual !== expected) {
+      this.logger.error(
+        `${this.embeddings.modelId()} returns ${actual}-dimensional vectors and the ` +
+          `Title.embedding column holds ${expected}. Nothing will be embedded until the column ` +
+          `is migrated to match or EMBEDDING_MODEL is changed back.`,
+      );
+      return 0;
+    }
+
     let embedded = 0;
     for (const [index, title] of pending.entries()) {
       try {
