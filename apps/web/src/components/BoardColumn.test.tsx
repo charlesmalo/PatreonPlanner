@@ -141,7 +141,7 @@ describe('BoardColumn', () => {
       effectAllowed: '',
     });
 
-    function calls() {
+    function calls(items = [entry]) {
       const seen: string[] = [];
       global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const path = new URL(String(input), 'http://localhost').pathname;
@@ -150,7 +150,7 @@ describe('BoardColumn', () => {
           return {
             ok: true,
             status: 200,
-            json: async () => ({ items: [entry], nextCursor: null }),
+            json: async () => ({ items, nextCursor: null }),
           } as Response;
         }
         seen.push(`${method} ${path}`);
@@ -158,6 +158,131 @@ describe('BoardColumn', () => {
       });
       return seen;
     }
+
+    describe('the grouping band', () => {
+      const other = recommendation({ id: 'rec-2', customTitle: 'Mononoke', status: 'PENDING' });
+
+      /**
+       * jsdom fires no real drag, so `dragstart` is dispatched on the card the way the browser
+       * would — it bubbles to the column, which is where the payload is read.
+       */
+      const startDragging = (title: string, id: string, status = 'PENDING') =>
+        fireEvent.dragStart(screen.getByText(title), {
+          dataTransfer: transfer({ id, status }),
+        });
+
+      const bandFor = (title: string) =>
+        screen.queryByText(new RegExp(`Group into .${title}`, 'i'));
+
+      it('offers no band at all while nothing is being dragged', async () => {
+        // The gesture is discoverable when it applies and invisible otherwise; a permanent band
+        // under every card would be a drop target for a drag nobody started.
+        const seen = calls();
+        expect(seen).toEqual([]);
+        stub([entry, other]);
+        setup({ canModerate: true });
+        await screen.findByText('Spirited Away');
+
+        expect(bandFor('Mononoke')).not.toBeInTheDocument();
+      });
+
+      it('offers the other cards once a drag begins', async () => {
+        stub([entry, other]);
+        setup({ canModerate: true });
+        await screen.findByText('Spirited Away');
+
+        startDragging('Spirited Away', 'rec-1');
+
+        await waitFor(() => expect(bandFor('Mononoke')).toBeInTheDocument());
+      });
+
+      it('never offers the card being dragged as its own target', async () => {
+        stub([entry, other]);
+        setup({ canModerate: true });
+        await screen.findByText('Spirited Away');
+
+        startDragging('Spirited Away', 'rec-1');
+
+        await waitFor(() => expect(bandFor('Mononoke')).toBeInTheDocument());
+        expect(bandFor('Spirited Away')).not.toBeInTheDocument();
+      });
+
+      it('offers nothing for a card dragged from another column', async () => {
+        // Same column only: a child whose head is elsewhere renders as a normal top-level card
+        // while its votes count toward a head the reader cannot see.
+        stub([entry, other]);
+        setup({ canModerate: true });
+        await screen.findByText('Spirited Away');
+
+        startDragging('Spirited Away', 'rec-1', 'ACCEPTED');
+
+        expect(bandFor('Mononoke')).not.toBeInTheDocument();
+      });
+
+      it('offers no band on a card whose head sits in another column', async () => {
+        // The case that makes the filter load-bearing. A child nested under a head *in this
+        // column* is drawn inside it and never gets a top-level band anyway; one whose head is
+        // elsewhere is promoted to the top by `buildTree` and looks exactly like a free card.
+        // The API still refuses it as a target, so the band must too.
+        const inside = recommendation({
+          id: 'rec-3',
+          customTitle: 'Porco Rosso',
+          status: 'PENDING',
+          parentId: 'head-in-another-column',
+          parentSource: 'STAFF',
+        });
+        stub([entry, other, inside]);
+        setup({ canModerate: true });
+        await screen.findByText('Spirited Away');
+
+        startDragging('Spirited Away', 'rec-1');
+
+        await waitFor(() => expect(bandFor('Mononoke')).toBeInTheDocument());
+        expect(bandFor('Porco Rosso')).not.toBeInTheDocument();
+      });
+
+      it('offers no band at all while dragging a card that already heads a group', async () => {
+        // One level, in both directions: the API refuses every target for such an entry.
+        const child = recommendation({
+          id: 'rec-4',
+          customTitle: 'Totoro',
+          status: 'PENDING',
+          parentId: 'rec-1',
+          parentSource: 'STAFF',
+        });
+        stub([entry, other, child]);
+        setup({ canModerate: true });
+        await screen.findByText('Spirited Away');
+
+        startDragging('Spirited Away', 'rec-1');
+
+        expect(bandFor('Mononoke')).not.toBeInTheDocument();
+      });
+
+      it('groups the entry when the band is dropped on', async () => {
+        const seen = calls([entry, other]);
+        setup({ canModerate: true });
+        await screen.findByText('Spirited Away');
+
+        startDragging('Spirited Away', 'rec-2');
+        const band = await screen.findByText(/Group into .Spirited Away/i);
+        fireEvent.drop(band, { dataTransfer: transfer({ id: 'rec-2', status: 'PENDING' }) });
+
+        await waitFor(() =>
+          expect(seen).toEqual(['POST /api/v1/creators/ada-writes/recommendations/rec-2/group']),
+        );
+      });
+
+      it('offers no band to a moderator without MOVE_ENTRIES', async () => {
+        stub([entry, other]);
+        setup({ canModerate: true, permissions: [] });
+        await screen.findByText('Spirited Away');
+
+        startDragging('Spirited Away', 'rec-1');
+
+        expect(bandFor('Mononoke')).not.toBeInTheDocument();
+      });
+    });
 
     it('changes status when a card is dropped from another column', async () => {
       const seen = calls();
