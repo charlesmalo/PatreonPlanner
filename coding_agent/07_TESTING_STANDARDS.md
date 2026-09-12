@@ -87,9 +87,17 @@ passing.
 declarations, and covering them measures that the app boots, which every
 integration test already proves.
 
-**The web side is not wired.** Vitest needs `@vitest/coverage-v8`, a new
-dependency — the engineer's decision (`01_PROJECT_RULES.md` §4), not an
-agent's.
+**The web side is wired too**, and this paragraph said it was not for longer
+than it was true. `@vitest/coverage-v8` was taken, and the thresholds live in
+`apps/web/vite.config.ts`: 90% lines and statements, 85% branches, 88%
+functions. Run it with `cd apps/web && pnpm test -- --coverage`.
+
+**Both gates are global, and a global cannot see a file.** Three web files sat
+at 0% — `Tickets.tsx` at 157 statements, `LandingPage.tsx`, `App.tsx` — inside
+a passing 91.09%, because enough other files were excellent. They are covered
+now; whether a per-file floor should be added, and at what number, is an open
+question in `PROGRESS_TRACKER.md`. Until it is answered, **read the per-file
+report, not only the exit code**, when adding a file.
 
 A percentage is still the weaker question. Coverage says a line ran; the
 mutation discipline in §7 asks whether anything would have noticed if it ran
