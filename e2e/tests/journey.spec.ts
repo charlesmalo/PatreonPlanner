@@ -469,6 +469,53 @@ test('a moderator arranges a column by hand and it stays arranged', async ({ pag
   await expect(suggestions.getByRole('heading', { level: 3 }).first()).toHaveText(before[1]);
 });
 
+test('a moderator groups one entry under another, and the votes combine', async ({ page }) => {
+  // The half no unit test reaches: the nesting a group produces is a *projection over the whole
+  // column*, computed server-side and rebuilt into a tree by the client. Only the real stack
+  // shows that grouping through the menu actually changes what the board draws.
+  seedEntryFrom('patreon-other-e2e', 'Kiki Delivery');
+  seedEntryFrom('patreon-other-e2e', 'Kiki Sequel');
+  await signIn(page, 500, 'patreon-grouper-e2e');
+  makeStaff('patreon-grouper-e2e');
+  await page.goto(`/c/${CREATOR.slug}`);
+
+  const suggestions = page.getByRole('region', { name: /suggestions/i });
+  const sequel = suggestions.getByRole('listitem').filter({ hasText: 'Kiki Sequel' });
+  await expect(sequel).toBeVisible();
+
+  await sequel.getByRole('button', { name: /group .Kiki Sequel./i }).click();
+  await sequel.getByRole('menuitem', { name: /Kiki Delivery/i }).click();
+
+  // The child keeps its row and its own page — grouping preserves, unlike a theme merge — so it
+  // is still on the board, now drawn *inside* the head rather than beside it.
+  const head = suggestions.getByRole('listitem').filter({ hasText: 'Kiki Delivery' });
+  await expect(head.getByRole('listitem').filter({ hasText: 'Kiki Sequel' })).toBeVisible();
+
+  // Stored, not merely optimistic: the projection is rebuilt from the server on every load.
+  await page.reload();
+  await expect(
+    suggestions
+      .getByRole('listitem')
+      .filter({ hasText: 'Kiki Delivery' })
+      .getByRole('listitem')
+      .filter({ hasText: 'Kiki Sequel' }),
+  ).toBeVisible();
+
+  // And it comes apart again. Ungroup is offered only because the head was chosen by staff —
+  // a nesting the catalogue implied carries no such control.
+  const nested = suggestions.getByRole('listitem').filter({ hasText: 'Kiki Sequel' }).last();
+  await nested.getByRole('button', { name: /group .Kiki Sequel./i }).click();
+  await nested.getByRole('menuitem', { name: /ungroup/i }).click();
+
+  await expect(
+    suggestions
+      .getByRole('listitem')
+      .filter({ hasText: 'Kiki Delivery' })
+      .getByRole('listitem')
+      .filter({ hasText: 'Kiki Sequel' }),
+  ).toHaveCount(0);
+});
+
 test('a reader folds a column away and it stays folded', async ({ page }) => {
   seedEntryFrom('patreon-other-e2e', 'Ponyo');
   await page.goto(`/c/${CREATOR.slug}`);

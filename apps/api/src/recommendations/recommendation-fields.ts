@@ -17,6 +17,9 @@ import type { ReactionCount } from '../reactions/reactions.service';
 export const BOARD_ONLY_DEFAULTS = {
   availability: null,
   parentId: null,
+  // Null for the same reason `parentId` is: nesting is a projection over the rest of the board,
+  // so neither has an answer for one entry read on its own.
+  parentSource: null as 'STAFF' | 'CATALOGUE' | null,
   themes: [] as Array<{ id: string; name: string }>,
   // A freshly submitted entry and a search hit both have none, and a client rendering a card
   // from either needs the same fields the board's card has.

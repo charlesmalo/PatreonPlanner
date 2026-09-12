@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client';
-import type { StaffPermission } from '../api/types';
+import type { Recommendation, StaffPermission } from '../api/types';
 import { localCollapsed, localSort, remember } from '../api/board-settings';
 import { useBoard } from '../api/hooks';
-import { readDrag } from './drag';
+import { readDrag, type DraggedEntry } from './drag';
 import { buildTree, type TreeNode } from './board-tree';
+import { groupTargets } from './group-targets';
 import { RecommendationCard } from './RecommendationCard';
 
 interface BoardColumnProps {
@@ -58,6 +59,19 @@ export function BoardColumn({
   const canMove = canModerate && (permissions ?? []).includes('MOVE_ENTRIES');
   const [sort, setSort] = useState(() => localSort(slug, status));
   const [dragOver, setDragOver] = useState(false);
+  /**
+   * The card currently being dragged, so the grouping bands know whether to appear.
+   *
+   * Read from the bubbled `dragstart`: the card sets the payload in its own handler, and this one
+   * runs after it on the way up. `dragstart` is the only moment the drag data store is readable —
+   * by `dragover` the browser has put it in protected mode, which is exactly when the bands need
+   * to decide whether to show.
+   *
+   * React state rather than a module variable, because the bands are rendered output: a value
+   * nothing subscribes to would be set and never painted. A first version did exactly that, and
+   * the band never appeared.
+   */
+  const [dragging, setDragging] = useState<DraggedEntry | null>(null);
 
   const chooseSort = (next: string) => {
     setSort(next);
@@ -90,6 +104,20 @@ export function BoardColumn({
     }
   }
 
+  /** A card dropped onto another card's grouping band: one entry put inside another. */
+  async function groupInto(id: string, intoId: string) {
+    try {
+      await api.post(`/creators/${encodeURIComponent(slug)}/recommendations/${id}/group`, {
+        intoId,
+      });
+    } finally {
+      // Refetched either way, like every other drop: the head's de-duplicated total changes, and
+      // a refused group corrects itself rather than leaving the board showing a nesting that is
+      // not there.
+      onMoved(id, status);
+    }
+  }
+
   /** A card dropped onto another card, in manual sort: a position between its neighbours. */
   async function placeBefore(id: string, beforeId: string) {
     const order = board.items.map((item) => item.id);
@@ -106,6 +134,34 @@ export function BoardColumn({
     }
   }
 
+  const tree = buildTree(board.items);
+
+  /**
+   * Which entries carry a group, read off the tree rather than the card.
+   *
+   * A card does not know its own children — nesting is a projection over the column — so the
+   * only place that can answer is the one holding the built tree. The API refuses to group an
+   * entry that already heads one, so this is what keeps the menu from offering moves it would
+   * refuse.
+   */
+  const headIds = new Set(
+    tree.filter((node) => node.children.length > 0).map((node) => node.item.id),
+  );
+  const targetsFor = (item: Recommendation) =>
+    groupTargets(item, board.items, (id) => headIds.has(id));
+
+  /**
+   * Whether the band under `targetId` should be offered for the entry being dragged.
+   *
+   * Looks the dragged entry up rather than synthesising one from its id: `groupTargets` reads
+   * whatever it needs off the entry, and a stand-in carrying only an id would keep type-checking
+   * while quietly answering a different question the day it reads one more field.
+   */
+  const canGroupInto = (draggedId: string, targetId: string) => {
+    const dragged = board.items.find((item) => item.id === draggedId);
+    return dragged ? targetsFor(dragged).some((t) => t.id === targetId) : false;
+  };
+
   const renderNode = (node: TreeNode): JSX.Element => (
     <RecommendationCard
       key={node.item.id}
@@ -120,6 +176,8 @@ export function BoardColumn({
         board.remove(id);
         onMoved(id, next);
       }}
+      groupTargets={canMove ? targetsFor(node.item) : undefined}
+      onGroupChanged={canMove ? () => onMoved(node.item.id, status) : undefined}
     >
       {node.children.map((child) => renderNode(child))}
     </RecommendationCard>
@@ -128,6 +186,11 @@ export function BoardColumn({
   return (
     <section
       aria-label={label}
+      // Bubbled from the card that started it, which has already called setData by the time this
+      // runs. The only moment the payload is readable — see `dragging` above.
+      onDragStart={(event) => setDragging(readDrag(event.dataTransfer))}
+      // Fires even when a drag is abandoned outside any drop target, so the bands always clear.
+      onDragEnd={() => setDragging(null)}
       onDragOver={(event) => {
         if (!canMove) return;
         // Preventing the default is what marks this a valid drop target; without it the browser
@@ -202,7 +265,7 @@ export function BoardColumn({
             <p className="text-sm text-slate-500 dark:text-slate-400">{emptyText}</p>
           ) : (
             <ul className="space-y-3">
-              {buildTree(board.items).map((node) => (
+              {tree.map((node) => (
                 <div
                   key={node.item.id}
                   onDragOver={(event) => {
@@ -221,6 +284,14 @@ export function BoardColumn({
                   }}
                 >
                   {renderNode(node)}
+                  <GroupDropBand
+                    canMove={canMove}
+                    status={status}
+                    target={node.item}
+                    dragged={dragging}
+                    canGroupInto={canGroupInto}
+                    onGroup={groupInto}
+                  />
                 </div>
               ))}
             </ul>
@@ -239,5 +310,75 @@ export function BoardColumn({
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * The drop target that turns a drag into a group, shown only while one is in progress.
+ *
+ * A separate band rather than the card itself, because dropping *on* a card already means
+ * something: in manual sort it places the card between its neighbours. Overloading one gesture
+ * with two meanings that differ by a sort dropdown is how a board becomes unpredictable. This
+ * appears beneath the card only while a valid drag is happening, so the gesture is discoverable
+ * exactly when it applies and invisible the rest of the time.
+ *
+ * Same column only: a drag from elsewhere carries a different status, and a child whose head is
+ * in another column renders as a normal top-level card while its votes count toward a head the
+ * reader cannot see. The board would be showing a total with no visible cause.
+ */
+function GroupDropBand({
+  canMove,
+  status,
+  target,
+  dragged,
+  canGroupInto,
+  onGroup,
+}: {
+  canMove: boolean;
+  status: string;
+  target: Recommendation;
+  dragged: DraggedEntry | null;
+  canGroupInto: (draggedId: string, targetId: string) => boolean;
+  onGroup: (id: string, intoId: string) => void;
+}) {
+  const [over, setOver] = useState(false);
+
+  // Nothing is being dragged, it came from another column, or this card is not somewhere it may
+  // go. The same filter the menu uses, so the band and the menu can never disagree.
+  if (
+    !canMove ||
+    !dragged ||
+    dragged.status !== status ||
+    dragged.id === target.id ||
+    !canGroupInto(dragged.id, target.id)
+  ) {
+    return null;
+  }
+
+  return (
+    <div
+      onDragOver={(event) => {
+        event.preventDefault();
+        setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(event) => {
+        setOver(false);
+        const entry = readDrag(event.dataTransfer);
+        if (!entry || entry.status !== status || entry.id === target.id) return;
+        // Stopped so the card's own reorder drop does not also fire.
+        event.stopPropagation();
+        event.preventDefault();
+        onGroup(entry.id, target.id);
+      }}
+      className={`mt-1 rounded border border-dashed px-2 py-1 text-center text-xs ${
+        over
+          ? 'border-sky-500 bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-300'
+          : 'border-slate-300 text-slate-500 dark:border-slate-700 dark:text-slate-400'
+      }`}
+    >
+      {/* Text, never markup: a title is a stranger's words. */}
+      Group into “{target.customTitle}”
+    </div>
   );
 }

@@ -13,6 +13,7 @@ import { NoteList } from './NoteList';
 import { PickButton } from './PickButton';
 import { DRAG_TYPE } from './drag';
 import { ReactionBar } from './ReactionBar';
+import { GroupControl } from './GroupControl';
 import { StatusControl } from './StatusControl';
 import { WatchOrderList } from './WatchOrderList';
 import { UpvoteButton } from './UpvoteButton';
@@ -31,6 +32,16 @@ interface RecommendationCardProps {
   /** Entries this one contains — a season under its show, a film under its franchise. */
   children?: React.ReactNode;
   /**
+   * What this entry may be grouped into, already filtered by `groupTargets`.
+   *
+   * Supplied only by the board: grouping is a per-column decision and needs the column's tree to
+   * know which entries carry members. Undefined everywhere else the card renders — a search hit
+   * and an entry's own page have no column to group within — and the control is then absent
+   * rather than offering a move with nothing to move into.
+   */
+  groupTargets?: Recommendation[];
+  onGroupChanged?: () => void;
+  /**
    * `h1` when this card *is* the page — on an entry's own page the title is the document's
    * subject, and repeating it above the card would show it twice.
    */
@@ -48,6 +59,8 @@ export function RecommendationCard({
   onCount,
   onStatusChanged,
   children,
+  groupTargets,
+  onGroupChanged,
 }: RecommendationCardProps) {
   const Heading = headingLevel === 1 ? 'h1' : 'h3';
   return (
@@ -222,6 +235,18 @@ export function RecommendationCard({
             capabilities payload without `permissions` would blank the board rather than hide a
             button.
           */}
+          {/* Grouping is MOVE_ENTRIES on both endpoints — the same gate, for the same reason. */}
+          {canModerate &&
+          permissions?.includes('MOVE_ENTRIES') &&
+          groupTargets &&
+          onGroupChanged ? (
+            <GroupControl
+              slug={slug}
+              entry={recommendation}
+              targets={groupTargets}
+              onChanged={onGroupChanged}
+            />
+          ) : null}
           {canModerate && permissions?.includes('MOVE_ENTRIES') ? (
             <StatusControl
               slug={slug}

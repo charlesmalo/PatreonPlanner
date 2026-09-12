@@ -29,7 +29,8 @@ a count copied forward is a claim nobody is checking, so this one was re-run.
 - [x] M10: Weighted voting, the upward-only ratchet, the my-votes page
 - [x] M11: Granular moderator permissions, view-as mode
 - [x] M12: Disputes and contact tickets
-- [x] M13: Grouping
+- [x] M13: Grouping — the API, and (later) the control that reaches it: a `Group`
+      menu on every card and a drop band while dragging, same column only
 - [x] M14: Reactions
 - [x] M16: Drag-and-drop, and hand-arranged order
 - [x] M15: Donation page (link-out; needs a payment URL to switch on)
@@ -385,7 +386,13 @@ reverted rather than shipped as an invented finding.
 That is the same error this tracker records once already, with the reaction limit that was
 "four presses away" and was actually sixty.
 
-## Grouping has no client, and the route audit cannot see it
+## Grouping had no client, and the route audit could not see it
+
+**Closed.** The control was built; see _Known Debt_ for what the deferral note got wrong. The
+audit limitation below stands exactly as written — it is why nothing reported this for as long as
+it was true.
+
+### The original note
 
 Found while tracing which endpoints return which errors, and **not an error-path finding at all**:
 `POST /creators/:slug/recommendations/:id/group` and its `DELETE` have **no caller anywhere in the
@@ -402,18 +409,32 @@ missing for a decision somebody can already make. Recorded in _Known Debt_.
 
 ## Known Debt
 
-- **Grouping is built, tested, and unreachable.** `POST :id/group` and `DELETE :id/group` are
-  MOVE_ENTRIES-gated, enforce one level of nesting in both directions, recompute a de-duplicated
-  sum, and have their own integration suite. **Nothing in the client calls either**, and no e2e
-  journey touches them.
+- ~~**Grouping is built, tested, and unreachable.**~~ Built, and **the note that deferred it was
+  wrong on its central claim**. It said grouping "invents a board surface — what a group looks
+  like, how you make one, what happens to the cards" and so was a product decision rather than
+  wiring.
 
-  Not a missing link this time: there is no control anywhere, because there is no grouping
-  surface. Building one decides what a group looks like on a board, how a reader makes one, what
-  happens to the grouped cards, and how it interacts with the column tabs and drag-and-drop —
-  product questions, not wiring.
+  The rendering already existed. `present()` exposes `groupHeadId` as `parentId`, `buildTree`
+  nests on it, and `BoardColumn` renders children recursively — so a group made through the API
+  would have drawn correctly the whole time, with the head carrying the de-duplicated total. The
+  TMDB-implied parents on the same field were producing exactly that rendering in production.
 
-  Worth knowing what it costs to leave: a board with five posts about one series shows five cards,
-  and the de-duplicated sum that exists to fix exactly that is uncomputable from the UI.
+  Only the control was missing, which is the #117 shape, not a new surface. The claim was made by
+  reading the endpoints and the debt notes rather than the read path; one `grep` for `parentId`
+  would have settled it.
+
+  What it actually took: a `GroupControl` menu, a drop band on the board, and one API field.
+
+  **`parentSource` exists because `parentId` merged two things.** A staff group and a
+  catalogue-implied nesting were "the same answer" while nothing acted on them. A control that
+  undoes a group has to tell them apart — `DELETE :id/group` returns early on a catalogue-implied
+  child, so an Ungroup offered on `parentId` alone would have done nothing on half the cards it
+  appeared on.
+
+  **Same column only, which is narrower than the API allows.** The board fetches one status at a
+  time and `buildTree` promotes any child whose head is absent, so a cross-column group draws the
+  child as an ordinary card while its votes count toward a head the reader cannot see. The client
+  offers the honest subset.
 
 - **A board has no search, though the API has one.**
   `GET /creators/:slug/recommendations/similar` is VIEW-gated, rate limited, fuses a trigram arm

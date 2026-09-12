@@ -357,6 +357,13 @@ export class RecommendationsService {
         // A head chosen by staff wins over one TMDB implies: the explicit decision is the whole
         // point, and it is the only one that can reach an entry with no catalogue title.
         parentId: groupHeadId ?? ((titleId && parents.get(titleId)) || null),
+        // Which of the two it was. `parentId` alone cannot say, and a control that undoes a
+        // group needs to know: `DELETE :id/group` returns early on a catalogue-implied child,
+        // so offering "Ungroup" on `parentId` alone would be a button that silently does
+        // nothing for half the cards it appeared on.
+        parentSource: groupHeadId
+          ? ('STAFF' as const)
+          : (titleId && parents.get(titleId) && ('CATALOGUE' as const)) || null,
         themes: (titleId && themes.get(titleId)) || [],
         // Never an input to the ordering above — see the Reaction model.
         reactions: reactions.get(item.id) ?? [],
