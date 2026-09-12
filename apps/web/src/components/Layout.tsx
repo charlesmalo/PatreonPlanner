@@ -48,7 +48,7 @@ export function Layout({ user, loadingSession, onSignOut, notifications, childre
                 should have to sign in to do. The app's own links sit next to it for the same
                 reason, and because both are the app speaking rather than the board. */}
             <ThemeMenu />
-            <AppMenu />
+            <AppMenu signedIn={user !== null} />
             {loadingSession ? null : user ? (
               <div className="flex items-center gap-3">
                 {/* Signed-in only: there is nobody to notify otherwise, and the endpoints 401. */}
