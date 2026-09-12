@@ -11,6 +11,20 @@ import { FlagActions } from './FlagActions';
 import type { StaffPermission } from '../api/types';
 import { RedactForm } from './RedactForm';
 
+/**
+ * Which check flagged it, in the moderator's terms.
+ *
+ * The difference matters: the word list is a rule this product ships and the blocklist is one
+ * this creator wrote, and only the second is theirs to revisit. Falls back to the raw value
+ * rather than failing — a source added to the API after this build shipped would otherwise read
+ * "Flagged by the undefined".
+ */
+const SOURCE_LABELS: Record<string, string> = {
+  WORDLIST: 'the word list',
+  CREATOR: "this board's blocklist",
+  ML: 'the automatic classifier',
+};
+
 const REASON_LABELS: Record<string, string> = {
   SPAM: 'Spam or advertising',
   HARASSMENT: 'Harassment or hate',
@@ -125,6 +139,19 @@ function QueueRow({ slug, item, permissions, onUpdate, onFlagResolved }: QueueRo
             {STATUS_LABELS[item.status] ?? item.status} · {item.upvoteCount} upvotes · suggested by{' '}
             {item.submittedBy.fullName ?? 'a patron'}
           </p>
+          {/* Shown above the text it is about. An entry the system judged sits in a queue ordered
+              by *reports*, so without this it is indistinguishable from one nobody has ever
+              questioned — which is what it was, for as long as this went unread. */}
+          {item.moderation ? (
+            <p className="mt-2 rounded bg-amber-50 px-2 py-1 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+              Flagged by {SOURCE_LABELS[item.moderation.source] ?? item.moderation.source}
+              {item.moderation.categories.length > 0
+                ? ` — ${item.moderation.categories
+                    .map((category) => category.toLowerCase().replace(/_/g, ' '))
+                    .join(', ')}`
+                : ''}
+            </p>
+          ) : null}
           {item.description ? (
             <p className="mt-2 whitespace-pre-line break-words text-sm text-slate-600 dark:text-slate-300">
               {item.description}

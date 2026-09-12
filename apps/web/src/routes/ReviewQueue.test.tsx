@@ -75,6 +75,76 @@ describe('ReviewQueue', () => {
     expect(screen.getByText('link farm')).toBeInTheDocument();
   });
 
+  it('says when the system flagged an entry, and why', async () => {
+    // The verdict was recorded and shown to nobody. This queue lists every entry on the board
+    // ordered by open reports, so one the system judged sat among entries nobody had ever
+    // questioned with nothing to tell them apart.
+    global.fetch = fakeApi({
+      'GET /api/v1/creators/ada-writes': creator,
+      'GET /api/v1/creators/ada-writes/capabilities': moderator,
+      'GET /api/v1/creators/ada-writes/review-queue': {
+        items: [
+          queueItem({
+            moderation: {
+              verdict: 'FLAG',
+              categories: ['HARASSMENT'],
+              source: 'WORDLIST',
+              createdAt: new Date().toISOString(),
+            },
+          }),
+        ],
+        nextOffset: null,
+      },
+    });
+    renderQueue();
+
+    expect(await screen.findByText(/flagged by the word list/i)).toBeInTheDocument();
+    expect(screen.getByText(/harassment/i)).toBeInTheDocument();
+  });
+
+  it('names the board own blocklist rather than calling it the word list', async () => {
+    // Three sources can flag, and which one did is the difference between "the rules we ship"
+    // and "a word this creator banned" — the second is the creator's own decision to revisit.
+    global.fetch = fakeApi({
+      'GET /api/v1/creators/ada-writes': creator,
+      'GET /api/v1/creators/ada-writes/capabilities': moderator,
+      'GET /api/v1/creators/ada-writes/review-queue': {
+        items: [
+          queueItem({
+            moderation: {
+              verdict: 'FLAG',
+              categories: ['CREATOR_BLOCKLIST'],
+              source: 'CREATOR',
+              createdAt: new Date().toISOString(),
+            },
+          }),
+        ],
+        nextOffset: null,
+      },
+    });
+    renderQueue();
+
+    expect(await screen.findByText(/flagged by this board's blocklist/i)).toBeInTheDocument();
+  });
+
+  it('says nothing at all about an entry the system never judged', async () => {
+    // A PASS is deliberately not recorded, so null means never judged — not judged and cleared.
+    // Printing "not flagged" on every row would be noise that also happens to be a claim the
+    // data cannot support.
+    global.fetch = fakeApi({
+      'GET /api/v1/creators/ada-writes': creator,
+      'GET /api/v1/creators/ada-writes/capabilities': moderator,
+      'GET /api/v1/creators/ada-writes/review-queue': {
+        items: [queueItem({ moderation: null })],
+        nextOffset: null,
+      },
+    });
+    renderQueue();
+
+    await screen.findByText('Spirited Away');
+    expect(screen.queryByText(/flagged by/i)).not.toBeInTheDocument();
+  });
+
   it('shows a watch order steps so they can be moderated', async () => {
     // The API returns them; a queue that dropped them would review a title and nothing else.
     global.fetch = fakeApi({

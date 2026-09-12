@@ -102,6 +102,32 @@ export class ReviewQueueService {
 
     const hasMore = items.length > take;
     const page = hasMore ? items.slice(0, take) : items;
+
+    // Why the *system* flagged something, which this queue recorded and never showed. The row is
+    // written by ModerationService, pointed at the entry by `attachSubject` — "which is what lets
+    // the review queue find it" — and indexed by `subjectId` for this exact lookup. One query for
+    // the page, like the board does for availability, rather than one per row.
+    //
+    // Scoped by creator as well as by id: a subject id is a uuid and says nothing about which
+    // board it belongs to, and every other read here is scoped the same way.
+    const judged = await this.prisma.moderationResult.findMany({
+      where: { creatorId, subjectId: { in: page.map((item) => item.id) } },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        subjectId: true,
+        verdict: true,
+        categories: true,
+        source: true,
+        createdAt: true,
+      },
+    });
+    // Newest first above, so the first row for an entry is the verdict that stands — an edit runs
+    // through moderation again and writes another.
+    const moderation = new Map<string, (typeof judged)[number]>();
+    for (const row of judged) {
+      if (row.subjectId && !moderation.has(row.subjectId)) moderation.set(row.subjectId, row);
+    }
+
     return {
       items: page.map(({ _count, creatorNotes, ...item }) => ({
         ...item,
@@ -109,6 +135,9 @@ export class ReviewQueueService {
         // contract does not have to.
         notes: creatorNotes,
         openFlagCount: _count.flags,
+        // Null means never judged rather than judged and cleared: a PASS is deliberately not
+        // recorded, because almost everything passes and the table would be the largest here.
+        moderation: moderation.get(item.id) ?? null,
       })),
       nextOffset: hasMore ? offset + take : null,
     };
