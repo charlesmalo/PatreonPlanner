@@ -231,6 +231,18 @@ export interface ReviewQueueItem {
   watchOrderItems: WatchOrderItem[];
   /** Both kinds: the queue is where a moderator reads their own commentary. */
   notes: CreatorNote[];
+  /**
+   * Why the system judged this entry, or null if it never did.
+   *
+   * Null means never judged rather than judged and cleared: a PASS is deliberately not recorded,
+   * because almost everything passes and that table would be the largest in the database.
+   */
+  moderation: {
+    verdict: string;
+    categories: string[];
+    source: string;
+    createdAt: string;
+  } | null;
 }
 
 export interface NotificationPayload {

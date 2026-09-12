@@ -162,6 +162,47 @@ describe('Review queue (integration)', () => {
     ]);
   });
 
+  it('shows the moderator why the system flagged an entry', async () => {
+    // The evidence was written and never read. `ModerationResult` records the verdict and the
+    // categories behind it, `attachSubject` links it to the entry once there is one — "which is
+    // what lets the review queue find it", says the comment — and the table carries a
+    // `[subjectId]` index for exactly this lookup. Nothing looked.
+    //
+    // The queue lists every entry on the board, ordered by open reports, so an entry the system
+    // itself flagged sat among entries nobody has ever questioned, with nothing to tell them
+    // apart and no reason attached to the one that had been judged.
+    const rec = await makeEntry();
+    await ctx.prisma.moderationResult.create({
+      data: {
+        creatorId,
+        userId: patronUserId,
+        subjectType: 'RECOMMENDATION',
+        subjectId: rec.id,
+        verdict: 'FLAG',
+        categories: ['harassment'],
+        source: 'WORDLIST',
+      },
+    });
+
+    const res = await queue(staff).expect(200);
+    const item = res.body.items.find((i: { id: string }) => i.id === rec.id);
+    expect(item.moderation).toMatchObject({
+      verdict: 'FLAG',
+      categories: ['harassment'],
+      source: 'WORDLIST',
+    });
+  });
+
+  it('leaves moderation null on an entry the system never judged', async () => {
+    // PASS is the absence of a row, by design — almost everything passes and recording it would
+    // be the largest table here. So null means "never judged", not "judged and cleared".
+    const rec = await makeEntry();
+
+    const res = await queue(staff).expect(200);
+    const item = res.body.items.find((i: { id: string }) => i.id === rec.id);
+    expect(item.moderation).toBeNull();
+  });
+
   it('includes rejected and deleted entries so the bin is reachable', async () => {
     const deleted = await makeEntry({ status: 'DELETED' });
     const rejected = await makeEntry({ status: 'REJECTED' });
