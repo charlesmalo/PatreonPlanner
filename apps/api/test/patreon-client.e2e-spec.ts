@@ -134,4 +134,118 @@ describe('HttpPatreonClient', () => {
       expiresInSeconds: 3600,
     });
   });
+  /**
+   * `refreshTokens` and `fetchProfile` were **wholly uncovered** — every line of both, found by
+   * the per-file coverage floor rather than by anything failing. Every running system uses
+   * `FakePatreonClient`, so the real client is exercised only against Patreon itself.
+   *
+   * `fetchProfile` is the one that matters: it is the sign-in path, and it exists specifically to
+   * drop the `include` that makes the identity call time out for readers with many memberships.
+   */
+  it('renews a session from a refresh token', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ access_token: 'a2', refresh_token: 'r2', expires_in: 2678400 }),
+    } as unknown as Response);
+    global.fetch = fetchMock;
+
+    const tokens = await client.refreshTokens('the-refresh-token');
+
+    const body = new URLSearchParams(fetchMock.mock.calls[0][1].body as string);
+    expect(body.get('grant_type')).toBe('refresh_token');
+    expect(body.get('refresh_token')).toBe('the-refresh-token');
+    expect(tokens).toEqual({ accessToken: 'a2', refreshToken: 'r2', expiresInSeconds: 2678400 });
+  });
+
+  it('throws without leaking the response body when a refresh is rejected', async () => {
+    // The body of a token response can echo the refresh token back; only the status is logged.
+    global.fetch = jest.fn().mockResolvedValue({ ok: false, status: 400 } as unknown as Response);
+
+    await expect(client.refreshTokens('stale')).rejects.toThrow('Patreon token refresh failed');
+  });
+
+  it('asks for the profile without the include that makes identity time out', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: {
+          id: 'user-9',
+          attributes: { full_name: 'Ada', email: 'ada@example.com', image_url: 'https://img' },
+        },
+      }),
+    } as unknown as Response);
+    global.fetch = fetchMock;
+
+    const profile = await client.fetchProfile('token');
+
+    const url = new URL(String(fetchMock.mock.calls[0][0]));
+    expect(url.searchParams.get('include')).toBeNull();
+    expect(profile).toEqual({
+      patreonUserId: 'user-9',
+      fullName: 'Ada',
+      email: 'ada@example.com',
+      avatarUrl: 'https://img',
+    });
+  });
+
+  it('reads a profile with no attributes at all as nulls, not undefined', async () => {
+    // A `PatreonProfile` field is `string | null`; `undefined` would be written straight to a
+    // column typed otherwise.
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { id: 'user-9' } }),
+    } as unknown as Response);
+
+    const profile = await client.fetchProfile('token');
+
+    expect(profile).toEqual({
+      patreonUserId: 'user-9',
+      fullName: null,
+      email: null,
+      avatarUrl: null,
+    });
+  });
+
+  it('throws when the profile fetch is rejected', async () => {
+    global.fetch = jest.fn().mockResolvedValue({ ok: false, status: 500 } as unknown as Response);
+
+    await expect(client.fetchProfile('token')).rejects.toThrow('Patreon profile fetch failed');
+  });
+
+  it('throws when the identity fetch is rejected', async () => {
+    global.fetch = jest.fn().mockResolvedValue({ ok: false, status: 403 } as unknown as Response);
+
+    await expect(client.fetchIdentity('token')).rejects.toThrow('Patreon identity fetch failed');
+  });
+
+  it('reads an identity with no attributes as nulls', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { id: 'user-9' } }),
+    } as unknown as Response);
+
+    const identity = await client.fetchIdentity('token');
+
+    expect(identity).toEqual({
+      patreonUserId: 'user-9',
+      fullName: null,
+      email: null,
+      avatarUrl: null,
+      memberships: [],
+    });
+  });
+
+  it('drops a membership that names no campaign rather than storing an empty id', async () => {
+    const payload = {
+      data: { id: 'user-9', relationships: { memberships: { data: [{ id: 'm1' }] } } },
+      included: [{ id: 'm1', type: 'member', attributes: { patron_status: 'active_patron' } }],
+    };
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue({ ok: true, json: async () => payload } as unknown as Response);
+
+    const identity = await client.fetchIdentity('token');
+
+    expect(identity.memberships).toEqual([]);
+  });
 });
