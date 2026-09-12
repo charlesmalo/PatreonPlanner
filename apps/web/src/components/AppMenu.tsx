@@ -15,11 +15,27 @@ import { Link, useLocation } from 'react-router-dom';
 interface Item {
   to: string;
   label: string;
+  /** Asks the API for something only a session can answer, so it is no use to a visitor. */
+  needsSession?: boolean;
 }
 
-const ITEMS: Item[] = [{ to: '/support', label: 'Support the developers' }];
+/**
+ * `/premium` and `/carry-over` are here because nothing else in the client linked to them. A
+ * search for either path found the route definition and the page, and no `to=` anywhere — so both
+ * were complete, tested pages reachable only by typing the URL. They belong in this menu for the
+ * same reason the donation link does: they are the app's own, not a board's.
+ */
+const ITEMS: Item[] = [
+  { to: '/premium', label: 'Premium', needsSession: true },
+  { to: '/carry-over', label: 'Suggest a list to other boards', needsSession: true },
+  { to: '/support', label: 'Support the developers' },
+];
 
-export function AppMenu() {
+interface AppMenuProps {
+  signedIn: boolean;
+}
+
+export function AppMenu({ signedIn }: AppMenuProps) {
   const [open, setOpen] = useState(false);
   const container = useRef<HTMLDivElement>(null);
   const { pathname } = useLocation();
@@ -51,7 +67,11 @@ export function AppMenu() {
     setOpen(false);
   }, [pathname]);
 
-  if (onACreatorBoard) return null;
+  // A visitor is offered only what works without a session; the rest would open a page that can
+  // do nothing but report a failure.
+  const visible = ITEMS.filter((item) => signedIn || !item.needsSession);
+
+  if (onACreatorBoard || visible.length === 0) return null;
 
   return (
     <div className="relative" ref={container}>
@@ -72,7 +92,7 @@ export function AppMenu() {
           aria-label="More"
           className="absolute right-0 z-20 mt-1 w-56 rounded border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-800 dark:bg-slate-900"
         >
-          {ITEMS.map((item) =>
+          {visible.map((item) =>
             // The donation page carried a link to the donation page. A menu item that navigates
             // nowhere is a dead control, so where the reader already is says so instead.
             pathname === item.to ? (

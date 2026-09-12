@@ -83,6 +83,17 @@ describe('NotificationSettings', () => {
     expect(screen.getByText(/premium/i)).toBeInTheDocument();
   });
 
+  it('takes a free reader to where premium is actually bought', async () => {
+    // The sentence above already argues this: unlike a permission a moderator has to be granted,
+    // this reader is eligible to buy the thing. They were told the name of it and left to find
+    // the page themselves — and nothing in the client linked to /premium at all.
+    global.fetch = fakeApi(routes({ ...premium, canCustomise: false }));
+    renderPage();
+
+    const link = await screen.findByRole('link', { name: /premium/i });
+    expect(link).toHaveAttribute('href', '/premium');
+  });
+
   it('silences a board in one action and says what it did', async () => {
     global.fetch = fakeApi({
       ...routes(premium),

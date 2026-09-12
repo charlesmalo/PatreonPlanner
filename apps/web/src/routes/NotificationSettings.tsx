@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { useThemes } from '../api/hooks';
 
@@ -109,8 +109,17 @@ export function NotificationSettings() {
 
       {canCustomise ? null : (
         <p className="mt-2 rounded bg-slate-100 p-2 text-sm text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-          You are notified either way. Choosing <strong>which</strong> moves reach you is a premium
-          feature.
+          You are notified either way. Choosing <strong>which</strong> moves reach you is part of{' '}
+          {/* Unlike a permission a moderator has to be granted, this reader is eligible to buy the
+              thing — and was told its name and left to find the page on their own. Nothing in the
+              client linked to /premium at all. */}
+          <Link
+            to="/premium"
+            className="underline focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+          >
+            premium
+          </Link>
+          .
         </p>
       )}
 
