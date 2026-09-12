@@ -92,12 +92,40 @@ than it was true. `@vitest/coverage-v8` was taken, and the thresholds live in
 `apps/web/vite.config.ts`: 90% lines and statements, 85% branches, 88%
 functions. Run it with `cd apps/web && pnpm test -- --coverage`.
 
-**Both gates are global, and a global cannot see a file.** Three web files sat
-at 0% — `Tickets.tsx` at 157 statements, `LandingPage.tsx`, `App.tsx` — inside
-a passing 91.09%, because enough other files were excellent. They are covered
-now; whether a per-file floor should be added, and at what number, is an open
-question in `PROGRESS_TRACKER.md`. Until it is answered, **read the per-file
-report, not only the exit code**, when adding a file.
+### The second gate: a 75% per-file floor
+
+**An aggregate cannot see a file.** Three web files sat at 0% — `Tickets.tsx`
+at 157 statements, `LandingPage.tsx`, `App.tsx` — inside a passing 91.09%,
+because enough other files were excellent. Raising the aggregate would not have
+caught one of them.
+
+So there are two gates now, answering different questions, and they are given
+different numbers on purpose:
+
+| gate           | question                      | where                                      |
+| -------------- | ----------------------------- | ------------------------------------------ |
+| the aggregate  | is this codebase tested well? | `jest-e2e.json`, `apps/web/vite.config.ts` |
+| the floor, 75% | is any single file abandoned? | `scripts/audit-coverage-floor.mjs`         |
+
+**Lines and statements only.** Measured before choosing: at 75%, branches would
+fail 8 web and 12 API files and functions 4 and 9 — because on a small file
+those percentages are dominated by how many branches the file happens to have,
+not by neglect. A two-function file with one covered is 50%. A floor that fires
+on ordinary variation is one people learn to bypass. Branches and functions
+stay with the aggregate, where they mean something.
+
+**It is a script because neither runner can express it.** Vitest's glob
+thresholds are aggregate over the matching set — measured, not assumed — and
+Jest subtracts glob-matched paths from the global bucket, so a catch-all glob
+there would empty the 90% gate beside it.
+
+**Files under 10 statements are exempt, and counted out loud** — a percentage
+over three statements is arithmetic, not testing. **Except at zero:** no size
+excuses a file with no coverage at all.
+
+The floor runs inside each package's `coverage` script, so it cannot be skipped
+by running coverage on its own, and it refuses a missing or empty summary
+rather than reporting a clean tree it never read.
 
 A percentage is still the weaker question. Coverage says a line ran; the
 mutation discipline in §7 asks whether anything would have noticed if it ran

@@ -34,7 +34,9 @@ export default defineConfig({
         'src/test-support.tsx',
         'src/vite-env.d.ts',
       ],
-      reporter: ['text-summary', 'lcov'],
+      // `json-summary` is what `scripts/audit-coverage-floor.mjs` reads; without it the
+      // per-file floor has nothing to check and refuses to pass.
+      reporter: ['text-summary', 'lcov', 'json-summary'],
       /**
        * Set just under where the suite already stands, so this is a ratchet against regression
        * rather than a number to chase. Measured before choosing: 90.17% lines and statements,

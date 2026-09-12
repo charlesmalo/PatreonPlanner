@@ -18,5 +18,7 @@
       "statements": 90,
       "functions": 90
     }
-  }
+  },
+  "coverageReporters": ["text-summary", "lcov", "json-summary"],
+  "//coverageReporters": "`json-summary` is what scripts/audit-coverage-floor.mjs reads; the defaults omit it, and without it the per-file floor has nothing to check and refuses to pass."
 }

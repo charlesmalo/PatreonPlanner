@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "coverage": "vitest run --coverage"
+    "coverage": "vitest run --coverage && node ../../scripts/audit-coverage-floor.mjs apps/web"
   },
   "dependencies": {
     "react": "18.3.1",
