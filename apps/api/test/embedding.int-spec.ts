@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { ConfigService } from '../src/config/config.module';
 import { EMBED_BATCH_SIZE, EmbedTitlesJob } from '../src/jobs/embed-titles.job';
@@ -125,11 +126,35 @@ describe('Title embedding job (integration)', () => {
     expect(await job.runOnce()).toBe(1);
   });
 
-  it('refuses a vector of the wrong width rather than storing it', async () => {
-    // A dimension mismatch is a Postgres error at write time, not a silently wrong column.
-    const title = await makeTitle();
-    embeddings.embedPassages = async (texts: string[]) => texts.map(() => [1, 2, 3]);
-    expect(await job.runOnce()).toBe(0);
-    expect((await stored(title.id)).model).toBeNull();
+  it('refuses a vector of the wrong width, and says which two disagree', async () => {
+    // Swapping EMBEDDING_MODEL for one of a different width is the realistic way here, and what
+    // it produced was a batch of identical warnings naming a uuid and a Postgres error — every
+    // tick, forever — while the product symptom was silence: no vectors, so the semantic arm
+    // returns nothing and search quietly degrades to spelling alone. That exact silence has cost
+    // this project a five-layer investigation once already.
+    //
+    // EMBEDDING_DIMENSIONS exists to state the column's width and was read by nothing that runs.
+    // It is the contract, so it is what the model is checked against.
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    try {
+      const titles = await Promise.all([makeTitle('One'), makeTitle('Two'), makeTitle('Three')]);
+      embeddings.embedPassages = async (texts: string[]) =>
+        texts.map(() => new Array(768).fill(0.1));
+
+      expect(await job.runOnce()).toBe(0);
+
+      // The safety property first: a column of the wrong width is never written, and the rows
+      // keep a null model so they come round again once the mismatch is resolved.
+      for (const title of titles) expect((await stored(title.id)).model).toBeNull();
+
+      expect(error).toHaveBeenCalledTimes(1);
+      expect(String(error.mock.calls[0][0])).toMatch(/768.*384|384.*768/);
+      // Not one per row: the batch stops before the writes rather than failing each of them.
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      error.mockRestore();
+      warn.mockRestore();
+    }
   });
 });
