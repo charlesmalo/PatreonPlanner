@@ -87,9 +87,9 @@ What remains needs access this repository does not have:
 
 ## Open Questions Blocking Work
 
-**Two, and neither blocks anything shipped.**
+**One, and it does not block anything shipped.**
 
-**First: availability is answered for one region, server-wide.** The board and the entry page both
+**Availability is answered for one region, server-wide.** The board and the entry page both
 embed `availability` for `AVAILABILITY_REGION_DEFAULT`, so a patron in France reads "Where to
 watch (US)" and a list of US offers. `GET /creators/:slug/catalog/titles/:id/availability` takes
 a `region` and is the only thing that can answer otherwise; nothing in the client passes one,
@@ -106,24 +106,6 @@ The refresh obligation is the part worth weighing: `AvailabilityQuery` already r
 the deployment does not serve, with the comment that an open region set lets one caller create a
 permanent row and a permanent refresh obligation for every country on earth. Whichever way this
 goes, the bounded set stays bounded.
-
-**Second: should coverage gain a per-file floor, and at what number?** Both gates are global
-today, which is how three files sat at 0% inside a passing 91% (see _An aggregate cannot see a
-file_). The files are covered now; the blind spot is not. This is a policy choice, not a
-measurement, because it decides what every future PR must clear:
-
-| Option                          | Cost                                                                                                                                                                                             |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Leave it global                 | The hole reopens the first time a file ships without a test, and nothing says so                                                                                                                 |
-| Per-file floor at ~75%          | Passes today with headroom — the real floor is 81.81% — and would have caught all four. A second gate with a second meaning: "nothing is abandoned", distinct from the 90% aggregate quality bar |
-| Per-file at the full 90% target | One number, one meaning. **Fails today on 8 web files and 14 API files**, which §3 of `07_TESTING_STANDARDS.md` says teaches people to pass `--no-coverage`                                      |
-
-Recommendation: **the ~75% floor**, as a second gate stated in its own terms. The aggregate
-answers "is this codebase tested well"; the floor answers "is any file abandoned", and one
-number cannot answer both — which is the whole finding. Set it below today's worst file on
-purpose, so it fails on neglect rather than on ordinary variation.
-
-Not taken unilaterally: it is build configuration and it binds every future change.
 
 All three questions that previously stood here were answered and built:
 
@@ -308,9 +290,44 @@ files under 90%. The worst real one is `http-patreon.client.ts` at 74.57% lines 
 branches — its error and retry paths, which only a live Patreon exercises. The rest are
 three-statement abstract providers whose percentage is an artifact of their size.
 
-**The structural half is not fixed.** Both gates are still global-only, so this can reopen
-silently. The fix is a per-file floor, and the number is a policy decision rather than a
-measurement — see _Open Questions_.
+**The structural half is fixed too.** The engineer took the ~75% floor, and it is
+`scripts/audit-coverage-floor.mjs`, wired inside each package's `coverage` script so it cannot be
+skipped by running coverage on its own.
+
+Two gates now, answering different questions and holding different numbers: the aggregate asks
+whether the codebase is tested well, the floor asks whether any single file is abandoned.
+
+**Lines and statements only.** Measured before choosing: at 75%, branches would fail 8 web and 12
+API files, functions 4 and 9, because on a small file those percentages are dominated by how many
+branches the file happens to have rather than by neglect. A floor that fires on ordinary
+variation is one people learn to bypass.
+
+**A script, because neither runner can express it.** Vitest's glob thresholds are aggregate over
+the matching set — measured, not assumed: a catch-all glob at 99.99% reports 95.21%, the global
+number, and `perFile` inside a glob group is ignored. Jest subtracts glob-matched paths from the
+global bucket, so a catch-all glob there would empty the 90% gate beside it.
+
+Files under 10 statements are exempt and **counted out loud**; a percentage over three statements
+is arithmetic, not testing. **Except at zero** — no size excuses a file with nothing covered,
+since `safe-url.ts` is 8 statements and was one of the four finds.
+
+Adding it cost two more findings, both the same shape as the first four and neither failing
+anything: `HttpPatreonClient.refreshTokens` and `fetchProfile` were **wholly uncovered** — every
+running system uses `FakePatreonClient`, so the real one is exercised only against Patreon
+itself — and `ResendSender.send`, the only file that knows which email provider this is, had
+never been called by a test. Both are covered now; the Patreon client went 74.57% → 100% lines
+and 60.97% → 92.68% branches, and the API aggregate 96.8% → 97.3%.
+
+**The allow-list is empty on purpose.** An allow-list carrying an entry from birth is a gate
+negotiated against an existing violation, which §3 of `07_TESTING_STANDARDS.md` says is how gates
+die. The Patreon client was the one candidate and it was covered instead.
+
+Verified by mutation, five ways: a large file forced to 0% is named; a _small_ file forced to 0%
+is named too, rather than excused by the size floor; a missing summary and an empty one both
+refuse with exit 2 rather than reporting a clean tree; and — the one that matters — deleting
+every `Tickets.tsx` test and re-measuring for real makes the floor fire at 8.91% **while the
+aggregate gate still passes at 92.63%**. That is the whole argument for the second gate, run
+rather than asserted.
 
 ## Known Debt
 
