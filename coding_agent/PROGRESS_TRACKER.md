@@ -87,9 +87,9 @@ What remains needs access this repository does not have:
 
 ## Open Questions Blocking Work
 
-**One, and it does not block anything shipped.**
+**Two, and neither blocks anything shipped.**
 
-**Availability is answered for one region, server-wide.** The board and the entry page both
+**First: availability is answered for one region, server-wide.** The board and the entry page both
 embed `availability` for `AVAILABILITY_REGION_DEFAULT`, so a patron in France reads "Where to
 watch (US)" and a list of US offers. `GET /creators/:slug/catalog/titles/:id/availability` takes
 a `region` and is the only thing that can answer otherwise; nothing in the client passes one,
@@ -106,6 +106,24 @@ The refresh obligation is the part worth weighing: `AvailabilityQuery` already r
 the deployment does not serve, with the comment that an open region set lets one caller create a
 permanent row and a permanent refresh obligation for every country on earth. Whichever way this
 goes, the bounded set stays bounded.
+
+**Second: should coverage gain a per-file floor, and at what number?** Both gates are global
+today, which is how three files sat at 0% inside a passing 91% (see _An aggregate cannot see a
+file_). The files are covered now; the blind spot is not. This is a policy choice, not a
+measurement, because it decides what every future PR must clear:
+
+| Option                          | Cost                                                                                                                                                                                             |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Leave it global                 | The hole reopens the first time a file ships without a test, and nothing says so                                                                                                                 |
+| Per-file floor at ~75%          | Passes today with headroom — the real floor is 81.81% — and would have caught all four. A second gate with a second meaning: "nothing is abandoned", distinct from the 90% aggregate quality bar |
+| Per-file at the full 90% target | One number, one meaning. **Fails today on 8 web files and 14 API files**, which §3 of `07_TESTING_STANDARDS.md` says teaches people to pass `--no-coverage`                                      |
+
+Recommendation: **the ~75% floor**, as a second gate stated in its own terms. The aggregate
+answers "is this codebase tested well"; the floor answers "is any file abandoned", and one
+number cannot answer both — which is the whole finding. Set it below today's worst file on
+purpose, so it fails on neglect rather than on ordinary variation.
+
+Not taken unilaterally: it is build configuration and it binds every future change.
 
 All three questions that previously stood here were answered and built:
 
@@ -251,6 +269,48 @@ they were written to find, one level up.
 **The lesson generalises past these two.** A check that only reports what it finds
 wrong cannot distinguish a clean tree from an empty one. Every one of these should
 say how much it examined, and pin what it expects to examine.
+
+## An aggregate cannot see a file
+
+The same defect as the two audits above, one level up again: **a global coverage gate cannot
+tell "every file is decently covered" from "most files are excellent and three are zero."**
+Both read as 91%.
+
+Measured on the web side, which passed its 90% gate at 91.09% lines:
+
+| file                         | statements | coverage |
+| ---------------------------- | ---------- | -------- |
+| `src/routes/Tickets.tsx`     | 157        | **0%**   |
+| `src/routes/LandingPage.tsx` | 37         | **0%**   |
+| `src/App.tsx`                | 33         | **0%**   |
+
+None of the three had a test file at all. `Tickets.tsx` — the moderator's inbox — is the
+largest route in the client and had exactly one e2e journey through its happy path and nothing
+else: no load failure, no empty state, no resolved rendering, no status filter, and nothing on
+the rule that decides whether picking a resolution overwrites what a moderator has typed.
+
+A fourth, found the same way and worth more than its size: **`src/components/safe-url.ts`**, the
+client half of an XSS boundary, sat at 75% lines / 50% branches with its `catch` measured at
+**0 executions across all 458 tests**. All three consumers test `javascript:` against their own
+markup — which is why the protocol check was covered — and none had ever handed it a string that
+is not a URL at all.
+
+Closed: 25 tests, every one verified by mutation. Web coverage moved 91.09% → 95.21% lines,
+90.55% → 91.80% functions, and **no file sits at 0%**. The new per-file floor is 81.81%
+(`drag.ts`, 11 statements).
+
+**Nothing was found wrong in any of the four.** The finding is the hole, not a defect — which is
+the honest and less satisfying half of the result, and the reason to write it down rather than
+claim a save.
+
+The API side was measured the same way and is healthy: 96.8% global, nothing at 0%, 14 of 128
+files under 90%. The worst real one is `http-patreon.client.ts` at 74.57% lines / 60.97%
+branches — its error and retry paths, which only a live Patreon exercises. The rest are
+three-statement abstract providers whose percentage is an artifact of their size.
+
+**The structural half is not fixed.** Both gates are still global-only, so this can reopen
+silently. The fix is a per-file floor, and the number is a policy decision rather than a
+measurement — see _Open Questions_.
 
 ## Known Debt
 
