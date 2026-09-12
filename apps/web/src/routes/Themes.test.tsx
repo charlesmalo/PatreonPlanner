@@ -145,4 +145,22 @@ describe('Themes', () => {
     expect(await screen.findByRole('status')).toHaveTextContent(/did not save/i);
     expect(screen.getByText('Anime')).toBeInTheDocument();
   });
+
+  it('says the name is taken rather than only that nothing changed', async () => {
+    // The fixture holds "Anime" and "anime" precisely because that pair is why merging exists,
+    // so a clash is the ordinary case here rather than an exotic one. The API answers it with
+    // 409; without reading that, a creator is told only that nothing happened and retypes the
+    // same taken name.
+    withThemes({ 'PATCH /api/v1/creators/ada-writes/themes/t1': new Error('409') });
+    renderPage();
+    await screen.findByText('Anime');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Rename Anime' }));
+    const field = screen.getByLabelText(/new name/i);
+    await userEvent.clear(field);
+    await userEvent.type(field, 'Documentary');
+    await userEvent.click(screen.getByRole('button', { name: /^save$/i }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent(/already exists/i);
+  });
 });

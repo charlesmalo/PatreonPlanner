@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { api } from '../api/client';
+import { ApiError, api } from '../api/client';
 import { useCreator } from '../api/hooks';
 import type { ThemeSummary } from '../api/types';
 
@@ -58,8 +58,15 @@ export function Themes() {
         (current ?? []).map((t) => (t.id === theme.id ? { ...t, name: saved.name } : t)),
       );
       setPending(null);
-    } catch {
-      setMessage('That did not save. Nothing changed.');
+    } catch (error) {
+      setMessage(
+        error instanceof ApiError && error.status === 409
+          ? // The API answers a name clash with 409. Without this a creator is told only that
+            // nothing changed, and retypes the same taken name — the board already holds "Anime"
+            // and "anime", which is the pair that makes merging exist.
+            'A theme with that name already exists.'
+          : 'That did not save. Nothing changed.',
+      );
     }
   }
 
