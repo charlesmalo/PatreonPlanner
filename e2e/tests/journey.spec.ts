@@ -91,8 +91,23 @@ async function showColumn(page: import('@playwright/test').Page, label: string |
 }
 
 async function signOut(page: import('@playwright/test').Page) {
+  // Armed *before* the click, not awaited after it. The client sets `user` to null and only then
+  // calls `window.location.assign('/')`, so the header flips on a React state update while the
+  // reload is still in flight. Asserting on the header alone returns mid-navigation, and the
+  // caller's next `page.goto('/')` is interrupted by it — "Navigation to … is interrupted by
+  // another navigation to …", seen in CI on the sign-in that follows. That is the same failure
+  // `signIn` documents, one function over.
+  //
+  // `waitForURL('/')` cannot stand in for this: signing out *from* `/` leaves the URL unchanged,
+  // so it resolves instantly and waits for nothing. Nor can the document be probed with
+  // `page.evaluate` — the reload destroys the execution context underneath the call, which fails
+  // the check it was meant to perform. A frame-navigation listener armed beforehand is immune to
+  // both, because it is already subscribed when the navigation lands.
+  const reloaded = page.waitForEvent('framenavigated', (frame) => frame === page.mainFrame());
+
   await page.getByRole('button', { name: /sign out/i }).click();
   await expect(page.getByRole('link', { name: /sign in with patreon/i })).toBeVisible();
+  await reloaded;
 }
 
 test('an anonymous visitor can read a public board', async ({ page }) => {
