@@ -69,6 +69,64 @@ Trigram matching and semantic search are fused, so both routes find the entry.
 **Notifications.** The bell polls once a minute, so it is not instant by design. Opening it marks
 what it showed as read, and nothing else.
 
+## Driving it from a script
+
+Sometimes it is easier to script the demo than to click it — capturing a screenshot, reproducing
+a sequence, or checking that something survives a reload. Playwright is already a dev dependency
+of `e2e`, so nothing new is needed.
+
+Three things will trip you up, in the order you hit them.
+
+**1. Sign-in goes through the real OAuth chain.** `/__be/<person>` — `ada`, `mo`, `bea`, `cal`,
+`dee` — does not set a cookie directly. It redirects into `/auth/patreon/login` on the app, which
+bounces through the stub and back. Wait for the app, not for the stub.
+
+**2. There is a consent screen.** The stub shows "Continue as…" with a link, the way Patreon shows
+an approve screen. A person clicks it without thinking; a script has to. Skip it and you are left
+sitting on `/oauth2/authorize` wondering why sign-in timed out.
+
+**3. Columns are tabs, not side by side.** Only one column's panel is visible at a time and the
+rest are `inert`, so anything outside the column the board opens on has to be asked for first.
+This is true for a person too — it is why the board has Suggestions / Accepted / Now Playing /
+Completed across the top rather than four columns at once.
+
+An ES-module script has to live **inside `e2e/`**, or `@playwright/test` will not resolve:
+
+```bash
+cat > e2e/scratch.mjs <<'JS'
+import { chromium } from '@playwright/test';
+
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1280, height: 1100 } });
+
+await page.goto('http://localhost:4001/__be/ada');            // 1. pick a person
+const consent = page.locator('a[href*="/oauth2/authorize"]').first();
+if (await consent.count()) await consent.click();              // 2. the consent screen
+await page.getByRole('button', { name: /sign out/i }).waitFor({ timeout: 20000 });
+
+await page.goto('http://localhost:8081/c/ada-watches-things');
+await page.getByRole('tab', { name: /suggestions/i }).click(); // 3. columns are tabs
+
+const column = page.getByRole('region', { name: /suggestions/i });
+await column.getByRole('heading', { level: 3 }).first().waitFor();
+await page.screenshot({ path: 'board.png', fullPage: true });
+
+await browser.close();
+JS
+(cd e2e && node scratch.mjs) && rm e2e/scratch.mjs
+```
+
+The working directory is `e2e/`, so `board.png` lands there — untracked, and easy to commit by
+accident. Write it somewhere outside the repo if you are keeping it.
+
+Ada is the one to sign in as for anything needing a permission: she is `OWNER`, and an owner holds
+every staff permission implicitly. Her `CreatorStaff.permissions` array is empty in the database,
+which looks wrong and is not — `permissions.ts` short-circuits on the role.
+
+**Assert the state in the same run that captures it.** A screenshot proves nothing on its own, and
+a caption written from memory drifts from the picture. Reading the thing you are about to
+photograph — how many cards are nested, which buttons exist — keeps the two honest.
+
 ## What is stubbed
 
 - **Patreon** — a local process at :4001. Real OAuth shape, real redirect, real state cookie; it
