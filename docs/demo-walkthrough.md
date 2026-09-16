@@ -190,13 +190,18 @@ On **Settings**, above the blocklist: **what a vote from each tier counts for**.
 Producer is 3, so the board is not ranked by how many people upvoted — it is ranked by what those
 upvotes are worth here.
 
-You can see it on the board without changing anything. *Spirited Away* and *Princess Mononoke* each
-have **2** upvotes and a weighted score of **4**, because one of those votes is Cal's and Cal is a
-Producer. *Perfect Blue* has 1 and 1, because Bea is a Sidekick. **Top rated** sorts on the second
-number.
+You can see it on the board without changing anything. *Spirited Away* has **2** upvotes and a
+weighted score of **4**, because one of those votes is Cal's and Cal is a Producer. *Perfect Blue*
+has 1 and 1, because Bea is a Sidekick. **Top rated** sorts on the second number.
 
-Set Producer back to 1 and the two scores collapse to 2: every tier at 1 is a plain popularity
-sort, which is the one thing this mechanic exists not to be. The change reaches votes already cast
+*Princess Mononoke* is the interesting one: it also has 2 upvotes, one of them Cal's, and its
+weighted score is **2**. Cal upvoted it before he upgraded, and a vote stores the tier it was cast
+at rather than the tier its owner holds today. That is not a bug in the weighting — it is the
+whole reason §11b3 below exists.
+
+Set Producer back to 1 and *Spirited Away* collapses from 4 to 2: every tier at 1 is a plain
+popularity sort, which is the one thing this mechanic exists not to be. *Princess Mononoke* does
+not move, because nothing in it was ever counted above 1. The change reaches votes already cast
 — a vote stores which tier it came from, not a copied number — so the board re-ranks immediately
 rather than waiting for somebody to vote again.
 
