@@ -303,6 +303,22 @@ money if this database ever outlives the demo.
   rather than sending it. `docs/email-setup.md`.
 - **Anything from TMDB.** The catalogue is stubbed; searching finds the stub's fixtures.
 - **The donation page.** Built and switched off — it needs `VITE_DONATION_URL`.
+- **Grouping's de-duplication.** You can group two entries and watch the child nest under the
+  head, but you cannot see the thing that makes the total *correct*. A group counts each person
+  once, at their best tier — so somebody who upvoted both entries is not counted twice. The
+  seeded votes have **no overlap**: *Princess Mononoke* is Cal and Dee, *Perfect Blue* is Bea, so
+  the de-duplicated total (3) is identical to what naive summing would give (3). The mechanic and
+  its absence look the same on screen.
+
+  One line of seed fixes it — add `dee` to *Perfect Blue*'s upvotes, making the group 3 where
+  summing would say 4 — but that retunes vote data the demo depends on elsewhere, so it is
+  recorded here rather than done. The de-duplication itself is covered by the API's integration
+  tests.
+
+  Worth stating plainly because the rest of this file is written on the opposite principle: the
+  seed is deliberately arranged so each mechanic differs visibly from its absence. Producer is
+  seeded at 3, one of Cal's votes is deliberately stale, two entries carry reactions. Grouping
+  shipped after that tuning and never got it.
 
 ## Starting over
 
