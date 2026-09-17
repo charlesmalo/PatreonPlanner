@@ -25,6 +25,38 @@ get a fresh board next time; without it, whatever you did survives the restart.
 It runs on 8081/4001 so it can sit alongside the e2e stack (8080/4000) without either disturbing
 the other.
 
+## Testing from other computers and phones
+
+Set `DEMO_HOST` to this machine's address on the network:
+
+```bash
+DEMO_HOST=192.168.1.42 docker compose -p patreonplanner-demo \
+  -f docker-compose.demo.yml up -d --wait
+```
+
+Then open `http://192.168.1.42:8081` from any browser on the same network — another laptop, a
+phone, a tablet. Everyone shares one board, so two people signed in as different personas see each
+other's upvotes and moves arrive.
+
+It defaults to `localhost`, so the single-machine case is unchanged and needs nothing.
+
+**Setting it is not optional for sign-in.** The published ports already listen on every interface,
+so another machine can _load_ the board without `DEMO_HOST` — and then sign-in fails, because the
+API hands that browser an authorize URL pointing at `localhost:4001` and the browser dutifully
+tries its own. The redirect back lands on its own localhost too. Nothing says why; the sign-in
+button just does not get you anywhere.
+
+Find the address with `ipconfig getifaddr en0` on macOS, or `hostname -I` on Linux. Reseeding is
+not required — this only changes URLs.
+
+Two things that do **not** get in the way, having been checked rather than assumed: the session
+cookie is `Secure` only when the redirect URI is `https`, so plain HTTP over a LAN keeps its
+session; and `SameSite=Lax` is unaffected, because every hop is same-site once the host matches.
+
+Worth knowing what you are exposing: anybody who can reach that address gets the board, and
+`/__be` lets them be any persona. It is a demo with seeded data and a fake payment provider, on
+your local network — but it is not access-controlled, so a café's wifi is not the place for it.
+
 ## Who you can be
 
 Pick from <http://localhost:4001/__be>. Signing in as someone else replaces your session, so the
