@@ -119,9 +119,23 @@ Three things will trip you up, in the order you hit them.
 `dee` — does not set a cookie directly. It redirects into `/auth/patreon/login` on the app, which
 bounces through the stub and back. Wait for the app, not for the stub.
 
-**2. There is a consent screen.** The stub shows "Continue as…" with a link, the way Patreon shows
-an approve screen. A person clicks it without thinking; a script has to. Skip it and you are left
-sitting on `/oauth2/authorize` wondering why sign-in timed out.
+**2. There is a consent screen, and it lists _everybody_.** The stub shows "Continue as…" the way
+Patreon shows an approve screen — but not with one link. It offers **all five personas**, each
+carrying `?persona=<who>`, and `/__be/<who>` does not narrow that list.
+
+So a script must click the link for the person it wants:
+
+```js
+page.locator(`a[href*="persona=${who}"]`).first(); // not .first() on the whole list
+```
+
+Taking the first link instead signs you in as **Ada**, whichever persona you asked for, and
+nothing anywhere says so — the run succeeds, the header shows a name you did not choose, and any
+conclusion you draw about permissions is about Ada. That mistake produced a confident and entirely
+fictional table of what each persona can see, twice, before it was spotted.
+
+Skipping the consent step altogether leaves you sitting on `/oauth2/authorize` wondering why
+sign-in timed out.
 
 **3. Columns are tabs, not side by side.** Only one column's panel is visible at a time and the
 rest are `inert`, so anything outside the column the board opens on has to be asked for first.
@@ -137,9 +151,11 @@ import { chromium } from '@playwright/test';
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 1100 } });
 
-await page.goto('http://localhost:4001/__be/ada');            // 1. pick a person
-const consent = page.locator('a[href*="/oauth2/authorize"]').first();
-if (await consent.count()) await consent.click();              // 2. the consent screen
+const who = 'ada'; // ada · mo · bea · cal · dee
+await page.goto(`http://localhost:4001/__be/${who}`);          // 1. pick a person
+// 2. the consent screen lists every persona — click the one you asked for, not the first
+const consent = page.locator(`a[href*="persona=${who}"]`).first();
+if (await consent.count()) await consent.click();
 await page.getByRole('button', { name: /sign out/i }).waitFor({ timeout: 20000 });
 
 await page.goto('http://localhost:8081/c/ada-watches-things');
