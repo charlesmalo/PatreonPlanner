@@ -62,18 +62,24 @@ your local network — but it is not access-controlled, so a café's wifi is not
 Pick from <http://localhost:4001/__be>. Signing in as someone else replaces your session, so the
 way to see two sides of an interaction is to switch back and forth.
 
-| Person       | What they are | What that means                                                  |
-| ------------ | ------------- | ---------------------------------------------------------------- |
-| Ada Lovelace | Owner         | Everything, including policy and the blocklist                   |
-| Mo Ferran    | Moderator     | Moves entries, works the review queue — **cannot** change policy |
-| Bea Okonjo   | Patron, $5    | Read, upvote, submit                                             |
-| Cal Nguyen   | Patron, $15   | Same, on the higher tier                                         |
-| Dee Alvarez  | Lapsed patron | Read only — cannot upvote or submit                              |
-| _(nobody)_   | Signed out    | Read only, on a public board                                     |
+| Person       | What they are | What that means                                                                                                |
+| ------------ | ------------- | -------------------------------------------------------------------------------------------------------------- |
+| Ada Lovelace | Owner         | Everything, including policy and the blocklist                                                                 |
+| Mo Ferran    | Moderator     | Moves entries, works the review queue, edits and merges themes — **cannot** change policy or touch the webhook |
+| Bea Okonjo   | Patron, $5    | Read, upvote, submit                                                                                           |
+| Cal Nguyen   | Patron, $15   | Same, on the higher tier                                                                                       |
+| Dee Alvarez  | Lapsed patron | Read only — cannot upvote or submit                                                                            |
+| _(nobody)_   | Signed out    | Read only, on a public board                                                                                   |
 
 The Mo/Ada split is worth poking at deliberately: a moderator who arrived by invite link can
 moderate content but cannot make a paid board public or change the webhook secret. That was a real
 bug found in review, and it is visible from the UI.
+
+Mo holds five of the six permissions, and `MANAGE_POLICY` is the one he does not. That is the
+split: he runs the queue, Ada decides who may read the board. A `MOD` row starts with **no**
+permissions — which is what an invite grants before a creator chooses — so the seed grants Mo's
+explicitly. Without that he could not move an entry or open the review queue, and this page told
+you to go to him for both.
 
 ## Things worth trying
 

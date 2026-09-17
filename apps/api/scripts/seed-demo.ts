@@ -9,7 +9,7 @@
  * Run through the demo stack (`docker compose -f docker-compose.demo.yml up`), which invokes it
  * once the migrations have landed.
  */
-import { PrismaClient, RecommendationStatus } from '@prisma/client';
+import { PrismaClient, RecommendationStatus, StaffPermission } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -84,10 +84,28 @@ async function main() {
     });
   }
 
+  // Everything except MANAGE_POLICY, which is the Mo/Ada split this demo exists to show: a
+  // moderator runs the queue, the owner decides who may read the board. The schema says the same
+  // where the permission is declared — "a moderator arriving by invite link should be able to run
+  // the queue without being able to open the board to the whole internet".
+  //
+  // Seeded explicitly because a `MOD` row defaults to *no* permissions, which is what an invite
+  // grants before a creator chooses. That is realistic, and it left Mo unable to move an entry or
+  // open the review queue — while this file's own documentation sent playtesters to him to do
+  // exactly those two things. A moderator who can do nothing has been told something untrue.
+  const moPermissions: StaffPermission[] = [
+    'MOVE_ENTRIES',
+    'EDIT_ENTRIES',
+    'HANDLE_REPORTS',
+    'WRITE_NOTES',
+    'MANAGE_THEMES',
+  ];
   await prisma.creatorStaff.upsert({
     where: { creatorId_userId: { creatorId, userId: users.mo } },
-    create: { creatorId, userId: users.mo, role: 'MOD' },
-    update: {},
+    create: { creatorId, userId: users.mo, role: 'MOD', permissions: moPermissions },
+    // Written on re-run too, not left alone: a volume seeded before this existed still holds a
+    // moderator with an empty set, and `up` should converge it rather than need a wipe.
+    update: { permissions: moPermissions },
   });
 
   // Dee is deliberately a former patron: the read/upvote/submit split is one of the things worth
