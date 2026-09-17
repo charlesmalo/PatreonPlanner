@@ -7,6 +7,25 @@ name: patreonplanner-demo
 # nginx proxy — a demo that skipped those would be demonstrating something else.
 #
 # Ports: web on 8081, stub on 4001 (e2e uses 8080 and 4000).
+#
+# ## Testing from another computer
+#
+# Every browser-facing URL below is built from `DEMO_HOST`, which defaults to `localhost` so
+# nothing changes for the ordinary single-machine case. Set it to this machine's address on the
+# network and the whole stack becomes reachable from other computers and phones:
+#
+#     DEMO_HOST=192.168.1.42 docker-compose -p patreonplanner-demo \
+#       -f docker-compose.demo.yml up -d --wait
+#
+# It has to be set, not merely reachable. The published ports already listen on every interface,
+# so another machine can *load* the board at http://192.168.1.42:8081 without this — and then
+# sign-in fails, because the API hands the browser an authorize URL pointing at `localhost:4001`
+# and the browser dutifully tries its own. The redirect back would land on its own localhost too.
+# One of these left as `localhost` breaks sign-in from everywhere except this machine.
+#
+# Cookies survive the move: they are `Secure` only when the redirect URI is https, so plain HTTP
+# over a LAN keeps its session. `SameSite=Lax` is unaffected — every hop is same-site once the
+# host matches.
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -36,7 +55,7 @@ services:
     command: node patreon-stub.mjs
     environment:
       PORT: '4000'
-      WEB_ORIGIN: http://localhost:8081
+      WEB_ORIGIN: http://${DEMO_HOST:-localhost}:8081
       # Ask who is signing in, rather than reusing whoever went last — the demo's whole point is
       # seeing an interaction from both sides.
       STUB_CONSENT_SCREEN: 'true'
@@ -87,15 +106,15 @@ services:
       PORT: '3000'
       PATREON_CLIENT_ID: e2e-client
       PATREON_CLIENT_SECRET: e2e-secret
-      PATREON_REDIRECT_URI: http://localhost:8081/auth/patreon/callback
+      PATREON_REDIRECT_URI: http://${DEMO_HOST:-localhost}:8081/auth/patreon/callback
       # Browser-facing vs server-facing: the browser reaches the stub on the published port,
       # the API reaches it inside the compose network.
-      PATREON_OAUTH_BASE_URL: http://localhost:4001
+      PATREON_OAUTH_BASE_URL: http://${DEMO_HOST:-localhost}:4001
       PATREON_API_BASE_URL: http://patreon-stub:4000
       # The same stub also stands in for TMDB; only the API calls it, so the in-network URL.
       TMDB_API_BASE_URL: http://patreon-stub:4000/3
       TMDB_API_KEY: e2e-tmdb-key
-      WEB_ORIGIN: http://localhost:8081
+      WEB_ORIGIN: http://${DEMO_HOST:-localhost}:8081
       ENCRYPTION_KEY: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=
       # On, unlike the e2e stack: enrichment, availability and embeddings are part of what there
       # is to look at, and a demo with the background work switched off shows a thinner product
@@ -129,7 +148,7 @@ services:
       # The browser's address for the API, which is the web origin: nginx proxies /api/ to the
       # API service, and the checkout stand-in is a page the browser navigates to rather than
       # something the SPA fetches.
-      API_PUBLIC_URL: http://localhost:8081
+      API_PUBLIC_URL: http://${DEMO_HOST:-localhost}:8081
     healthcheck:
       # node rather than curl: the runtime image ships production dependencies only.
       test:
