@@ -161,7 +161,17 @@ async function main() {
       // anywhere the my-votes page has nothing to offer and the feature cannot be seen.
       votedBefore: ['cal'],
     },
-    { title: 'Perfect Blue', by: 'cal', status: 'PENDING', upvotes: ['bea'] },
+    {
+      title: 'Perfect Blue',
+      by: 'cal',
+      status: 'PENDING',
+      // Dee is here so that she and *Princess Mononoke* **overlap**, which is the only way the
+      // demo can show what grouping actually does. A group counts each person once, at their
+      // best tier — so grouping these two gives 3, where adding the two totals would say 4.
+      // Without a shared voter the de-duplicated number and the naive one are identical, and the
+      // mechanic is indistinguishable from its absence on screen.
+      upvotes: ['bea', 'dee'],
+    },
     { title: 'Paprika', by: 'dee', status: 'PENDING' },
     { title: 'Grave of the Fireflies', by: 'bea', status: 'COMPLETED' },
     {

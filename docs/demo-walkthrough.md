@@ -84,6 +84,31 @@ Write two notes on an entry — one **TIMELINE**, one **COMMENTARY**. Only the t
 the board. The kind is the only thing keeping them apart, which is why the board test asserts
 against the whole page rather than a selector.
 
+### 4b. Two entries that are really one
+
+Patrons suggest the same thing twice in ways de-duplication cannot catch — a film and its sequel,
+a season and the show. As **Ada**, on **Suggestions**, open **Group** on *Perfect Blue* and choose
+*Into "Princess Mononoke"*. It is drawn inside the head now, and the head carries the group's
+support.
+
+Grouping **preserves**. The child keeps its row, its votes and its own page; only what the head
+displays changes. That is what separates it from merging a theme, where the loser ceases to exist.
+**Ungroup** on the child puts it back.
+
+Watch the head's number rather than the nesting, because that is the part that is easy to get
+wrong. Before: *Princess Mononoke* 2, *Perfect Blue* 2. Grouped, the head reads **3** — not 4.
+**Dee upvoted both**, and a group counts each person once, at the best tier they used anywhere in
+it. Adding the two totals would count her twice and quietly inflate the head, with nothing on the
+screen to say the number was wrong.
+
+Dee's second vote is in the seed for exactly this reason. Without an overlapping voter the
+de-duplicated total and the naive one are the same number, and the mechanic would be
+indistinguishable from its absence.
+
+You can also drag one card onto another: a **Group into…** band appears under every card the drop
+would be legal on, and only while a drag is happening. The menu is the accessible path — native
+drag does nothing from a keyboard or on touch — and the band is the shortcut.
+
 ### 5. Who hears about a move
 
 As **Ada**, move **Perfect Blue** to Now Playing. **Bea's** bell rings: it is Anime, and Anime is
@@ -192,7 +217,9 @@ upvotes are worth here.
 
 You can see it on the board without changing anything. *Spirited Away* has **2** upvotes and a
 weighted score of **4**, because one of those votes is Cal's and Cal is a Producer. *Perfect Blue*
-has 1 and 1, because Bea is a Sidekick. **Top rated** sorts on the second number.
+also has 2 upvotes and a weighted score of **2**, because Bea is a Sidekick and Dee — a lapsed
+patron — carries no tier at all. Same number of people, half the weight. **Top rated** sorts on
+the second number.
 
 *Princess Mononoke* is the interesting one: it also has 2 upvotes, one of them Cal's, and its
 weighted score is **2**. Cal upvoted it before he upgraded, and a vote stores the tier it was cast
@@ -303,22 +330,6 @@ money if this database ever outlives the demo.
   rather than sending it. `docs/email-setup.md`.
 - **Anything from TMDB.** The catalogue is stubbed; searching finds the stub's fixtures.
 - **The donation page.** Built and switched off — it needs `VITE_DONATION_URL`.
-- **Grouping's de-duplication.** You can group two entries and watch the child nest under the
-  head, but you cannot see the thing that makes the total *correct*. A group counts each person
-  once, at their best tier — so somebody who upvoted both entries is not counted twice. The
-  seeded votes have **no overlap**: *Princess Mononoke* is Cal and Dee, *Perfect Blue* is Bea, so
-  the de-duplicated total (3) is identical to what naive summing would give (3). The mechanic and
-  its absence look the same on screen.
-
-  One line of seed fixes it — add `dee` to *Perfect Blue*'s upvotes, making the group 3 where
-  summing would say 4 — but that retunes vote data the demo depends on elsewhere, so it is
-  recorded here rather than done. The de-duplication itself is covered by the API's integration
-  tests.
-
-  Worth stating plainly because the rest of this file is written on the opposite principle: the
-  seed is deliberately arranged so each mechanic differs visibly from its absence. Producer is
-  seeded at 3, one of Cal's votes is deliberately stale, two entries carry reactions. Grouping
-  shipped after that tuning and never got it.
 
 ## Starting over
 
