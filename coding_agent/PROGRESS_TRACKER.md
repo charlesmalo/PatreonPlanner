@@ -46,6 +46,44 @@ a count copied forward is a claim nobody is checking, so this one was re-run.
 
 ## Active Task
 
+**Grouped label filters — planned, not started.**
+
+| artefact     | state                                                                             |
+| ------------ | --------------------------------------------------------------------------------- |
+| Spec         | `docs/superpowers/specs/2026-09-18-grouped-label-filters-design.md` — PR #132     |
+| Plan         | `docs/superpowers/plans/2026-09-18-grouped-label-filters.md` — 10 tasks, 64 steps |
+| Prerequisite | **PR #131 must merge first** (`feat/filter-labels-per-tab`)                       |
+
+**Do not start Task 1 until #131 is on `main`.** The plan's whole starting point — multi-select
+OR, `themes=a,b`, `ThemeFilter` taking `selected: string[]`, `localThemes` / `rememberThemes` — is
+in that PR. It is open and unmerged only because CI is blocked (see the billing note in §2 of the
+resume file; the repo has to be public for Actions to run).
+
+**What is being built.** A reader combines filter labels into AND groups that are ORed together —
+`(A) OR (B AND Y)` — by dragging one chip onto another or choosing from a menu, and splits them
+again at magnets between members. Disjunctive normal form, deliberately not a general boolean
+expression: DNF is exactly what the interaction can express, so model and UI cannot drift.
+
+**Two things the plan's self-review caught**, both spec requirements with no task, now fixed:
+
+- **Focus placement.** A magnet and a group's ✕ each destroy the element that was clicked, so
+  focus falls to `<body>` unless it is placed — the same trap #131 hit with the per-chip ✕.
+  Task 4 now specifies where focus lands for each action and tests it.
+- **Pruning deleted labels.** Labels are merged and deleted on the `/themes` page, so a remembered
+  filter can name one that is gone and 404 the board on load. Task 6 now prunes on read, silently.
+
+**The risk worth knowing before it is built.** An AND group is narrow by construction. Measured on
+the demo board: five labels, ten possible pairs, **five of which never co-occur at all**, largest
+overlap four entries between two near-synonyms. So the common outcome of combining two labels is
+an empty column that reads as broken. Task 7 makes the column say what it asked for; Task 9 seeds
+a pair that co-occurs so the mechanic differs visibly from its absence — the tracker's own
+_"too uniform to show a feature"_ rule, applied before shipping rather than after.
+
+**Two decisions taken from the spec's recommendations, and reversible:** the empty column names
+the filter (§4), and a group of one is unrepresentable (Open question 2).
+
+### The previous active task
+
 Nothing in flight, and nothing designed but unbuilt.
 
 The last thing built was the pair of tier gates on the settings page — who may
