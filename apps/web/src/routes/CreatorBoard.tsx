@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useCreator, useSession, useThemes, useViewMode } from '../api/hooks';
-import { hydrate } from '../api/board-settings';
+import { hydrate, localThemes, rememberThemes } from '../api/board-settings';
 import { narrowCapabilities } from '../api/view-mode';
 import { BoardTabs } from '../components/BoardTabs';
 import { ContactForm } from '../components/ContactForm';
@@ -9,7 +9,6 @@ import { ModeBanner } from '../components/ModeBanner';
 import { ViewModeSwitch } from '../components/ViewModeSwitch';
 import { BoardColumn } from '../components/BoardColumn';
 import { SubmitForm } from '../components/SubmitForm';
-import { ThemeFilter } from '../components/ThemeFilter';
 
 /**
  * Design §7's patron board: Suggestions, Accepted, Now Playing, Completed. Rejected and Deleted
@@ -60,7 +59,7 @@ export function CreatorBoard() {
   // Applied once, here, rather than at each gate: a call site that forgot would keep offering a
   // control the reader asked not to see. Narrowing only — see `narrowCapabilities`.
   const capabilities = narrowCapabilities(granted, mode);
-  const [theme, setTheme] = useState<string | null>(null);
+  const [themeIds, setThemeIds] = useState<string[]>(() => localThemes(slug));
   const themes = useThemes(slug, !loading && !error);
   // Bumped when a submission lands or a card moves, which remounts the columns so they refetch.
   // Each column owns its own cursor, so an entry leaving one has to be picked up by another —
@@ -163,8 +162,6 @@ export function CreatorBoard() {
       {/* Below the board, not above it: most readers came to read, and a contact form at the top
           would push what they came for down the page. */}
 
-      <ThemeFilter themes={themes} selected={theme} onSelect={setTheme} />
-
       {capabilities.submit ? (
         <div className="mt-6">
           <SubmitForm
@@ -189,7 +186,12 @@ export function CreatorBoard() {
             slug={slug}
             status={tab.status}
             label={tab.label}
-            theme={theme}
+            themes={themes}
+            selectedThemes={themeIds}
+            onSelectThemes={(next) => {
+              setThemeIds(next);
+              void rememberThemes(slug, next);
+            }}
             canUpvote={capabilities.upvote}
             canModerate={capabilities.moderate}
             permissions={capabilities.permissions}

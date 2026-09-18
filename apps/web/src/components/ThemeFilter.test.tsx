@@ -7,48 +7,106 @@ const themes = [
   { id: 't2', name: 'Fantasy', entryCount: 1 },
 ];
 
+const setup = (selected: string[] = [], onChange = vi.fn()) => {
+  render(<ThemeFilter themes={themes} selected={selected} onChange={onChange} />);
+  return onChange;
+};
+
 describe('ThemeFilter', () => {
-  it('renders nothing when the board has no themes', () => {
+  it('renders nothing when the board has no labels', () => {
     // An empty control is worse than none: it suggests filtering exists and does nothing.
-    const { container } = render(<ThemeFilter themes={[]} selected={null} onSelect={vi.fn()} />);
+    const { container } = render(<ThemeFilter themes={[]} selected={[]} onChange={vi.fn()} />);
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('renders one control per theme with its count', () => {
-    render(<ThemeFilter themes={themes} selected={null} onSelect={vi.fn()} />);
-    expect(screen.getByRole('button', { name: /Anime \(3\)/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Fantasy \(1\)/ })).toBeInTheDocument();
+  it('is called Filter labels', () => {
+    setup();
+    expect(screen.getByRole('group', { name: /filter labels/i })).toBeInTheDocument();
   });
 
-  it('reports the chosen theme', async () => {
-    const onSelect = vi.fn();
-    render(<ThemeFilter themes={themes} selected={null} onSelect={onSelect} />);
-    await userEvent.click(screen.getByRole('button', { name: /Anime/ }));
-    expect(onSelect).toHaveBeenCalledWith('t1');
+  it('renders one toggle per label, without a count', () => {
+    // The count was board-wide while the control now sits inside one column, so it would claim a
+    // number the entries underneath it do not add up to.
+    setup();
+    expect(screen.getByRole('button', { name: 'Anime' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Anime \(/ })).not.toBeInTheDocument();
   });
 
-  it('clears the filter when the selected theme is clicked again', async () => {
-    const onSelect = vi.fn();
-    render(<ThemeFilter themes={themes} selected="t1" onSelect={onSelect} />);
-    await userEvent.click(screen.getByRole('button', { name: /Anime/ }));
-    expect(onSelect).toHaveBeenCalledWith(null);
+  it('adds a label to the selection rather than replacing it', async () => {
+    const onChange = setup(['t1']);
+    await userEvent.click(screen.getByRole('button', { name: 'Fantasy' }));
+    expect(onChange).toHaveBeenCalledWith(['t1', 't2']);
   });
 
-  it('marks the selected theme as pressed', () => {
-    render(<ThemeFilter themes={themes} selected="t1" onSelect={vi.fn()} />);
-    expect(screen.getByRole('button', { name: /Anime/ })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: /Fantasy/ })).toHaveAttribute(
+  it('removes a label when its toggle is pressed again', async () => {
+    const onChange = setup(['t1', 't2']);
+    await userEvent.click(screen.getByRole('button', { name: 'Anime' }));
+    expect(onChange).toHaveBeenCalledWith(['t2']);
+  });
+
+  it('offers a remove button only on the labels actually filtering', async () => {
+    setup(['t1']);
+    expect(screen.getByRole('button', { name: /remove anime filter/i })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /remove fantasy filter/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('removes just that label when its ✕ is pressed', async () => {
+    const onChange = setup(['t1', 't2']);
+    await userEvent.click(screen.getByRole('button', { name: /remove anime filter/i }));
+    expect(onChange).toHaveBeenCalledWith(['t2']);
+  });
+
+  it('keeps focus on the label after removing it, rather than losing it to the page', async () => {
+    // The ✕ disappears with the selection, so focus would land on <body> and a keyboard reader
+    // would be dropped back to the top of the document. The toggle stays put, so focus goes there.
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <ThemeFilter themes={themes} selected={['t1']} onChange={onChange} />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: /remove anime filter/i }));
+    rerender(<ThemeFilter themes={themes} selected={[]} onChange={onChange} />);
+    expect(screen.getByRole('button', { name: 'Anime' })).toHaveFocus();
+  });
+
+  it('offers Clear all only while something is filtering', async () => {
+    const { rerender } = render(<ThemeFilter themes={themes} selected={[]} onChange={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: /clear all/i })).not.toBeInTheDocument();
+    rerender(<ThemeFilter themes={themes} selected={['t1']} onChange={vi.fn()} />);
+    expect(screen.getByRole('button', { name: /clear all/i })).toBeInTheDocument();
+  });
+
+  it('clears every label at once', async () => {
+    const onChange = setup(['t1', 't2']);
+    await userEvent.click(screen.getByRole('button', { name: /clear all/i }));
+    expect(onChange).toHaveBeenCalledWith([]);
+  });
+
+  it('marks the filtering labels as pressed', () => {
+    setup(['t1']);
+    expect(screen.getByRole('button', { name: 'Anime' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Fantasy' })).toHaveAttribute(
       'aria-pressed',
       'false',
     );
   });
 
-  it('renders a theme name containing markup as text', () => {
+  it('announces the current filter politely', () => {
+    // A filter that changes the list underneath it without saying so leaves a screen-reader user
+    // with no idea the page moved.
+    setup(['t1']);
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent(/anime/i);
+    expect(status).toHaveAttribute('aria-live', 'polite');
+  });
+
+  it('renders a label name containing markup as text', () => {
     const { container } = render(
       <ThemeFilter
         themes={[{ id: 't1', name: '<img src=x>', entryCount: 1 }]}
-        selected={null}
-        onSelect={vi.fn()}
+        selected={[]}
+        onChange={vi.fn()}
       />,
     );
     expect(screen.getByText(/<img src=x>/)).toBeInTheDocument();

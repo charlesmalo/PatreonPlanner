@@ -34,7 +34,9 @@ describe('BoardColumn', () => {
           slug="ada-writes"
           status="PENDING"
           label="Suggestions"
-          theme={null}
+          themes={[]}
+          selectedThemes={[]}
+          onSelectThemes={vi.fn()}
           canUpvote={false}
           canModerate={false}
           // Dragging is a MOVE_ENTRIES action, so a case about dragging has to grant it. A

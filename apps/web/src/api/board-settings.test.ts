@@ -1,4 +1,11 @@
-import { hydrate, localCollapsed, localSort, remember } from './board-settings';
+import {
+  hydrate,
+  localCollapsed,
+  localSort,
+  localThemes,
+  remember,
+  rememberThemes,
+} from './board-settings';
 
 describe('board settings', () => {
   const originalFetch = global.fetch;
@@ -101,5 +108,38 @@ describe('board settings', () => {
 
     expect(await hydrate('ada')).toBe(false);
     expect(localCollapsed('ada', 'PENDING')).toBe(true);
+  });
+
+  describe('label filters', () => {
+    it('starts with nothing filtering', () => {
+      expect(localThemes('ada-writes')).toEqual([]);
+    });
+
+    it('remembers the selection for the whole board, not per column', async () => {
+      // Shared across columns on purpose: a reader narrowing to Anime and swapping to Accepted is
+      // still asking about Anime, and a per-status key would look like the filter clearing itself.
+      await rememberThemes('ada-writes', ['t1', 't2']);
+      expect(localThemes('ada-writes')).toEqual(['t1', 't2']);
+    });
+
+    it('keeps one board filter out of another board', async () => {
+      await rememberThemes('ada-writes', ['t1']);
+      expect(localThemes('mo-reads')).toEqual([]);
+    });
+
+    it('clears back to empty', async () => {
+      await rememberThemes('ada-writes', ['t1']);
+      await rememberThemes('ada-writes', []);
+      expect(localThemes('ada-writes')).toEqual([]);
+    });
+
+    it('sends nothing to the server', async () => {
+      // Local only: the view-settings payload carries collapse and sort, and adding a field there
+      // is a DTO change for something documented as best-effort arrangement.
+      const fetchSpy = vi.fn();
+      global.fetch = fetchSpy;
+      await rememberThemes('ada-writes', ['t1']);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
   });
 });

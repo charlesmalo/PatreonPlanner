@@ -30,7 +30,7 @@ export function useThemes(slug: string, enabled: boolean) {
 export function useBoard(
   slug: string,
   enabled: boolean,
-  themeId?: string | null,
+  themeIds?: string[],
   status?: string,
   sort?: string,
 ) {
@@ -44,11 +44,15 @@ export function useBoard(
   const [error, setError] = useState<ApiError | null>(null);
   const [moreError, setMoreError] = useState<string | null>(null);
 
-  // The theme, the column and the sort are all part of the path, so changing any of them
+  // The labels, the column and the sort are all part of the path, so changing any of them
   // refetches and resets paging — a cursor from one ordering means nothing in another, and
   // re-sorting a page already fetched would sort one page of a list with more behind it.
+  //
+  // Sorted before joining so the same selection always produces the same path: picking Anime then
+  // Thriller and picking them the other way round are the same filter, and two spellings of it
+  // would refetch for no reason and defeat any cache keyed on the path.
   const query = new URLSearchParams();
-  if (themeId) query.set('theme', themeId);
+  if (themeIds && themeIds.length > 0) query.set('themes', [...themeIds].sort().join(','));
   if (status) query.set('status', status);
   if (sort) query.set('sort', sort);
   const search = query.toString();
