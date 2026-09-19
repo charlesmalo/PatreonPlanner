@@ -19,8 +19,8 @@ interface BoardColumnProps {
    * Shared across columns rather than held per column: the selection belongs to the reader's view
    * of the board, so swapping tabs keeps whatever they were narrowing by.
    */
-  selectedThemes: string[];
-  onSelectThemes: (themeIds: string[]) => void;
+  selectedThemes: string[][];
+  onSelectThemes: (groups: string[][]) => void;
   canUpvote: boolean;
   canModerate: boolean;
   /** Which staff controls the cards may draw. The API checks each one again. */

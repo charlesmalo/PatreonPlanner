@@ -59,7 +59,7 @@ export function CreatorBoard() {
   // Applied once, here, rather than at each gate: a call site that forgot would keep offering a
   // control the reader asked not to see. Narrowing only — see `narrowCapabilities`.
   const capabilities = narrowCapabilities(granted, mode);
-  const [themeIds, setThemeIds] = useState<string[]>(() => localThemes(slug));
+  const [themeIds, setThemeIds] = useState<string[][]>(() => localThemes(slug));
   const themes = useThemes(slug, !loading && !error);
   // Bumped when a submission lands or a card moves, which remounts the columns so they refetch.
   // Each column owns its own cursor, so an entry leaving one has to be picked up by another —
