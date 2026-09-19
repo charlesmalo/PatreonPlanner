@@ -338,7 +338,10 @@ describe('label groups', () => {
     // This value comes from localStorage, which a reader can edit and an old build may have
     // written. A board that cannot paint because its filter is unreadable is worse than one that
     // paints unfiltered.
-    expect(decodeGroups('a||b')).toEqual([['a'], ['b']]);
+    // `a||b` reads as `a AND b` — the empty member is dropped, not treated as a group boundary.
+    // A stored value this shape means somebody edited it by hand; keeping the labels it names is
+    // friendlier than discarding the filter, and no interaction can produce it.
+    expect(decodeGroups('a||b')).toEqual([['a', 'b']]);
     expect(decodeGroups(',,')).toEqual([]);
   });
 
@@ -420,10 +423,13 @@ export function toggleLabel(groups: string[][], id: string): string[][] {
 export function combine(groups: string[][], id: string, intoIndex: number): string[][] {
   const target = groups[intoIndex];
   if (!target || target.includes(id)) return groups;
-  // Removed first, so a label never appears twice across the filter. The target is found by
-  // identity rather than by index, because removing may have shifted the indices.
+  // Removed first, so a label never appears twice across the filter — which means the target may
+  // have shifted index, and `without` rebuilds every array so it is no longer the same object
+  // either. It is found by a member that survives: `anchor` cannot be `id`, because a target
+  // containing `id` returned above.
+  const anchor = target[0];
   const remaining = without(groups, id);
-  return remaining.map((group) => (group === target ? [...group, id] : group));
+  return remaining.map((group) => (group.includes(anchor) ? [...group, id] : group));
 }
 
 /** `magnetIndex` is the gap after that member: 0 splits between members 0 and 1. */
@@ -450,7 +456,14 @@ Expected: PASS, 9 tests.
 
 - [ ] **Step 5: Verify by mutation**
 
-In `combine`, drop the `without(groups, id)` call and append to the target directly. Confirm **"combines a label into a group and takes it out of its old one"** fails. Restore.
+Two, because this function has already been wrong once:
+
+1. Drop the `without(groups, id)` call and append to the target directly. Confirm **"combines a
+   label into a group and takes it out of its old one"** fails. Restore.
+2. Match the target by identity — `group === target` instead of `group.includes(anchor)`. Confirm
+   the same test fails, and note *how*: the label is removed and never re-added, so the filter
+   silently loses it. `without` rebuilds every array, so an identity check can never match. This
+   is the bug the plan shipped with and the review caught before any code was written.
 
 - [ ] **Step 6: Commit**
 
