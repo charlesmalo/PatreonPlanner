@@ -1,40 +1,52 @@
 import { useRef } from 'react';
 import type { ThemeSummary } from '../api/types';
+import { removeGroup, splitAt, toggleLabel } from './label-groups';
 
 interface ThemeFilterProps {
   themes: ThemeSummary[];
-  /** Every label currently narrowing the column. Empty means no filter. */
-  selected: string[];
-  onChange: (themeIds: string[]) => void;
+  /** An OR of groups, each an AND of labels. Empty means no filter. */
+  selected: string[][];
+  onChange: (groups: string[][]) => void;
 }
 
 /**
- * Design §7's browse-by-theme, as removable filter chips.
+ * Design §7's browse-by-theme, as removable filter chips that can be combined.
  *
- * **Multi-select, matched as OR.** Adding a label widens the results, which is what a chip filter
- * conventionally does — a reader adding "Thriller" to "Anime" is asking for more, not for the
- * handful of entries carrying both. The server reads it the same way.
+ * **Groups are ANDed, and ORed with each other.** A lone chip is a group of one, so an ungrouped
+ * filter behaves exactly as it did before groups existed.
  *
  * **No count on the label.** It used to read "Anime (3)", but that number is board-wide and this
- * control now sits inside one column, so it would claim a total the entries underneath it do not
- * add up to. A number that does not match what is on screen is worse than no number.
+ * control sits inside one column, so it would claim a total the entries underneath it do not add
+ * up to.
  *
- * Two buttons per selected chip rather than one: a remove control nested inside a toggle would be
- * a button inside a button, which is invalid and which no screen reader reads the way it looks.
- * They are siblings, each with its own name — "Anime", and "Remove Anime filter".
+ * Every control here destroys the element that was clicked — a magnet splits the group it sits
+ * in, a remove button takes its own chip away — so focus is placed deliberately. Left alone it
+ * falls to `<body>`, which drops a keyboard reader at the top of the document.
  */
 export function ThemeFilter({ themes, selected, onChange }: ThemeFilterProps) {
-  // Keyed by label id: the ✕ vanishes with the selection, so focus has to go somewhere that
-  // survives the removal. The toggle for that same label does.
+  // Keyed by label id, and by group, because the thing that was clicked is gone by the next
+  // render and focus has to land somewhere that survives.
   const toggles = useRef(new Map<string, HTMLButtonElement | null>());
+  const groupRemoves = useRef(new Map<string, HTMLButtonElement | null>());
 
-  // An empty control suggests filtering exists and does nothing.
   if (themes.length === 0) return null;
 
-  const active = themes.filter((theme) => selected.includes(theme.id));
-  const remove = (id: string) => {
-    onChange(selected.filter((selectedId) => selectedId !== id));
-    toggles.current.get(id)?.focus();
+  const byId = new Map(themes.map((theme) => [theme.id, theme]));
+  const nameOf = (id: string) => byId.get(id)?.name ?? id;
+  const inFilter = new Set(selected.flat());
+  const spoken = selected.map((group) => group.map(nameOf).join(' and '));
+
+  const afterSplit = (groupIndex: number, magnetIndex: number) => {
+    const next = splitAt(selected, groupIndex, magnetIndex);
+    onChange(next);
+    // The left-hand half of what was split: the reader's attention was on that boundary.
+    queueMicrotask(() => groupRemoves.current.get(next[groupIndex]?.join('|') ?? '')?.focus());
+  };
+
+  const afterRemoveGroup = (groupIndex: number) => {
+    const first = selected[groupIndex][0];
+    onChange(removeGroup(selected, groupIndex));
+    queueMicrotask(() => toggles.current.get(first)?.focus());
   };
 
   return (
@@ -47,9 +59,9 @@ export function ThemeFilter({ themes, selected, onChange }: ThemeFilterProps) {
         <h3 className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
           Filter labels
         </h3>
-        {/* Inline with the heading, and only while there is something to clear: a permanently
-            visible "Clear all" is a control that does nothing most of the time. */}
-        {active.length > 0 ? (
+        {/* Only while there is something to clear: a permanently visible "Clear all" is a control
+            that does nothing most of the time. */}
+        {selected.length > 0 ? (
           <button
             type="button"
             onClick={() => onChange([])}
@@ -60,50 +72,71 @@ export function ThemeFilter({ themes, selected, onChange }: ThemeFilterProps) {
         ) : null}
       </div>
 
-      <ul className="mt-1.5 flex flex-wrap gap-2">
-        {themes.map((theme) => {
-          const on = selected.includes(theme.id);
-          return (
-            <li key={theme.id} className="relative">
-              <button
-                type="button"
-                ref={(node) => toggles.current.set(theme.id, node)}
-                aria-pressed={on}
-                onClick={() =>
-                  onChange(on ? selected.filter((id) => id !== theme.id) : [...selected, theme.id])
-                }
-                className={`rounded-full border py-0.5 pl-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 ${
-                  on
-                    ? 'border-sky-500 bg-sky-50 pr-6 dark:bg-sky-950'
-                    : 'border-slate-300 pr-2.5 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800'
-                }`}
+      {selected.length > 0 ? (
+        <ul className="mt-1.5 flex flex-wrap gap-2">
+          {selected.map((group, groupIndex) => {
+            const names = group.map(nameOf);
+            return (
+              <li
+                key={group.join('|')}
+                className="flex items-center rounded-full border border-sky-500 bg-sky-50 py-0.5 pl-2.5 pr-1 text-xs dark:bg-sky-950"
               >
-                {/* Text, never markup: label names are creator-editable. */}
-                {theme.name}
-              </button>
-              {on ? (
+                {group.map((id, memberIndex) => (
+                  <span key={id} className="flex items-center">
+                    {/* Text, never markup: label names are creator-editable. */}
+                    {names[memberIndex]}
+                    {memberIndex < group.length - 1 ? (
+                      <button
+                        type="button"
+                        // Named for what it does and to which pair: "magnet" read aloud says nothing.
+                        aria-label={`Split between ${names[memberIndex]} and ${names[memberIndex + 1]}`}
+                        onClick={() => afterSplit(groupIndex, memberIndex)}
+                        className="mx-1 rounded-full px-1 leading-none text-sky-700 hover:bg-sky-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:text-sky-300 dark:hover:bg-sky-900"
+                      >
+                        <span aria-hidden="true">●</span>
+                      </button>
+                    ) : null}
+                  </span>
+                ))}
                 <button
                   type="button"
-                  // Names the label, not just "remove": a screen reader announcing eight identical
-                  // "Remove" buttons has told the reader nothing about which one to press.
-                  aria-label={`Remove ${theme.name} filter`}
-                  onClick={() => remove(theme.id)}
-                  className="absolute right-0.5 top-1/2 -translate-y-1/2 rounded-full px-1 text-xs leading-none text-slate-500 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:text-slate-400 dark:hover:text-slate-100"
+                  ref={(node) => groupRemoves.current.set(group.join('|'), node)}
+                  aria-label={`Remove ${names.join(' and ')} filter`}
+                  onClick={() => afterRemoveGroup(groupIndex)}
+                  className="ml-1 rounded-full px-1 leading-none text-slate-500 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:text-slate-400 dark:hover:text-slate-100"
                 >
                   <span aria-hidden="true">✕</span>
                 </button>
-              ) : null}
-            </li>
-          );
-        })}
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+
+      <ul className="mt-1.5 flex flex-wrap gap-2">
+        {themes.map((theme) => (
+          <li key={theme.id}>
+            <button
+              type="button"
+              ref={(node) => toggles.current.set(theme.id, node)}
+              aria-pressed={inFilter.has(theme.id)}
+              onClick={() => onChange(toggleLabel(selected, theme.id))}
+              className={`rounded-full border px-2.5 py-0.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 ${
+                inFilter.has(theme.id)
+                  ? 'border-sky-500 bg-sky-50 dark:bg-sky-950'
+                  : 'border-slate-300 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800'
+              }`}
+            >
+              {theme.name}
+            </button>
+          </li>
+        ))}
       </ul>
 
       {/* Polite, not assertive: the list below has changed, which is worth saying once the reader
           finishes what they are doing rather than interrupting them mid-word. */}
       <p role="status" aria-live="polite" className="sr-only">
-        {active.length === 0
-          ? 'No label filters.'
-          : `Filtering by ${active.map((theme) => theme.name).join(', ')}.`}
+        {spoken.length === 0 ? 'No label filters.' : `Filtering by ${spoken.join(', or ')}.`}
       </p>
     </div>
   );
