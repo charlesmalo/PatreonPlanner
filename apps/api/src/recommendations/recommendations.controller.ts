@@ -26,6 +26,7 @@ import { RequirePermission } from '../access/require-permission.decorator';
 import { GroupEntryDto } from './dto/group-entry.dto';
 import { RankEntryDto } from './dto/rank-entry.dto';
 import { GroupingService } from './grouping.service';
+import { parseLabelFilter } from './label-filter';
 import { ChangeStatusDto } from '../moderation/dto/change-status.dto';
 import { CreateFlagDto } from '../moderation/dto/create-flag.dto';
 import { FlagsService } from '../moderation/flags.service';
@@ -65,7 +66,7 @@ export class RecommendationsController {
       query.cursor,
       query.limit,
       viewer,
-      query.themes,
+      parseLabelFilter(query.themes),
       query.status,
       query.sort,
     );

@@ -233,7 +233,7 @@ export class RecommendationsService {
     rawCursor: string | undefined,
     limit: number | undefined,
     viewer: { userId: string | null; staffRole: StaffRoleValue | null },
-    themeIds?: string[],
+    themeGroups?: string[][],
     status?: RecommendationStatus,
     sort: BoardSort = 'upvotes',
   ) {
@@ -247,7 +247,8 @@ export class RecommendationsService {
     // Every id is checked, and one bad id refuses the whole filter rather than being dropped:
     // answering a narrower question than the caller asked, without saying so, is how a board
     // quietly lies about what it holds.
-    if (themeIds && themeIds.length > 0) {
+    const themeIds = (themeGroups ?? []).flat();
+    if (themeIds.length > 0) {
       const found = await this.prisma.theme.findMany({
         where: { id: { in: themeIds }, creatorId: creator.id },
         select: { id: true },
@@ -259,18 +260,31 @@ export class RecommendationsService {
     const items = (await this.prisma.recommendation.findMany({
       where: {
         creatorId: creator.id,
-        // OR across the selected labels: `some` matches an entry carrying *any* of them, and
-        // matches it once however many it carries — a join written the obvious way would return
-        // the row per matching label and duplicate it, which keyset pagination cannot survive.
-        ...(themeIds && themeIds.length > 0
-          ? { title: { themes: { some: { themeId: { in: themeIds } } } } }
-          : {}),
         // Composed with AND, never spread: both clauses are disjunctions and want the `OR` key,
         // so spreading let the cursor overwrite the visibility filter outright — page one was
         // correct and every page after it returned rejected, deleted and other patrons' pending
         // entries to anyone who clicked "Load more".
         AND: [
           visibilityWhere(creator, viewer),
+          // OR across groups, AND inside them. Composed into this `AND` rather than spread beside
+          // it: this clause and the visibility filter both want an `OR` key, and spreading let one
+          // overwrite the other — page one was correct and every page after it returned rejected,
+          // deleted and other patrons' pending entries.
+          //
+          // `some` per label, so an entry carrying several of a group's labels still matches once.
+          // A join written the obvious way returns the row per matching label and duplicates it,
+          // which keyset pagination cannot survive.
+          ...(themeGroups && themeGroups.length > 0
+            ? [
+                {
+                  OR: themeGroups.map((group) => ({
+                    AND: group.map((themeId) => ({
+                      title: { themes: { some: { themeId } } },
+                    })),
+                  })),
+                },
+              ]
+            : []),
           // Inside the AND with everything else: a status filter spread alongside the visibility
           // rule would overwrite it, and asking for REJECTED would return the column rather than
           // nothing. Narrowing only ever intersects.

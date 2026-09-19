@@ -274,6 +274,42 @@ describe('Board nesting and theme filtering (integration)', () => {
     await board(patron, `&themes=${randomUUID()}`).expect(404);
   });
 
+  it('matches every label in a group', async () => {
+    // Both labels on the same entry, so an AND group finds it.
+    await ctx.prisma.titleTheme.create({ data: { titleId: filmTitleId, themeId: otherThemeId } });
+    const res = await board(patron, `&themes=${themeId}|${otherThemeId}`).expect(200);
+    expect(res.body.items.map((i: { id: string }) => i.id)).toEqual([filmId]);
+  });
+
+  it('finds nothing when a group asks for labels no entry carries together', async () => {
+    // The labels sit on different entries. This is the common case on a real board, and it must
+    // be an honest empty page rather than an error.
+    const res = await board(patron, `&themes=${themeId}|${otherThemeId}`).expect(200);
+    expect(res.body.items).toEqual([]);
+  });
+
+  it('ORs across groups while ANDing inside them', async () => {
+    const res = await board(patron, `&themes=${themeId},${otherThemeId}`).expect(200);
+    const ids = res.body.items.map((i: { id: string }) => i.id);
+    expect(ids).toContain(filmId);
+    expect(ids).toContain(showId);
+  });
+
+  it('still applies visibility with a grouped filter', async () => {
+    // The filter narrows the existing read model; it must not become a second place the
+    // visibility rules live.
+    await ctx.prisma.creatorPolicy.update({
+      where: { creatorId },
+      data: { hidePendingFromPublic: true },
+    });
+    const res = await board(otherPatron, `&themes=${themeId},${otherThemeId}`).expect(200);
+    expect(res.body.items).toHaveLength(0);
+  });
+
+  it('refuses a malformed expression with 400, not 404', async () => {
+    await board(patron, `&themes=${themeId}|`).expect(400);
+  });
+
   it('rejects a label list that is not uuids', async () => {
     await board(patron, `&themes=not-a-uuid`).expect(400);
   });
