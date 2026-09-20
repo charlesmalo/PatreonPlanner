@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useCreator, useSession, useThemes, useViewMode } from '../api/hooks';
 import { hydrate, localThemes, rememberThemes } from '../api/board-settings';
+import { encodeGroups } from '../components/label-groups';
 import { narrowCapabilities } from '../api/view-mode';
 import { BoardTabs } from '../components/BoardTabs';
 import { ContactForm } from '../components/ContactForm';
@@ -60,7 +61,38 @@ export function CreatorBoard() {
   // control the reader asked not to see. Narrowing only — see `narrowCapabilities`.
   const capabilities = narrowCapabilities(granted, mode);
   const [themeIds, setThemeIds] = useState<string[][]>(() => localThemes(slug));
+  /**
+   * Whether the remembered filter has been checked against the labels the board actually has.
+   *
+   * A stored filter can name a label merged away or deleted since, and sending that id has the
+   * server refuse the whole filter — a 404 on load, for a choice the reader may not remember
+   * making. So nothing is sent until the label list arrives and the dead ids are gone.
+   *
+   * Starts true when there is no stored filter, which is the common case: there is nothing to
+   * validate, so the first fetch is the filtered one and no request is wasted.
+   */
+  const [validated, setValidated] = useState(() => localThemes(slug).length === 0);
   const themes = useThemes(slug, !loading && !error);
+
+  // A remembered filter can name a label that has since been merged away or deleted on the themes
+  // page. Sending it would have the server refuse the whole filter and 404 the board on load, so
+  // the dead ids are dropped once the live list arrives — silently, because a reader returning to
+  // a board does not need an error about a label they may not remember choosing.
+  //
+  // Compared as encoded strings so an unchanged filter keeps its identity and this does not loop.
+  useEffect(() => {
+    if (themes.length === 0) return;
+    const live = new Set(themes.map((theme) => theme.id));
+    setThemeIds((current) => {
+      const pruned = current
+        .map((group) => group.filter((id) => live.has(id)))
+        .filter((group) => group.length > 0);
+      if (encodeGroups(pruned) === encodeGroups(current)) return current;
+      void rememberThemes(slug, pruned);
+      return pruned;
+    });
+    setValidated(true);
+  }, [themes, slug]);
   // Bumped when a submission lands or a card moves, which remounts the columns so they refetch.
   // Each column owns its own cursor, so an entry leaving one has to be picked up by another —
   // threading every mutation through four independent lists would be more code for less
@@ -187,7 +219,7 @@ export function CreatorBoard() {
             status={tab.status}
             label={tab.label}
             themes={themes}
-            selectedThemes={themeIds}
+            selectedThemes={validated ? themeIds : []}
             onSelectThemes={(next) => {
               setThemeIds(next);
               void rememberThemes(slug, next);

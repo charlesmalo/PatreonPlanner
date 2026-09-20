@@ -134,6 +134,31 @@ describe('BoardColumn', () => {
     expect(await screen.findByText(/creator pick/i)).toBeInTheDocument();
   });
 
+  it('names the labels when a group matches nothing', async () => {
+    // An AND group is narrow by construction and usually matches nothing, which reads as a broken
+    // filter rather than a true answer unless the column says what it asked for.
+    stub([]);
+    setup({
+      canModerate: true,
+      themes: [
+        { id: 't1', name: 'Anime', entryCount: 1 },
+        { id: 't2', name: 'Documentary', entryCount: 1 },
+      ],
+      selectedThemes: [['t1', 't2']],
+    });
+
+    expect(
+      await screen.findByText(/no entries carry both anime and documentary/i),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps the ordinary empty text when nothing is filtering', async () => {
+    stub([]);
+    setup({ emptyText: 'Nothing suggested yet.' });
+
+    expect(await screen.findByText('Nothing suggested yet.')).toBeInTheDocument();
+  });
+
   describe('dragging', () => {
     /** jsdom has no real drag, so the transfer is a stub carrying what a card would set. */
     const transfer = (payload?: object) => ({
