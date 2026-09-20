@@ -24,6 +24,7 @@ describe('Board nesting and theme filtering (integration)', () => {
   let filmId: string;
   let similarId: string;
   let themeId: string;
+  let otherThemeId: string;
 
   beforeAll(async () => {
     ctx = await startAuthApp();
@@ -122,6 +123,16 @@ describe('Board nesting and theme filtering (integration)', () => {
     });
     themeId = theme.id;
     await ctx.prisma.titleTheme.create({ data: { titleId: filmTitleId, themeId } });
+
+    // A second label on a *different* entry, so a two-label filter has something to prove: with
+    // OR both entries come back, with AND neither would.
+    const second = await ctx.prisma.theme.create({
+      data: { creatorId, name: 'Documentary', slug: 'documentary' },
+    });
+    otherThemeId = second.id;
+    await ctx.prisma.titleTheme.create({
+      data: { titleId: showTitleId, themeId: otherThemeId },
+    });
   });
 
   async function loginAs(patreonUserId: string) {
@@ -222,36 +233,62 @@ describe('Board nesting and theme filtering (integration)', () => {
   it('returns each entry themes', async () => {
     const res = await board(patron).expect(200);
     expect(entry(res.body, filmId).themes).toEqual([{ id: themeId, name: 'Anime' }]);
-    expect(entry(res.body, showId).themes).toEqual([]);
+    expect(entry(res.body, showId).themes).toEqual([{ id: otherThemeId, name: 'Documentary' }]);
+    expect(entry(res.body, similarId).themes).toEqual([]);
   });
 
-  it('narrows the board to one theme', async () => {
-    const res = await board(patron, `&theme=${themeId}`).expect(200);
+  it('narrows the board to one label', async () => {
+    const res = await board(patron, `&themes=${themeId}`).expect(200);
     expect(res.body.items.map((i: { id: string }) => i.id)).toEqual([filmId]);
   });
 
-  it('rejects a theme belonging to another creator', async () => {
+  it('matches either label rather than both', async () => {
+    // OR, not AND: the two labels sit on different entries, so an AND would return nothing and
+    // this assertion would be the one that caught it.
+    const res = await board(patron, `&themes=${themeId},${otherThemeId}`).expect(200);
+    const ids = res.body.items.map((i: { id: string }) => i.id);
+    expect(ids).toContain(filmId);
+    expect(ids).toContain(showId);
+  });
+
+  it('does not return an entry twice when it carries two of the selected labels', async () => {
+    // `some` with `in` matches the row once however many labels hit, but a join written the
+    // obvious way would duplicate it — and a duplicated entry breaks keyset pagination.
+    await ctx.prisma.titleTheme.create({ data: { titleId: filmTitleId, themeId: otherThemeId } });
+    const res = await board(patron, `&themes=${themeId},${otherThemeId}`).expect(200);
+    const ids = res.body.items.map((i: { id: string }) => i.id);
+    expect(ids.filter((id: string) => id === filmId)).toHaveLength(1);
+  });
+
+  it('rejects a label belonging to another creator, even alongside a valid one', async () => {
     const foreign = await ctx.prisma.theme.create({
       data: { creatorId: otherCreatorId, name: 'Anime', slug: 'anime' },
     });
-    await board(patron, `&theme=${foreign.id}`).expect(404);
+    await board(patron, `&themes=${foreign.id}`).expect(404);
+    // The whole filter is refused rather than the foreign id quietly dropped, which would answer
+    // a question the caller did not ask.
+    await board(patron, `&themes=${themeId},${foreign.id}`).expect(404);
   });
 
-  it('rejects an unknown theme', async () => {
-    await board(patron, `&theme=${randomUUID()}`).expect(404);
+  it('rejects an unknown label', async () => {
+    await board(patron, `&themes=${randomUUID()}`).expect(404);
   });
 
-  it('applies the same visibility rules with a theme filter', async () => {
+  it('rejects a label list that is not uuids', async () => {
+    await board(patron, `&themes=not-a-uuid`).expect(400);
+  });
+
+  it('applies the same visibility rules with a label filter', async () => {
     // The filter narrows the existing read model; it must not become a second place the
     // visibility rules live.
     await ctx.prisma.creatorPolicy.update({
       where: { creatorId },
       data: { hidePendingFromPublic: true },
     });
-    const res = await board(otherPatron, `&theme=${themeId}`).expect(200);
+    const res = await board(otherPatron, `&themes=${themeId}`).expect(200);
     expect(res.body.items).toHaveLength(0);
 
-    const asStaff = await board(staff, `&theme=${themeId}`).expect(200);
+    const asStaff = await board(staff, `&themes=${themeId}`).expect(200);
     expect(asStaff.body.items.map((i: { id: string }) => i.id)).toEqual([filmId]);
   });
 

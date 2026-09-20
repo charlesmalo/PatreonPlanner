@@ -1,18 +1,26 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client';
-import type { Recommendation, StaffPermission } from '../api/types';
+import type { Recommendation, StaffPermission, ThemeSummary } from '../api/types';
 import { localCollapsed, localSort, remember } from '../api/board-settings';
 import { useBoard } from '../api/hooks';
 import { readDrag, type DraggedEntry } from './drag';
 import { buildTree, type TreeNode } from './board-tree';
 import { groupTargets } from './group-targets';
+import { ThemeFilter } from './ThemeFilter';
 import { RecommendationCard } from './RecommendationCard';
 
 interface BoardColumnProps {
   slug: string;
   status: string;
   label: string;
-  theme: string | null;
+  /** Every label on the board, for the filter this column renders. */
+  themes: ThemeSummary[];
+  /**
+   * Shared across columns rather than held per column: the selection belongs to the reader's view
+   * of the board, so swapping tabs keeps whatever they were narrowing by.
+   */
+  selectedThemes: string[];
+  onSelectThemes: (themeIds: string[]) => void;
   canUpvote: boolean;
   canModerate: boolean;
   /** Which staff controls the cards may draw. The API checks each one again. */
@@ -45,7 +53,9 @@ export function BoardColumn({
   slug,
   status,
   label,
-  theme,
+  themes,
+  selectedThemes,
+  onSelectThemes,
   canUpvote,
   canModerate,
   permissions,
@@ -77,7 +87,7 @@ export function BoardColumn({
     setSort(next);
     void remember(slug, status, { sort: next });
   };
-  const board = useBoard(slug, true, theme, status, sort);
+  const board = useBoard(slug, true, selectedThemes, status, sort);
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
@@ -257,6 +267,11 @@ export function BoardColumn({
               </option>
             ))}
           </select>
+
+          {/* Inside the column, not above the tabs: the filter narrows what is directly beneath
+              it, and a control sitting above four tabs gave no clue which one it acted on. The
+              selection itself is shared, so swapping tabs keeps it. */}
+          <ThemeFilter themes={themes} selected={selectedThemes} onChange={onSelectThemes} />
           {board.loading ? (
             <p role="status" className="text-sm text-slate-600 dark:text-slate-300">
               Loading…

@@ -19,6 +19,20 @@ const collapseKey = (slug: string, status: string) => `pp.board.${slug}.collapse
 const sortKey = (slug: string, status: string) => `pp.board.${slug}.sort.${status}`;
 
 /**
+ * Which labels are filtering, for the whole board rather than per column.
+ *
+ * Board-level because the selection is shared: a reader who narrows to "Anime" and swaps to
+ * Accepted is still asking about Anime, so storing it per status would make the filter appear to
+ * clear itself on every tab change.
+ *
+ * Local only, deliberately. The server's view-settings payload carries collapse and sort, and
+ * adding a field to it means a DTO change and a migration for something explicitly described
+ * there as best-effort arrangement. Surviving a reload on this device is the thing that was
+ * missing; syncing across devices can be added when somebody wants it.
+ */
+const themesKey = (slug: string) => `pp.board.${slug}.themes`;
+
+/**
  * How a reader has arranged a board, from wherever the answer is fastest.
  *
  * `localStorage` is read synchronously and used for the first paint. A board that waits on a
@@ -31,6 +45,18 @@ export function localCollapsed(slug: string, status: string): boolean {
 
 export function localSort(slug: string, status: string): string {
   return window.localStorage.getItem(sortKey(slug, status)) ?? '';
+}
+
+export function localThemes(slug: string): string[] {
+  const raw = window.localStorage.getItem(themesKey(slug));
+  // Split rather than JSON: the value is a list of ids and nothing else, and a malformed JSON
+  // blob here would throw during the first render of the board.
+  return raw ? raw.split(',').filter((id) => id.length > 0) : [];
+}
+
+/** Local only — see `themesKey`. Nothing is sent to the server. */
+export async function rememberThemes(slug: string, themeIds: string[]): Promise<void> {
+  window.localStorage.setItem(themesKey(slug), themeIds.join(','));
 }
 
 /**

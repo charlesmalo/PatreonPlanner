@@ -1,6 +1,7 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import type { RecommendationStatus } from '@prisma/client';
 import {
+  ArrayMaxSize,
   IsIn,
   IsInt,
   IsOptional,
@@ -26,10 +27,24 @@ export class ListRecommendationsQuery {
   @Max(50)
   limit?: number;
 
-  /** Narrows the same read model rather than adding a second one the rules could drift between. */
+  /**
+   * Labels to narrow by, comma-separated, matched as **OR**: an entry carrying any one of them is
+   * in. Narrows the same read model rather than adding a second one the rules could drift between.
+   *
+   * Comma-separated rather than a repeated parameter, so the value is one string whatever its
+   * length — Express hands back a string for `?themes=a` and an array for `?themes=a&themes=b`,
+   * and a DTO that has to accept both shapes is a DTO with two code paths to keep in step.
+   *
+   * Capped because each id is validated against the board before the query runs; an unbounded
+   * list is an unbounded number of ids to check.
+   */
   @IsOptional()
-  @IsUUID()
-  theme?: string;
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.split(',').filter((part) => part.length > 0) : value,
+  )
+  @ArrayMaxSize(20)
+  @IsUUID(undefined, { each: true })
+  themes?: string[];
 
   /**
    * One kanban column. Narrows what visibility already allows and can never widen it — a patron

@@ -407,10 +407,44 @@ describe('CreatorBoard nesting and themes', () => {
     global.fetch = fetchMock;
     renderBoard();
 
-    await userEvent.click(await screen.findByRole('button', { name: /Anime \(1\)/ }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Anime' }));
     await waitFor(() => {
       const urls = fetchMock.mock.calls.map(([input]) => String(input));
-      expect(urls.some((u) => u.includes('theme=t1'))).toBe(true);
+      expect(urls.some((u) => u.includes('themes=t1'))).toBe(true);
+    });
+  });
+
+  it('keeps the filter when the reader swaps columns', async () => {
+    // The control is rendered per column; the selection is not. Swapping tabs must not silently
+    // drop what the reader narrowed to.
+    const fetchMock = fakeApi({
+      'GET /api/v1/creators/ada-writes': creator,
+      'GET /api/v1/creators/ada-writes/capabilities': viewOnly,
+      'GET /api/v1/creators/ada-writes/recommendations': (url: URL) => ({
+        items: byColumn(url, [recommendation()]),
+        nextCursor: null,
+      }),
+      'GET /api/v1/creators/ada-writes/themes': {
+        items: [{ id: 't1', name: 'Anime', entryCount: 1 }],
+      },
+    });
+    global.fetch = fetchMock;
+    renderBoard();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Anime' }));
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(([i]) => String(i).includes('themes=t1'))).toBe(true),
+    );
+
+    await userEvent.click(screen.getByRole('tab', { name: /accepted/i }));
+
+    // The *latest* request for that column, not every one: all four panels mount up front, so
+    // Accepted was fetched once before any filter existed and always will be.
+    await waitFor(() => {
+      const accepted = fetchMock.mock.calls
+        .map(([i]) => String(i))
+        .filter((u) => u.includes('status=ACCEPTED'));
+      expect(accepted.at(-1)).toContain('themes=t1');
     });
   });
 
@@ -438,7 +472,7 @@ describe('CreatorBoard nesting and themes', () => {
 
     expect(await screen.findByText('Everything')).toBeInTheDocument();
     filtered = true;
-    await userEvent.click(screen.getByRole('button', { name: /Anime \(1\)/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Anime' }));
 
     expect(await screen.findByText('Only Themed')).toBeInTheDocument();
     expect(screen.queryByText('Everything')).not.toBeInTheDocument();

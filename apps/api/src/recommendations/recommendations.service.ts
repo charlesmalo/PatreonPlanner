@@ -233,7 +233,7 @@ export class RecommendationsService {
     rawCursor: string | undefined,
     limit: number | undefined,
     viewer: { userId: string | null; staffRole: StaffRoleValue | null },
-    themeId?: string,
+    themeIds?: string[],
     status?: RecommendationStatus,
     sort: BoardSort = 'upvotes',
   ) {
@@ -243,19 +243,28 @@ export class RecommendationsService {
 
     // Scoped to this creator: a theme id from another board must not silently return an empty
     // page, which reads as "no matches here" rather than "that is not your theme".
-    if (themeId) {
-      const theme = await this.prisma.theme.findFirst({
-        where: { id: themeId, creatorId: creator.id },
+    //
+    // Every id is checked, and one bad id refuses the whole filter rather than being dropped:
+    // answering a narrower question than the caller asked, without saying so, is how a board
+    // quietly lies about what it holds.
+    if (themeIds && themeIds.length > 0) {
+      const found = await this.prisma.theme.findMany({
+        where: { id: { in: themeIds }, creatorId: creator.id },
         select: { id: true },
       });
-      if (!theme) throw new NotFoundException();
+      if (found.length !== new Set(themeIds).size) throw new NotFoundException();
     }
 
     const isStaff = viewer.staffRole !== null;
     const items = (await this.prisma.recommendation.findMany({
       where: {
         creatorId: creator.id,
-        ...(themeId ? { title: { themes: { some: { themeId } } } } : {}),
+        // OR across the selected labels: `some` matches an entry carrying *any* of them, and
+        // matches it once however many it carries — a join written the obvious way would return
+        // the row per matching label and duplicate it, which keyset pagination cannot survive.
+        ...(themeIds && themeIds.length > 0
+          ? { title: { themes: { some: { themeId: { in: themeIds } } } } }
+          : {}),
         // Composed with AND, never spread: both clauses are disjunctions and want the `OR` key,
         // so spreading let the cursor overwrite the visibility filter outright — page one was
         // correct and every page after it returned rejected, deleted and other patrons' pending

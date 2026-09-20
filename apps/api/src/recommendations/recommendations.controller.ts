@@ -65,7 +65,7 @@ export class RecommendationsController {
       query.cursor,
       query.limit,
       viewer,
-      query.theme,
+      query.themes,
       query.status,
       query.sort,
     );

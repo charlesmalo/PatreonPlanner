@@ -982,12 +982,14 @@ test('a patron can narrow the board to one theme', async ({ page }) => {
   seedTheme('Anime', [129]);
   await page.reload();
 
-  await page.getByRole('button', { name: /Anime \(1\)/ }).click();
+  // No count on the chip: the number was board-wide while the control now sits inside one
+  // column, so it would claim a total the entries underneath it do not add up to.
+  await page.getByRole('button', { name: 'Anime', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Spirited Away' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'An unthemed link' })).toHaveCount(0);
 
   // Clicking again clears it.
-  await page.getByRole('button', { name: /Anime \(1\)/ }).click();
+  await page.getByRole('button', { name: 'Anime', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'An unthemed link' })).toBeVisible();
 });
 
