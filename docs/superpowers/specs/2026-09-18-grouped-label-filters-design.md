@@ -178,7 +178,32 @@ Still local only, and still not synced to the server, for the reason #131 gives.
 
 ---
 
-## 6. Demo data — **decided: seed for it**
+## 6. Demo data — **decided: nothing to seed, corrected after measuring**
+
+> **This section was wrong, and is kept with its correction rather than rewritten.** It asserted
+> the demo could not show grouping and asked for a seeded pair of co-occurring labels. When the
+> implementation reached that task the numbers were measured instead of assumed, and the demo
+> already showed both outcomes:
+>
+> ```
+> Animation AND Anime        4 entries
+> Animation AND Long Watch   1
+> Thriller AND Animation     1
+> Thriller AND Anime         1
+> Long Watch AND Anime       1
+> Thriller AND Long Watch    0
+> ```
+>
+> A group that fills a column and pairs that find nothing both exist, so no seed change was made.
+> Retuning deliberately-chosen demo data to produce what it already produces would have been work
+> for its own sake. `docs/demo-walkthrough.md` §4c documents both cases instead.
+>
+> The mistake is the one this repository keeps finding: **written from what the seed looked like
+> rather than from what the database held.** The sparsity that prompted it is real — five of the
+> ten possible pairs are empty — but "mostly sparse" is not "cannot show it", and one query
+> separated the two.
+
+The original text follows.
 
 The demo cannot currently show this. With five labels whose overlaps are almost all zero, a
 playtester combining two labels sees an empty column, and the feature looks broken exactly when
