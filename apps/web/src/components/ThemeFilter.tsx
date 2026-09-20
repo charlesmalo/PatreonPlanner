@@ -59,9 +59,16 @@ export function ThemeFilter({ themes, selected, onChange }: ThemeFilterProps) {
       className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-800"
     >
       <div className="flex items-baseline justify-between gap-2">
-        <h3 className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        {/* A span, not a heading. The group's `aria-label` already names this for a screen
+            reader, so a heading would announce it twice — and an h3 here sits among the cards'
+            own h3s, which made "the first heading in this column" mean the filter rather than
+            the first entry. Three board journeys failed on exactly that. */}
+        <span
+          aria-hidden="true"
+          className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400"
+        >
           Filter labels
-        </h3>
+        </span>
         {/* Only while there is something to clear: a permanently visible "Clear all" is a control
             that does nothing most of the time. */}
         {selected.length > 0 ? (
