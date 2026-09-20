@@ -1,6 +1,9 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import type { ThemeSummary } from '../api/types';
-import { removeGroup, splitAt, toggleLabel } from './label-groups';
+import { combine, removeGroup, splitAt, toggleLabel } from './label-groups';
+
+/** Its own type, so a card dragged from the board is never mistaken for a label. */
+const DRAG_LABEL = 'application/x-pp-label';
 
 interface ThemeFilterProps {
   themes: ThemeSummary[];
@@ -79,6 +82,14 @@ export function ThemeFilter({ themes, selected, onChange }: ThemeFilterProps) {
             return (
               <li
                 key={group.join('|')}
+                draggable
+                onDragStart={(event) => event.dataTransfer.setData(DRAG_LABEL, group[0])}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const id = event.dataTransfer.getData(DRAG_LABEL);
+                  if (id && !group.includes(id)) onChange(combine(selected, id, groupIndex));
+                }}
                 className="flex items-center rounded-full border border-sky-500 bg-sky-50 py-0.5 pl-2.5 pr-1 text-xs dark:bg-sky-950"
               >
                 {group.map((id, memberIndex) => (
@@ -98,6 +109,15 @@ export function ThemeFilter({ themes, selected, onChange }: ThemeFilterProps) {
                     ) : null}
                   </span>
                 ))}
+                {selected.length > 1 ? (
+                  <CombineMenu
+                    label={names.join(' and ')}
+                    options={selected
+                      .map((other, index) => ({ index, name: other.map(nameOf).join(' and ') }))
+                      .filter((option) => option.index !== groupIndex)}
+                    onChoose={(intoIndex) => onChange(combine(selected, group[0], intoIndex))}
+                  />
+                ) : null}
                 <button
                   type="button"
                   ref={(node) => groupRemoves.current.set(group.join('|'), node)}
@@ -139,5 +159,60 @@ export function ThemeFilter({ themes, selected, onChange }: ThemeFilterProps) {
         {spoken.length === 0 ? 'No label filters.' : `Filtering by ${spoken.join(', or ')}.`}
       </p>
     </div>
+  );
+}
+
+/**
+ * The accessible half of combining. Drag is the shortcut and does nothing from a keyboard or on
+ * touch — `drag.ts` says so, and entry grouping already answers it the same way.
+ *
+ * Each option is named by every label in the target group, so "combine with Fantasy and
+ * Documentary" says which group without the reader having to count chips.
+ */
+function CombineMenu({
+  label,
+  options,
+  onChoose,
+}: {
+  label: string;
+  options: Array<{ index: number; name: string }>;
+  onChoose: (intoIndex: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="relative">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`Combine ${label} with another label`}
+        onClick={() => setOpen((value) => !value)}
+        className="ml-1 rounded-full px-1 leading-none text-sky-700 hover:bg-sky-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:text-sky-300 dark:hover:bg-sky-900"
+      >
+        <span aria-hidden="true">▾</span>
+      </button>
+      {open ? (
+        <ul
+          role="menu"
+          className="absolute left-0 top-full z-10 mt-1 rounded border border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900"
+        >
+          {options.map((option) => (
+            <li key={option.index}>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  onChoose(option.index);
+                  setOpen(false);
+                }}
+                className="block w-full whitespace-nowrap px-3 py-1.5 text-left text-xs hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:hover:bg-slate-800"
+              >
+                {option.name}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </span>
   );
 }

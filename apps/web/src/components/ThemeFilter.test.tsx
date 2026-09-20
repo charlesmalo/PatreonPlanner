@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ThemeFilter } from './ThemeFilter';
 
@@ -158,6 +158,54 @@ describe('ThemeFilter', () => {
     await userEvent.click(screen.getByRole('button', { name: /remove anime and fantasy filter/i }));
     rerender(<ThemeFilter themes={themes} selected={[]} onChange={onChange} />);
     expect(screen.getByRole('button', { name: 'Anime' })).toHaveFocus();
+  });
+
+  it('offers to combine a group with each of the others', async () => {
+    render(<ThemeFilter themes={themes} selected={[['t1'], ['t2']]} onChange={vi.fn()} />);
+    await userEvent.click(screen.getByRole('button', { name: /combine anime with/i }));
+    expect(screen.getByRole('menuitem', { name: 'Fantasy' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Anime' })).not.toBeInTheDocument();
+  });
+
+  it('combines into the chosen group', async () => {
+    const onChange = vi.fn();
+    render(<ThemeFilter themes={themes} selected={[['t1'], ['t2']]} onChange={onChange} />);
+    await userEvent.click(screen.getByRole('button', { name: /combine anime with/i }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Fantasy' }));
+    expect(onChange).toHaveBeenCalledWith([['t2', 't1']]);
+  });
+
+  it('offers no combine control when only one group is filtering', () => {
+    render(<ThemeFilter themes={themes} selected={[['t1']]} onChange={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: /combine/i })).not.toBeInTheDocument();
+  });
+
+  it('names an existing group in the menu by all of its labels', async () => {
+    render(<ThemeFilter themes={themes} selected={[['t1'], ['t2', 't3']]} onChange={vi.fn()} />);
+    await userEvent.click(screen.getByRole('button', { name: /combine anime with/i }));
+    expect(screen.getByRole('menuitem', { name: 'Fantasy and Documentary' })).toBeInTheDocument();
+  });
+
+  it('combines when one group is dropped onto another', async () => {
+    const onChange = vi.fn();
+    render(<ThemeFilter themes={themes} selected={[['t1'], ['t2']]} onChange={onChange} />);
+    const transfer = { getData: () => 't1', setData: vi.fn(), dropEffect: '', effectAllowed: '' };
+    // Scoped by the group's own remove button: the name "Fantasy" also appears in the toggle
+    // list below, and the chip is the drop target.
+    const chip = screen.getByRole('button', { name: /remove fantasy filter/i }).closest('li')!;
+    fireEvent.drop(chip, { dataTransfer: transfer });
+    expect(onChange).toHaveBeenCalledWith([['t2', 't1']]);
+  });
+
+  it('ignores a drop carrying something that is not a label', async () => {
+    // A card dragged from the board uses its own transfer type. Dropping one here must do
+    // nothing rather than combine with whatever id it happens to carry.
+    const onChange = vi.fn();
+    render(<ThemeFilter themes={themes} selected={[['t1'], ['t2']]} onChange={onChange} />);
+    const transfer = { getData: () => '', setData: vi.fn(), dropEffect: '', effectAllowed: '' };
+    const chip = screen.getByRole('button', { name: /remove fantasy filter/i }).closest('li')!;
+    fireEvent.drop(chip, { dataTransfer: transfer });
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it('renders a label name containing markup as text', () => {
