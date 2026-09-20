@@ -118,19 +118,31 @@ describe('board settings', () => {
     it('remembers the selection for the whole board, not per column', async () => {
       // Shared across columns on purpose: a reader narrowing to Anime and swapping to Accepted is
       // still asking about Anime, and a per-status key would look like the filter clearing itself.
-      await rememberThemes('ada-writes', ['t1', 't2']);
-      expect(localThemes('ada-writes')).toEqual(['t1', 't2']);
+      await rememberThemes('ada-writes', [['t1'], ['t2']]);
+      expect(localThemes('ada-writes')).toEqual([['t1'], ['t2']]);
     });
 
     it('keeps one board filter out of another board', async () => {
-      await rememberThemes('ada-writes', ['t1']);
+      await rememberThemes('ada-writes', [['t1']]);
       expect(localThemes('mo-reads')).toEqual([]);
     });
 
     it('clears back to empty', async () => {
-      await rememberThemes('ada-writes', ['t1']);
+      await rememberThemes('ada-writes', [['t1']]);
       await rememberThemes('ada-writes', []);
       expect(localThemes('ada-writes')).toEqual([]);
+    });
+
+    it('remembers groups, not just labels', async () => {
+      await rememberThemes('ada-writes', [['t1', 't2'], ['t3']]);
+      expect(localThemes('ada-writes')).toEqual([['t1', 't2'], ['t3']]);
+    });
+
+    it('reads a value written before groups existed as one group each', async () => {
+      // #131 wrote `t1,t2`. That meant `(t1) OR (t2)` then and means the same now, so a reader
+      // who filtered before this shipped finds their filter intact.
+      window.localStorage.setItem('pp.board.ada-writes.themes', 't1,t2');
+      expect(localThemes('ada-writes')).toEqual([['t1'], ['t2']]);
     });
 
     it('sends nothing to the server', async () => {
@@ -138,7 +150,7 @@ describe('board settings', () => {
       // is a DTO change for something documented as best-effort arrangement.
       const fetchSpy = vi.fn();
       global.fetch = fetchSpy;
-      await rememberThemes('ada-writes', ['t1']);
+      await rememberThemes('ada-writes', [['t1']]);
       expect(fetchSpy).not.toHaveBeenCalled();
     });
   });

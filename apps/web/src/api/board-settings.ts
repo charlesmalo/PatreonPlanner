@@ -1,4 +1,5 @@
 import { api } from './client';
+import { decodeGroups, encodeGroups } from '../components/label-groups';
 
 export interface BoardSettings {
   collapsed: string[];
@@ -47,16 +48,15 @@ export function localSort(slug: string, status: string): string {
   return window.localStorage.getItem(sortKey(slug, status)) ?? '';
 }
 
-export function localThemes(slug: string): string[] {
-  const raw = window.localStorage.getItem(themesKey(slug));
-  // Split rather than JSON: the value is a list of ids and nothing else, and a malformed JSON
-  // blob here would throw during the first render of the board.
-  return raw ? raw.split(',').filter((id) => id.length > 0) : [];
+export function localThemes(slug: string): string[][] {
+  // `decodeGroups` reads a value written before groups existed — `t1,t2` — as one group each,
+  // which is what it meant then and means now. No migration.
+  return decodeGroups(window.localStorage.getItem(themesKey(slug)) ?? '');
 }
 
 /** Local only — see `themesKey`. Nothing is sent to the server. */
-export async function rememberThemes(slug: string, themeIds: string[]): Promise<void> {
-  window.localStorage.setItem(themesKey(slug), themeIds.join(','));
+export async function rememberThemes(slug: string, groups: string[][]): Promise<void> {
+  window.localStorage.setItem(themesKey(slug), encodeGroups(groups));
 }
 
 /**

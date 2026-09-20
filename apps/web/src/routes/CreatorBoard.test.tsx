@@ -414,6 +414,31 @@ describe('CreatorBoard nesting and themes', () => {
     });
   });
 
+  it('drops a remembered label the board no longer has', async () => {
+    // Labels get merged and deleted on the themes page. A filter naming a dead one would send an
+    // id the server refuses and 404 the board on load — over a choice the reader may not
+    // remember making.
+    window.localStorage.setItem('pp.board.ada-writes.themes', 'gone|t1');
+    const fetchMock = fakeApi({
+      'GET /api/v1/creators/ada-writes': creator,
+      'GET /api/v1/creators/ada-writes/capabilities': viewOnly,
+      'GET /api/v1/creators/ada-writes/recommendations': (url: URL) => ({
+        items: byColumn(url, [recommendation()]),
+        nextCursor: null,
+      }),
+      'GET /api/v1/creators/ada-writes/themes': {
+        items: [{ id: 't1', name: 'Anime', entryCount: 1 }],
+      },
+    });
+    global.fetch = fetchMock;
+    renderBoard();
+
+    await screen.findByRole('button', { name: /remove anime filter/i });
+    expect(fetchMock.mock.calls.map(([i]) => String(i)).some((u) => u.includes('gone'))).toBe(
+      false,
+    );
+  });
+
   it('keeps the filter when the reader swaps columns', async () => {
     // The control is rendered per column; the selection is not. Swapping tabs must not silently
     // drop what the reader narrowed to.

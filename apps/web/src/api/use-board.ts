@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError, api } from './client';
+import { encodeGroups } from '../components/label-groups';
 import type { Board, Recommendation, ThemeSummary } from './types';
 
 /** Reading the board itself: its columns, its themes, and one entry on its own page. */
@@ -30,7 +31,7 @@ export function useThemes(slug: string, enabled: boolean) {
 export function useBoard(
   slug: string,
   enabled: boolean,
-  themeIds?: string[],
+  themeGroups?: string[][],
   status?: string,
   sort?: string,
 ) {
@@ -48,11 +49,10 @@ export function useBoard(
   // refetches and resets paging — a cursor from one ordering means nothing in another, and
   // re-sorting a page already fetched would sort one page of a list with more behind it.
   //
-  // Sorted before joining so the same selection always produces the same path: picking Anime then
-  // Thriller and picking them the other way round are the same filter, and two spellings of it
-  // would refetch for no reason and defeat any cache keyed on the path.
+  // Not sorted: order is meaningful now. The groups read as the chips look, and reordering them
+  // would rewrite a filter the reader arranged.
   const query = new URLSearchParams();
-  if (themeIds && themeIds.length > 0) query.set('themes', [...themeIds].sort().join(','));
+  if (themeGroups && themeGroups.length > 0) query.set('themes', encodeGroups(themeGroups));
   if (status) query.set('status', status);
   if (sort) query.set('sort', sort);
   const search = query.toString();

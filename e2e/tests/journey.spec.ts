@@ -982,8 +982,7 @@ test('a patron can narrow the board to one theme', async ({ page }) => {
   seedTheme('Anime', [129]);
   await page.reload();
 
-  // No count on the chip: the number was board-wide while the control now sits inside one
-  // column, so it would claim a total the entries underneath it do not add up to.
+  // No count on the chip: the number was board-wide while the control sits inside one column.
   await page.getByRole('button', { name: 'Anime', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Spirited Away' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'An unthemed link' })).toHaveCount(0);
@@ -991,6 +990,49 @@ test('a patron can narrow the board to one theme', async ({ page }) => {
   // Clicking again clears it.
   await page.getByRole('button', { name: 'Anime', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'An unthemed link' })).toBeVisible();
+});
+
+test('a patron combines two labels and splits them again', async ({ page }) => {
+  // The half no unit test reaches: the expression is encoded into a query string, parsed and run
+  // as SQL, and rebuilt into chips from what comes back. Only the real stack exercises all three.
+  clearIntelligence();
+  await signIn(page, 500);
+  await page.goto(`/c/${CREATOR.slug}`);
+
+  await page.getByLabel(/search films and shows/i).fill('spirited');
+  await page.getByRole('button', { name: /spirited away \(2001\)/i }).click();
+  await page.getByRole('button', { name: 'Suggest', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Spirited Away' })).toBeVisible();
+
+  await page.getByLabel(/catalogue does not have/i).fill('An unthemed link');
+  await page.getByRole('button', { name: 'Suggest', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'An unthemed link' })).toBeVisible();
+
+  // Both labels on the same entry, so an AND group has something to find.
+  seedTheme('Anime', [129]);
+  seedTheme('Classic', [129]);
+  await page.reload();
+
+  const filter = page.getByRole('group', { name: /filter labels/i });
+  await filter.getByRole('button', { name: 'Anime', exact: true }).click();
+  await filter.getByRole('button', { name: 'Classic', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Spirited Away' })).toBeVisible();
+
+  // Combine them: the column now wants entries carrying both, and this one does.
+  await filter.getByRole('button', { name: /combine anime with/i }).click();
+  await page.getByRole('menuitem', { name: 'Classic' }).click();
+  await expect(filter.getByRole('button', { name: /split between/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Spirited Away' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'An unthemed link' })).toHaveCount(0);
+
+  // Stored, not merely optimistic: the expression is rebuilt from localStorage on load.
+  await page.reload();
+  const afterReload = page.getByRole('group', { name: /filter labels/i });
+  await expect(afterReload.getByRole('button', { name: /split between/i })).toBeVisible();
+
+  // And the magnet takes them apart again.
+  await afterReload.getByRole('button', { name: /split between/i }).click();
+  await expect(afterReload.getByRole('button', { name: /split between/i })).toHaveCount(0);
 });
 
 test('a timed-out patron can still read and upvote, but not suggest', async ({ page }) => {

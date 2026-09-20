@@ -19,8 +19,8 @@ interface BoardColumnProps {
    * Shared across columns rather than held per column: the selection belongs to the reader's view
    * of the board, so swapping tabs keeps whatever they were narrowing by.
    */
-  selectedThemes: string[];
-  onSelectThemes: (themeIds: string[]) => void;
+  selectedThemes: string[][];
+  onSelectThemes: (groups: string[][]) => void;
   canUpvote: boolean;
   canModerate: boolean;
   /** Which staff controls the cards may draw. The API checks each one again. */
@@ -143,6 +143,28 @@ export function BoardColumn({
       onMoved(id, status);
     }
   }
+
+  /**
+   * A filtered column that finds nothing has not failed — it has answered. Saying which labels it
+   * asked for turns a blank column into that answer, and costs nothing the API has to learn.
+   *
+   * Worth the sentence because an AND group is narrow by construction: on a real board most pairs
+   * of labels never co-occur, so "nothing here" is the *common* outcome of combining two and
+   * reads as a bug without it.
+   */
+  const filteredEmptyText = () => {
+    if (selectedThemes.length === 0) return emptyText;
+    const names = (ids: string[]) =>
+      ids.map((id) => themes.find((theme) => theme.id === id)?.name ?? id);
+    const [first] = selectedThemes;
+    if (selectedThemes.length === 1 && first.length > 1) {
+      const parts = names(first);
+      return `No entries carry both ${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}.`;
+    }
+    return `Nothing here matches ${selectedThemes
+      .map((group) => names(group).join(' and '))
+      .join(', or ')}.`;
+  };
 
   const tree = buildTree(board.items);
 
@@ -277,7 +299,7 @@ export function BoardColumn({
               Loading…
             </p>
           ) : board.items.length === 0 ? (
-            <p className="text-sm text-slate-500 dark:text-slate-400">{emptyText}</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">{filteredEmptyText()}</p>
           ) : (
             <ul className="space-y-3">
               {tree.map((node) => (

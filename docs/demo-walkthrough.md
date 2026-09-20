@@ -109,6 +109,33 @@ You can also drag one card onto another: a **Group into…** band appears under 
 would be legal on, and only while a drag is happening. The menu is the accessible path — native
 drag does nothing from a keyboard or on touch — and the band is the shortcut.
 
+### 4c. Narrowing by more than one label
+
+Under each column's sort is **Filter labels**. Press one and the column narrows; press another and
+it *widens* — two labels are an OR, so adding one asks for more, which is what chip filters
+conventionally do.
+
+The selection follows you between tabs. Narrowing to Anime on Suggestions and swapping to Accepted
+keeps Anime, because you are narrowing the board rather than the column. It survives a reload too.
+
+**Combining two labels turns the OR into an AND.** Press the small ▾ on a chip and choose another
+label, or drag one chip onto another. They join into a single chip with a magnet between them, and
+the column now wants entries carrying *both*. Click the magnet to split them apart again; the
+group's one ✕ removes the whole thing.
+
+Worth trying both outcomes, because they look alike and mean different things:
+
+- **Animation and Anime** — four entries. The group works and the column fills.
+- **Anime and Documentary** — nothing carries both, so the column says
+  *"No entries carry both Anime and Documentary."* rather than going silently blank.
+
+That second case is the common one on a real board. Most pairs of labels never co-occur — here,
+five of the ten possible pairs are empty — so an AND group finding nothing is usually a true
+answer rather than a fault, and the column says which labels it asked for so you can tell.
+
+The ▾ menu and the drag do the same thing. The menu is the one that works from a keyboard and on
+a phone; the drag is a shortcut for a mouse.
+
 ### 5. Who hears about a move
 
 As **Ada**, move **Perfect Blue** to Now Playing. **Bea's** bell rings: it is Anime, and Anime is
