@@ -1,4 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { periodKeyFor } from './period-key';
@@ -79,5 +84,73 @@ export class TokensService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Spends one token on an accepted entry.
+   *
+   * **A conditional decrement, never a read-then-write.** Two requests that both read a balance
+   * of one would both pass a check and both write zero, and the reader would have spent a token
+   * they did not have. `updateMany ... where available > 0` lets the database answer instead: a
+   * count of zero means the balance was empty and the spend is refused. This is the same shape
+   * `ModerationActionsService.changeStatus` uses, for the same reason.
+   *
+   * Everything else — the ledger row, the redeem, the entry's counter — happens in one
+   * transaction with it. A decrement whose redeem never landed is a token that vanished.
+   */
+  async spend(
+    creatorId: string,
+    userId: string,
+    recommendationId: string,
+    note: string,
+  ): Promise<{ id: string }> {
+    const trimmed = note.trim();
+    // The note is the whole instruction — it is what the creator reads to know what to play, and
+    // nothing else in the system says it. An empty one makes the redeem unactionable.
+    if (trimmed.length === 0) throw new BadRequestException('A redeem needs a note');
+    if (trimmed.length > 200) throw new BadRequestException('That note is too long');
+
+    const policy = await this.prisma.creatorPolicy.findUnique({
+      where: { creatorId },
+      select: { redeemTokensEnabled: true },
+    });
+    if (!policy?.redeemTokensEnabled) throw new NotFoundException();
+
+    // Scoped by creatorId: an id alone says nothing about which board owns it, and a token on one
+    // board must never be spendable on another. 404 rather than 403, as everywhere else — a
+    // reader may not learn an entry exists by being refused it.
+    const entry = await this.prisma.recommendation.findFirst({
+      where: { id: recommendationId, creatorId },
+      select: { id: true, status: true },
+    });
+    if (!entry) throw new NotFoundException();
+    // Only an accepted entry. A redeem on something still in the queue would let money skip
+    // moderation, which is the one thing the queue exists to prevent.
+    if (entry.status !== 'ACCEPTED') {
+      throw new ConflictException('Only an accepted entry can be redeemed');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.tokenBalance.updateMany({
+        where: { creatorId, userId, available: { gt: 0 } },
+        data: { available: { decrement: 1 } },
+      });
+      // Zero rows means the balance was zero — or there is no balance row at all, which is the
+      // same answer to the reader.
+      if (count === 0) throw new ConflictException('No tokens left to spend');
+
+      const redeem = await tx.redeem.create({
+        data: { creatorId, recommendationId, userId, note: trimmed },
+        select: { id: true },
+      });
+      await tx.tokenLedger.create({
+        data: { creatorId, userId, kind: 'SPEND', amount: -1, redeemId: redeem.id },
+      });
+      await tx.recommendation.update({
+        where: { id: recommendationId },
+        data: { unconsumedRedeems: { increment: 1 } },
+      });
+      return redeem;
+    });
   }
 }
