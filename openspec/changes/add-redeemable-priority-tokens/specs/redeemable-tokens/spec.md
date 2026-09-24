@@ -154,6 +154,53 @@ back from `REJECTED` to `ACCEPTED` SHALL show its unconsumed redeems again.
 - **WHEN** staff move a redeemed entry to `REJECTED` and later back to `ACCEPTED`
 - **THEN** its redeems are still unconsumed and its Priority marker returns
 
+### Requirement: A redeemer is told when their redeem is played
+
+When an entry carrying unconsumed redeems moves to `ACTIVE`, each reader who redeemed it SHALL be
+notified that the entry they redeemed is now playing. The notification SHALL be sent whether or
+not that reader follows the board.
+
+A reader SHALL receive exactly one such notification per entry per move, however many tokens they
+spent on it, and SHALL NOT receive a duplicate because they also follow the board.
+
+No such notification SHALL be sent for a move to any status other than `ACTIVE`, nor for a move
+that does not complete.
+
+#### Scenario: A redeemer who does not follow the board
+
+- **WHEN** an entry redeemed by a reader who does not follow the board moves to `ACTIVE`
+- **THEN** that reader is notified that their redeem is playing
+
+#### Scenario: A redeemer who also follows the board
+
+- **WHEN** an entry redeemed by a follower moves to `ACTIVE`
+- **THEN** that reader receives one notification about it, not two
+
+#### Scenario: Two tokens, one notification
+
+- **WHEN** a reader who spent two tokens on one entry sees it move to `ACTIVE`
+- **THEN** they are notified once
+
+### Requirement: A spend is final
+
+A reader SHALL NOT be able to reverse a spend. Once a token is spent, the balance SHALL NOT be
+restored by any reader-initiated action, whether or not the redeem has been consumed.
+
+A creator MAY grant a token to a reader who spent one by mistake, using the ordinary grant. That
+grant SHALL be recorded as a grant, not as a reversal — the original spend SHALL remain in the
+ledger.
+
+#### Scenario: A reader attempting to take a spend back
+
+- **WHEN** a reader attempts to reverse their own spend on an unconsumed redeem
+- **THEN** the request is refused and their balance is unchanged
+
+#### Scenario: A creator making good on a misspend
+
+- **WHEN** a creator grants a token to a reader who misspent one
+- **THEN** the balance increases by one
+- **AND** the ledger shows both the original spend and the new grant
+
 ### Requirement: A balance is private; a redeem is not
 
 A reader SHALL be able to see their own balance on a board and the ledger rows explaining it. A

@@ -153,12 +153,34 @@ board is off, which is the same state it has had since it was created.
 
 Rollback is dropping the tables and columns; nothing existing reads them.
 
-## Open Questions
+## Resolved Questions
 
-- **Is the redeemer told when their redeem is played?** The move to `ACTIVE` already notifies
-  followers. A redeemer is not necessarily a follower, and being told "the thing you paid for is
-  on" is the moment the feature pays off. Leaning yes, as a distinct notification type; it is
-  cheap and it is the emotional point of the feature.
-- **Should a spend be undoable within a short window?** A misspent token on the wrong entry is
-  a plausible mistake and there is no decline flow to recover it. A five-minute undo would cover
-  fat fingers without opening the refund argument the proposal rules out.
+Both were left open when this design was written, and both are now decided.
+
+### The redeemer IS told when their redeem is played — **decided**
+
+A distinct notification, sent to each redeemer when the entry they redeemed reaches `ACTIVE`.
+
+The move already fans out to followers, so the machinery exists; this adds a notification type and
+a second recipient list. A redeemer is not necessarily a follower, and the moment the thing they
+spent on starts is the moment the token pays off. Staying silent spends the feature's whole
+emotional return to save one enum value.
+
+Consumption and notification happen in the same transaction as the status change, for the reason
+the audit row already lives there: a notification telling someone their redeem is playing, when
+the move was rolled back, is worse than none.
+
+### A spend is final — **decided: no undo**
+
+No undo window. A spend decrements, records and redeems in one transaction, and that is the end of
+it.
+
+*Why not the five-minute window considered here:* it needs a race settled between an undo and the
+creator consuming the redeem mid-undo, a rule for what happens when they collide, and a test for
+each. It is also inconsistent with the proposal already ruling out declines and refunds — three
+ways to un-spend a token is two more than a feature this size can explain.
+
+*What a misspend costs:* nothing that cannot be fixed by a creator granting one back, which is
+already in scope and needs no new rules. A patron who redeems the wrong entry asks; the creator
+decides. That is a conversation rather than a mechanism, which is the right size for a mistake
+this rare.

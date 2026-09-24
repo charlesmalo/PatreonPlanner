@@ -52,7 +52,7 @@ Every test is verified by mutation: break the thing, confirm the test that names
 - [ ] Test: with the feature off, the column orders exactly as before (assert against a board
       whose policy is off, not against a snapshot)
 
-## 5. Consuming
+## 5. Consuming, and telling the redeemer
 
 - [ ] Consume inside `ModerationActionsService.changeStatus`'s existing transaction when the
       destination is `ACTIVE`: mark redeems consumed, zero `unconsumedRedeems`
@@ -60,6 +60,12 @@ Every test is verified by mutation: break the thing, confirm the test that names
 - [ ] Test: moving to `REJECTED` and back to `ACCEPTED` leaves them unconsumed and the marker
       returns
 - [ ] Test: a rolled-back status change consumes nothing
+- [ ] A `REDEEM_PLAYING` notification to each redeemer, in the same transaction as the move
+- [ ] Test: a redeemer who does not follow the board is still told
+- [ ] Test: a redeemer who *does* follow gets one notification, not two
+- [ ] Test: no notification when the move is to any status but `ACTIVE`
+- [ ] `audit:enums` must still pass — a new `NotificationType` value has to be mirrored in
+      `apps/web/src/api/types.ts` or the audit fails, which is exactly what it is for
 
 ## 6. Reading a balance
 
@@ -98,6 +104,6 @@ Every test is verified by mutation: break the thing, confirm the test that names
 
 ## Before opening the PR
 
-- [ ] Answer the design's two open questions, or record them as deliberately unanswered
+- [ ] Both design questions are answered (notify: yes; undo: no) — check nothing drifted from them
 - [ ] All five verification commands, output quoted
 - [ ] e2e against a rebuilt stack, with the running image confirmed to carry the change
