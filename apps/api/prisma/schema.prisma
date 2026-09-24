@@ -184,6 +184,9 @@ model User {
   moderationActs          ModerationAction[]            @relation("ModerationActor")
   Reaction                Reaction[]
   RecommendationLink      RecommendationLink[]
+  tokenBalances           TokenBalance[]
+  tokenLedger             TokenLedger[]
+  redeems                 Redeem[]
 }
 
 model AbuseRecord {
@@ -240,29 +243,36 @@ model Creator {
   carryOverDeliveries CarryOverDelivery[]
   boardViewPrefs      BoardViewPreference[]
   staffInvites        StaffInvite[]
+  tokenBalances       TokenBalance[]
+  tokenLedger         TokenLedger[]
+  redeems             Redeem[]
 
   // Postgres does not index foreign keys automatically, and the cascade from Creator scans them.
   @@index([ownerUserId])
 }
 
 model Tier {
-  id            String   @id @default(uuid()) @db.Uuid
-  creatorId     String   @db.Uuid
-  patreonTierId String
-  title         String
-  amountCents   Int
+  id              String   @id @default(uuid()) @db.Uuid
+  creatorId       String   @db.Uuid
+  patreonTierId   String
+  title           String
+  amountCents     Int
   // What an upvote from this tier is worth. One until a creator says otherwise, so a board that
   // never touches this ranks by headcount exactly as it did before.
-  voteWeight    Int      @default(1)
-  order         Int
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  voteWeight      Int      @default(1)
+  // Redeem tokens granted to this tier's members per period. Zero until the creator sets it, so
+  // enabling the feature grants nothing by itself.
+  tokensPerPeriod Int      @default(0)
+  order           Int
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   creator        Creator         @relation(fields: [creatorId], references: [id], onDelete: Cascade)
   memberships    Membership[]
   upvotes        Upvote[]
   submitPolicies CreatorPolicy[] @relation("SubmitMinTier")
   upvotePolicies CreatorPolicy[] @relation("UpvoteMinTier")
+  tokenLedger    TokenLedger[]
 
   @@unique([creatorId, patreonTierId])
   @@index([creatorId])
@@ -356,6 +366,9 @@ model CreatorPolicy {
   submitMinTierId       String?        @db.Uuid
   upvoteMinTierId       String?        @db.Uuid
   hidePendingFromPublic Boolean        @default(false)
+  // Redeemable tokens are off for every board until its creator turns them on, so a board that
+  // never hears of the feature behaves exactly as it did before it existed.
+  redeemTokensEnabled   Boolean        @default(false)
   // Whether a patron may lift votes cast at a cheaper tier to their current one. On by default:
   // paying more, even once, is not meant to be taken back. A creator who wants the board to
   // reflect current support rather than historical generosity turns it off.
@@ -398,6 +411,10 @@ model Recommendation {
   // What the board ranks by. Denormalised like upvoteCount beside it, and for the same reason:
   // it is the sort key, and a keyset cursor has to compare a column.
   weightedScore     Int                  @default(0)
+  // Stored rather than counted on read, for the reason `weightedScore` is: the board orders on
+  // this and pages by keyset, and ordering by an aggregate over a joined table makes the cursor
+  // meaningless. Maintained in the same transaction as every spend and every consume.
+  unconsumedRedeems Int                  @default(0)
   // The entry this one is grouped under, chosen by staff. Distinct from the nesting the board
   // derives from TMDB collections: that is keyed on titleId and cannot express a decision, nor
   // reach an external link, which has no title at all.
@@ -441,6 +458,7 @@ model Recommendation {
   // `notes` is already a scalar on this model (the submitter's own free text from Plan 05), so
   // the relation carries the model's name instead.
   creatorNotes    CreatorNote[]
+  redeems         Redeem[]
 
   // De-duplication is enforced here, not by the read-then-write check: two concurrent
   // submissions of the same title both miss that read.
@@ -1095,6 +1113,10 @@ enum NotificationType {
   // Something moved on a board you follow. Deliberately distinct from ENTRY_STATUS_CHANGED, which
   // answers "your entry moved": the submitter must not receive both for one move.
   ENTRY_MOVED
+  // The entry you spent a token on is playing. Distinct from ENTRY_MOVED for the same reason
+  // that one is distinct from ENTRY_STATUS_CHANGED: a redeemer who also follows the board must
+  // receive one notification for the move, not two.
+  REDEEM_PLAYING
   TICKET_RAISED
   TICKET_RESOLVED
 }
@@ -1166,4 +1188,85 @@ model TitleAlias {
   @@unique([titleId, language, kind, text])
   @@index([titleId])
   @@index([text(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+/// What a reader has left to spend on one creator's board.
+///
+/// A cache of the ledger's sum, not a second truth: every write updates both in one transaction.
+/// Stored because the board reads a balance on every load, and summing a ledger that grows every
+/// month is a scan that gets slower forever.
+model TokenBalance {
+  id        String   @id @default(uuid()) @db.Uuid
+  creatorId String   @db.Uuid
+  userId    String   @db.Uuid
+  available Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  creator Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([creatorId, userId])
+}
+
+enum TokenLedgerKind {
+  TIER_GRANT
+  CREATOR_GRANT
+  SPEND
+}
+
+/// Every movement of a token, so a balance can always be explained.
+///
+/// A number nobody can account for is a number nobody can argue with: when a patron says "I had
+/// three", the answer has to be rows.
+model TokenLedger {
+  id        String          @id @default(uuid()) @db.Uuid
+  creatorId String          @db.Uuid
+  userId    String          @db.Uuid
+  kind      TokenLedgerKind
+  /// Positive for a grant, negative for a spend, so the column sums to the balance.
+  amount    Int
+  /// Set on TIER_GRANT only, with periodKey — together they are what makes granting idempotent.
+  tierId    String?         @db.Uuid
+  periodKey String?
+  /// Set on CREATOR_GRANT: why the creator gave these, in their own words.
+  reason    String?
+  redeemId  String?         @db.Uuid
+  createdAt DateTime        @default(now())
+
+  creator Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tier    Tier?   @relation(fields: [tierId], references: [id], onDelete: SetNull)
+  redeem  Redeem? @relation(fields: [redeemId], references: [id], onDelete: SetNull)
+
+  /// The idempotency guarantee, in the database rather than in a service that has to remember to
+  /// check. Membership sync runs on webhooks, on a refresh job and on sign-in, and is
+  /// transactional with none of them — so a grant that is merely *usually* run once is a grant
+  /// that will one day run twice.
+  @@unique([creatorId, userId, tierId, periodKey])
+  @@index([creatorId, userId, createdAt])
+}
+
+/// One token spent on one entry, with what the spender wants played.
+///
+/// The note is free text rather than a catalogue reference: nothing here models an episode, so
+/// "S2E04" is a sentence the creator reads rather than a row the system resolves.
+model Redeem {
+  id               String    @id @default(uuid()) @db.Uuid
+  creatorId        String    @db.Uuid
+  recommendationId String    @db.Uuid
+  userId           String    @db.Uuid
+  note             String
+  /// Set when the entry reached ACTIVE. A consumed redeem is never returned to a balance.
+  consumedAt       DateTime?
+  createdAt        DateTime  @default(now())
+
+  creator        Creator        @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  recommendation Recommendation @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ledger         TokenLedger[]
+
+  /// The board counts unconsumed redeems per entry on every load.
+  @@index([recommendationId, consumedAt])
+  @@index([creatorId, userId])
 }
