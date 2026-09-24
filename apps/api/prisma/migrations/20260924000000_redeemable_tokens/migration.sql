@@ -75,10 +75,14 @@ CREATE TABLE "Redeem" (
 -- check. Membership sync runs on webhooks, on a refresh job and on sign-in, and is transactional
 -- with none of them — a grant that is merely *usually* run once will one day run twice.
 --
+-- Keyed on the period and NOT the tier. Including the tier lets a reader who upgrades mid-period
+-- be granted a second time, because the new tier makes a new key — measured at 1 + 3 = 4 tokens
+-- for one month, which is a patron upgrading and downgrading to mint them.
+--
 -- Postgres treats NULLs as distinct in a unique index, so this constrains TIER_GRANT rows only:
--- a CREATOR_GRANT has no tier and no period, and several are expected.
-CREATE UNIQUE INDEX "TokenLedger_creatorId_userId_tierId_periodKey_key"
-    ON "TokenLedger"("creatorId", "userId", "tierId", "periodKey");
+-- a CREATOR_GRANT has no period, and several are expected.
+CREATE UNIQUE INDEX "TokenLedger_creatorId_userId_periodKey_key"
+    ON "TokenLedger"("creatorId", "userId", "periodKey");
 
 CREATE INDEX "TokenLedger_creatorId_userId_createdAt_idx"
     ON "TokenLedger"("creatorId", "userId", "createdAt");

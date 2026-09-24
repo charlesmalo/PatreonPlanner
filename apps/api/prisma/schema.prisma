@@ -1243,7 +1243,11 @@ model TokenLedger {
   /// check. Membership sync runs on webhooks, on a refresh job and on sign-in, and is
   /// transactional with none of them — so a grant that is merely *usually* run once is a grant
   /// that will one day run twice.
-  @@unique([creatorId, userId, tierId, periodKey])
+  ///
+  /// Deliberately keyed on the period and NOT the tier. Including `tierId` lets a reader who
+  /// upgrades mid-period be granted again, because the new tier makes a new key — measured at
+  /// 1 + 3 = 4 tokens for one month, which is a patron upgrading and downgrading to mint them.
+  @@unique([creatorId, userId, periodKey])
   @@index([creatorId, userId, createdAt])
 }
 
