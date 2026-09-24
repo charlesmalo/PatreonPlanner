@@ -46,6 +46,36 @@ a count copied forward is a claim nobody is checking, so this one was re-run.
 
 ## Active Task
 
+**Nothing in flight.** Grouped label filters shipped (#131, #134, #132, #135); `main` @ `4444dd7`.
+
+### Next up — redeemable priority tokens, planned and unstarted
+
+An OpenSpec change is ready at `openspec/changes/add-redeemable-priority-tokens/` — proposal,
+spec delta, design and tasks, `openspec validate --strict` clean. **Nothing is built.**
+
+A creator may opt their board into tokens: each tier grants N per period, the creator may grant
+extra directly (including to a moderator who pays nothing), and a patron spends one to mark an
+already-`ACCEPTED` entry **Priority** with a note. Redeems stack, lead the Accepted column, and are
+consumed when the entry reaches `ACTIVE`. Off for every board until a creator turns it on.
+
+**The idea as first written could not be built, and the proposal says why.** It asked for a
+redeem on "the next unwatched episode" — but nothing here models an episode. `WatchOrderItem` is a
+hand-ordered list of _titles_, and no table tracks per-episode watched state. Real episodes would
+mean a TMDB episode sync, an `Episode` table, per-episode watched UI and a job to keep it fresh.
+The redeem carries a **free-text note** instead: the patron writes `S2E04`, the creator reads it
+and plays it. Recorded under _Out, with reasons_ rather than quietly dropped.
+
+**A second thing the code decided for us:** there is no Patreon billing period to grant against.
+`currentPeriodEnd` belongs to _this product's own_ premium subscription, not to a reader's Patreon
+membership — `Membership` stores a state, never a date. So a period is a **UTC calendar month**,
+and the design states the consequence plainly: a reader joining on the 28th gets a full month's
+tokens for three days.
+
+Two questions left open on purpose: whether a redeemer is notified when their redeem is played,
+and whether a spend is undoable within a short window.
+
+### The previous active task
+
 **Grouped label filters — planned, not started.**
 
 | artefact     | state                                                                             |
