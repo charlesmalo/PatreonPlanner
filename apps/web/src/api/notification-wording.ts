@@ -21,6 +21,9 @@ const FILTER_LABELS: Record<Notification['type'], string> = {
   ENTRY_MOVED: 'Boards you follow',
   TICKET_RAISED: 'Messages to moderators',
   TICKET_RESOLVED: 'Answers to your messages',
+  // The reader's category, not the schema's: they spent a token, and what they want to know is
+  // that the thing they spent it on is on.
+  REDEEM_PLAYING: 'Your redeems',
 };
 
 /**

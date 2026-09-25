@@ -276,7 +276,9 @@ export interface Notification {
     | 'ENTRY_FLAGGED'
     | 'ENTRY_MOVED'
     | 'TICKET_RAISED'
-    | 'TICKET_RESOLVED';
+    | 'TICKET_RESOLVED'
+    /** The entry you spent a token on is playing. */
+    | 'REDEEM_PLAYING';
   /** A snapshot taken when the event happened, not a live view of the entry. */
   payload: NotificationPayload;
   /**

@@ -27,18 +27,24 @@ export const HIDDEN_STATUSES: RecommendationStatus[] = ['DELETED', 'REJECTED'];
 export function boardOrdering(sort: BoardSort): Prisma.RecommendationOrderByWithRelationInput[] {
   // The creator's picks lead every sort. Below them the chosen order applies as usual.
   const pick = { isCreatorPick: 'desc' } as const;
-  if (sort === 'newest') return [pick, { createdAt: 'desc' }, { id: 'desc' }];
-  if (sort === 'oldest') return [pick, { createdAt: 'asc' }, { id: 'asc' }];
+  // Then entries somebody spent a token on. Below a pick, because a pick is the creator's own
+  // statement about their own board and a redeem is a request — when they disagree, the person
+  // who owns the board wins. Zero for every entry on a board that never enables tokens, so this
+  // key changes no ordering there.
+  const redeemed = { unconsumedRedeems: 'desc' } as const;
+  if (sort === 'newest') return [pick, redeemed, { createdAt: 'desc' }, { id: 'desc' }];
+  if (sort === 'oldest') return [pick, redeemed, { createdAt: 'asc' }, { id: 'asc' }];
   // Highest first, and a card never placed by hand falls to the bottom rather than the top.
   if (sort === 'manual') {
     return [
       pick,
+      redeemed,
       { manualRank: { sort: 'desc', nulls: 'last' } },
       { createdAt: 'desc' },
       { id: 'desc' },
     ];
   }
-  return [pick, { weightedScore: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }];
+  return [pick, redeemed, { weightedScore: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }];
 }
 
 export function afterCursor(sort: BoardSort, cursor: BoardCursor): Prisma.RecommendationWhereInput {
@@ -64,7 +70,14 @@ export function afterCursor(sort: BoardSort, cursor: BoardCursor): Prisma.Recomm
     return {
       OR: [
         ...(cursor.isCreatorPick ? [{ isCreatorPick: false }] : []),
-        { isCreatorPick: cursor.isCreatorPick, OR: beyondRank },
+        {
+          isCreatorPick: cursor.isCreatorPick,
+          OR: [
+            // Past this cursor's redeem count entirely, then within it.
+            { unconsumedRedeems: { lt: cursor.unconsumedRedeems } },
+            { unconsumedRedeems: cursor.unconsumedRedeems, OR: beyondRank },
+          ],
+        },
       ],
     };
   }
@@ -86,7 +99,15 @@ export function afterCursor(sort: BoardSort, cursor: BoardCursor): Prisma.Recomm
     OR: [
       // Picks sort first, so once past them everything unpicked follows.
       ...(cursor.isCreatorPick ? [{ isCreatorPick: false }] : []),
-      { isCreatorPick: cursor.isCreatorPick, OR: withinPickGroup },
+      {
+        isCreatorPick: cursor.isCreatorPick,
+        OR: [
+          // Then redeems, which sort directly below the pick — so once past this cursor's redeem
+          // count, everything with fewer follows regardless of the sort beneath.
+          { unconsumedRedeems: { lt: cursor.unconsumedRedeems } },
+          { unconsumedRedeems: cursor.unconsumedRedeems, OR: withinPickGroup },
+        ],
+      },
     ],
   };
 }
@@ -121,6 +142,14 @@ export interface BoardCursor {
   manualRank: number | null;
   /** Leads every ordering, so it has to lead the cursor comparison too. */
   isCreatorPick: boolean;
+  /**
+   * Sorts directly below the pick, so it compares directly below it here.
+   *
+   * A sort key present in `boardOrdering` and absent here breaks paging *silently*: page one is
+   * correct and every page after it skips or repeats rows. That is why this field exists rather
+   * than the ordering alone.
+   */
+  unconsumedRedeems: number;
 }
 
 export function encodeCursor(row: {
@@ -129,6 +158,7 @@ export function encodeCursor(row: {
   id: string;
   isCreatorPick: boolean;
   manualRank: number | null;
+  unconsumedRedeems: number;
 }): string {
   return Buffer.from(
     JSON.stringify({
@@ -137,6 +167,7 @@ export function encodeCursor(row: {
       c: row.createdAt.toISOString(),
       i: row.id,
       p: row.isCreatorPick,
+      r: row.unconsumedRedeems,
     }),
   ).toString('base64url');
 }
@@ -150,6 +181,7 @@ export function decodeCursor(raw: string | undefined): BoardCursor | null {
       i: string;
       p?: boolean;
       m?: number | null;
+      r?: number;
     };
     const createdAt = new Date(parsed.c);
     if (typeof parsed.u !== 'number' || Number.isNaN(createdAt.getTime()) || !parsed.i) {
@@ -160,6 +192,9 @@ export function decodeCursor(raw: string | undefined): BoardCursor | null {
       manualRank: parsed.m ?? null,
       createdAt,
       id: parsed.i,
+      // Absent on a cursor minted before redeems existed. Zero is what every entry on such a
+      // board holds, so an old cursor keeps paging correctly rather than being rejected.
+      unconsumedRedeems: parsed.r ?? 0,
       isCreatorPick: parsed.p === true,
     };
   } catch {
