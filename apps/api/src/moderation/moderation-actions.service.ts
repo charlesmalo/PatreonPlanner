@@ -102,6 +102,44 @@ export class ModerationActionsService {
         ]);
       }
 
+      // A redeem is consumed the moment the creator plays it, and the reader who spent it is
+      // told. Both inside this transaction, for the reason the audit row is: telling somebody
+      // their redeem is playing, when the move was rolled back, is worse than not telling them.
+      const redeemers = new Set<string>();
+      if (to === 'ACTIVE') {
+        const unconsumed = await tx.redeem.findMany({
+          where: { recommendationId, consumedAt: null },
+          select: { id: true, userId: true },
+        });
+        if (unconsumed.length > 0) {
+          await tx.redeem.updateMany({
+            where: { id: { in: unconsumed.map((redeem) => redeem.id) } },
+            data: { consumedAt: new Date() },
+          });
+          await tx.recommendation.update({
+            where: { id: recommendationId },
+            data: { unconsumedRedeems: 0 },
+          });
+          // A Set, so somebody who spent two tokens on one entry hears about it once. The actor
+          // is excluded for the same reason the submitter is: a moderator who plays something
+          // knows what they played.
+          for (const redeem of unconsumed) {
+            if (redeem.userId !== actorUserId) redeemers.add(redeem.userId);
+          }
+        }
+      }
+      if (redeemers.size > 0) {
+        await this.notifications.emit(
+          tx,
+          [...redeemers].map((userId) => ({
+            userId,
+            creatorId,
+            type: 'REDEEM_PLAYING' as const,
+            payload,
+          })),
+        );
+      }
+
       // Amendment A.4: everyone following the board hears the moves they asked to hear about.
       // In the same transaction as the move itself, for the reason above — and excluding the two
       // people already accounted for, because the submitter has just been told and a moderator
@@ -110,7 +148,9 @@ export class ModerationActionsService {
         tx,
         creatorId,
         to,
-        [actorUserId, current.submittedByUserId],
+        // Redeemers excluded: they have just been told about this exact move in their own
+        // terms, and ENTRY_MOVED would be the same news a second time.
+        [actorUserId, current.submittedByUserId, ...redeemers],
         (current.title?.themes ?? []).map((link) => link.themeId),
         recommendationId,
       );

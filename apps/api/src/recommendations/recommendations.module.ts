@@ -1,3 +1,4 @@
+import { TokensService } from '../tokens/tokens.service';
 import { Module } from '@nestjs/common';
 import { RecommendationsController } from './recommendations.controller';
 import { MyVotesController } from './my-votes.controller';
@@ -15,6 +16,7 @@ import { SearchService } from './search.service';
 @Module({
   controllers: [RecommendationsController, MyVotesController, LinksController],
   providers: [
+    TokensService,
     RecommendationsService,
     SubmissionsService,
     SubmissionResolverService,

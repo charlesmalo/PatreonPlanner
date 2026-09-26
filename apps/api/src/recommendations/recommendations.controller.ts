@@ -26,6 +26,8 @@ import { RequirePermission } from '../access/require-permission.decorator';
 import { GroupEntryDto } from './dto/group-entry.dto';
 import { RankEntryDto } from './dto/rank-entry.dto';
 import { GroupingService } from './grouping.service';
+import { TokensService } from '../tokens/tokens.service';
+import { RedeemDto } from '../tokens/dto/redeem.dto';
 import { parseLabelFilter } from './label-filter';
 import { ChangeStatusDto } from '../moderation/dto/change-status.dto';
 import { CreateFlagDto } from '../moderation/dto/create-flag.dto';
@@ -51,6 +53,7 @@ export class RecommendationsController {
     private readonly flags: FlagsService,
     private readonly search: SearchService,
     private readonly grouping: GroupingService,
+    private readonly tokens: TokensService,
   ) {}
 
   @Get()
@@ -184,6 +187,26 @@ export class RecommendationsController {
     @Body() dto: GroupEntryDto,
   ) {
     return this.grouping.group(creator.id, id, dto.intoId);
+  }
+
+  /**
+   * Spending a token on this entry.
+   *
+   * UPVOTE rather than SUBMIT or MODERATE: redeeming is the same kind of act as upvoting — a
+   * reader expressing what they want — and a board that lets somebody upvote should let them
+   * spend a token they were granted. The service refuses anything that is not ACCEPTED, so this
+   * cannot be used to push something past the queue.
+   */
+  @Post(':id/redeem')
+  @RequireCapability('UPVOTE')
+  @UseGuards(CreatorAccessGuard, SessionGuard)
+  redeem(
+    @CurrentCreator() creator: ResolvedCreator,
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RedeemDto,
+  ) {
+    return this.tokens.spend(creator.id, user.id, id, dto.note);
   }
 
   @Patch(':id/rank')
