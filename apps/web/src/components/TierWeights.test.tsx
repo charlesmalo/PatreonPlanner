@@ -47,7 +47,10 @@ describe('TierWeights', () => {
 
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/saved/i));
     const sent = fetchMock.mock.calls.find(([, init]) => init?.method === 'PATCH');
-    expect(JSON.parse(String(sent?.[1]?.body))).toEqual({ voteWeight: 3, tokensPerPeriod: 0 });
+    // Only the weight. A blanket fixture edit once added `tokensPerPeriod` here too, which
+    // asserted this control sends a field it has nothing to do with — the two settings are
+    // separate PATCHes on purpose.
+    expect(JSON.parse(String(sent?.[1]?.body))).toEqual({ voteWeight: 3 });
   });
 
   it('says that zero means a tier votes for nothing, rather than hiding it', () => {
