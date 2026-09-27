@@ -153,4 +153,51 @@ export class TokensService {
       return redeem;
     });
   }
+
+  /**
+   * A reader's own balance, and the rows that explain it.
+   *
+   * Grants anything due first — this is where lazy granting actually happens, and why there is no
+   * scheduled job. A reader who looks is granted what they are owed; one who never looks accrues
+   * nothing until they do.
+   *
+   * There is no route that takes a user id, which is the strongest form of "a balance is
+   * private": the question cannot be asked, rather than being asked and refused.
+   */
+  async balanceFor(creatorId: string, userId: string, at: Date = new Date()) {
+    await this.grantDue(creatorId, userId, at);
+
+    const [policy, balance, ledger] = await Promise.all([
+      this.prisma.creatorPolicy.findUnique({
+        where: { creatorId },
+        select: { redeemTokensEnabled: true },
+      }),
+      this.prisma.tokenBalance.findUnique({
+        where: { creatorId_userId: { creatorId, userId } },
+        select: { available: true },
+      }),
+      this.prisma.tokenLedger.findMany({
+        where: { creatorId, userId },
+        orderBy: { createdAt: 'desc' },
+        // Enough to explain a balance without paging a list nobody scrolls: a year of monthly
+        // grants plus the spends between them.
+        take: 50,
+        select: {
+          id: true,
+          kind: true,
+          amount: true,
+          periodKey: true,
+          reason: true,
+          createdAt: true,
+        },
+      }),
+    ]);
+
+    const enabled = policy?.redeemTokensEnabled ?? false;
+    // Off means off: a board that disabled the feature keeps its rows — the spec requires that —
+    // but says nothing about them, so no control appears and nothing is spendable.
+    if (!enabled) return { enabled: false, available: 0, ledger: [] };
+
+    return { enabled: true, available: balance?.available ?? 0, ledger };
+  }
 }

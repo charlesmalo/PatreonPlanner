@@ -1,4 +1,5 @@
 import { TokensService } from '../tokens/tokens.service';
+import { TokensController } from '../tokens/tokens.controller';
 import { Module } from '@nestjs/common';
 import { RecommendationsController } from './recommendations.controller';
 import { MyVotesController } from './my-votes.controller';
@@ -14,7 +15,7 @@ import { RecommendationsService } from './recommendations.service';
 import { SearchService } from './search.service';
 
 @Module({
-  controllers: [RecommendationsController, MyVotesController, LinksController],
+  controllers: [TokensController, RecommendationsController, MyVotesController, LinksController],
   providers: [
     TokensService,
     RecommendationsService,
