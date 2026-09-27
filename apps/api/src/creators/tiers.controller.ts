@@ -25,6 +25,9 @@ export class TiersController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: SetTierWeightDto,
   ) {
-    return this.tiers.setWeight(creator.id, id, dto.voteWeight);
+    return this.tiers.setWeight(creator.id, id, {
+      voteWeight: dto.voteWeight,
+      tokensPerPeriod: dto.tokensPerPeriod,
+    });
   }
 }

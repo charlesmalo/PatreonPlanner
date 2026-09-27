@@ -200,4 +200,52 @@ export class TokensService {
 
     return { enabled: true, available: balance?.available ?? 0, ledger };
   }
+
+  /**
+   * A creator handing tokens to somebody directly.
+   *
+   * The recipient need not be a patron: thanking a moderator who pays nothing is the case this
+   * exists for. Recorded as its own ledger kind so a balance can always be explained — "three
+   * from your tier, two because Ada said thank you".
+   *
+   * Only the creator. A moderator, whatever permissions they hold, may not: a permission to
+   * moderate content is not a permission to mint something that obliges the creator to play it.
+   * That check belongs to the controller's capability gate; this method is only reached past it.
+   */
+  async grantDirect(
+    creatorId: string,
+    userId: string,
+    amount: number,
+    reason: string,
+  ): Promise<{ available: number }> {
+    const trimmed = reason.trim();
+    if (trimmed.length === 0) throw new BadRequestException('Say what the tokens are for');
+
+    const policy = await this.prisma.creatorPolicy.findUnique({
+      where: { creatorId },
+      select: { redeemTokensEnabled: true },
+    });
+    if (!policy?.redeemTokensEnabled) throw new NotFoundException();
+
+    // The recipient has to exist, but nothing about their membership matters — that is the
+    // point of a direct grant.
+    const recipient = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+    if (!recipient) throw new NotFoundException();
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.tokenLedger.create({
+        data: { creatorId, userId, kind: 'CREATOR_GRANT', amount, reason: trimmed },
+      });
+      const balance = await tx.tokenBalance.upsert({
+        where: { creatorId_userId: { creatorId, userId } },
+        create: { creatorId, userId, available: amount },
+        update: { available: { increment: amount } },
+        select: { available: true },
+      });
+      return balance;
+    });
+  }
 }

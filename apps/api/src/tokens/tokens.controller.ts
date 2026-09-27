@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import {
   CreatorAccessGuard,
   CurrentCreator,
@@ -7,6 +7,7 @@ import {
 import { RequireCapability } from '../access/require-capability.decorator';
 import { CurrentUser, CurrentUserPayload, SessionGuard } from '../session/session.guard';
 import { TokensService } from './tokens.service';
+import { GrantTokensDto } from './dto/grant-tokens.dto';
 
 /**
  * Its own controller rather than a route on the recommendations one: a balance belongs to the
@@ -31,5 +32,18 @@ export class TokensController {
   @UseGuards(CreatorAccessGuard, SessionGuard)
   mine(@CurrentCreator() creator: ResolvedCreator, @CurrentUser() user: CurrentUserPayload) {
     return this.tokens.balanceFor(creator.id, user.id);
+  }
+
+  /**
+   * The creator granting tokens to somebody — a bonus to a tier, or a thank-you to a moderator.
+   *
+   * ADMINISTER, not MODERATE: minting something that obliges the creator to play an entry is not
+   * a moderation power, and a moderator holding every content permission still may not do it.
+   */
+  @Post('grants')
+  @RequireCapability('ADMINISTER')
+  @UseGuards(CreatorAccessGuard, SessionGuard)
+  grant(@CurrentCreator() creator: ResolvedCreator, @Body() dto: GrantTokensDto) {
+    return this.tokens.grantDirect(creator.id, dto.userId, dto.amount, dto.reason);
   }
 }

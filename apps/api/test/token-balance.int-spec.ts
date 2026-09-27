@@ -44,6 +44,7 @@ describe('Token balance (integration)', () => {
   }
 
   beforeEach(async () => {
+    await ctx.prisma.creatorStaff.deleteMany();
     await ctx.prisma.tokenLedger.deleteMany();
     await ctx.prisma.tokenBalance.deleteMany();
     await ctx.prisma.membership.deleteMany();
@@ -64,6 +65,9 @@ describe('Token balance (integration)', () => {
           displayName: 'Balance Co',
           slug: 'balance-co',
           policy: { create: { viewVisibility: 'PUBLIC', redeemTokensEnabled: true } },
+          // ADMINISTER is resolved from the staff row, not from `ownerUserId` — a creator with
+          // no row holds no capability on their own board.
+          staff: { create: { userId: owner.userId, role: 'OWNER' } },
         },
       })
     ).id;
@@ -165,6 +169,49 @@ describe('Token balance (integration)', () => {
     await patronise(reader);
     const res = await getBalance(reader).expect(200);
     expect(res.body.enabled).toBe(true);
+  });
+
+  it('lets the creator grant tokens to somebody who pays nothing', async () => {
+    // The moderator thank-you: the recipient need not hold any membership at all.
+    const owner = await ctx.prisma.creator.findUniqueOrThrow({ where: { id: creatorId } });
+    const asOwner = await loginAs('bal-owner');
+    expect(owner.ownerUserId).toBe(asOwner.userId);
+
+    await request(ctx.app.getHttpServer())
+      .post('/api/v1/creators/balance-co/tokens/grants')
+      .set('Cookie', [asOwner.session, asOwner.csrf])
+      .set('x-csrf-token', asOwner.csrfToken)
+      .send({ userId: other.userId, amount: 2, reason: 'thanks for the queue' })
+      .expect(201);
+
+    const res = await getBalance(other).expect(200);
+    expect(res.body.available).toBe(2);
+    expect(res.body.ledger[0]).toMatchObject({
+      kind: 'CREATOR_GRANT',
+      amount: 2,
+      reason: 'thanks for the queue',
+    });
+  });
+
+  it('refuses a moderator holding every content permission', async () => {
+    // Minting something that obliges the creator to play an entry is not a moderation power.
+    await ctx.prisma.creatorStaff.create({
+      data: {
+        creatorId,
+        userId: reader.userId,
+        role: 'MOD',
+        permissions: ['MOVE_ENTRIES', 'EDIT_ENTRIES', 'HANDLE_REPORTS', 'WRITE_NOTES'],
+      },
+    });
+
+    await request(ctx.app.getHttpServer())
+      .post('/api/v1/creators/balance-co/tokens/grants')
+      .set('Cookie', [reader.session, reader.csrf])
+      .set('x-csrf-token', reader.csrfToken)
+      .send({ userId: other.userId, amount: 2, reason: 'nope' })
+      .expect(403);
+
+    expect(await ctx.prisma.tokenLedger.count({ where: { kind: 'CREATOR_GRANT' } })).toBe(0);
   });
 
   it('404s for a board that does not exist', async () => {

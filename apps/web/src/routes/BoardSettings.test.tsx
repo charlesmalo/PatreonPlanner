@@ -13,6 +13,7 @@ const policy = {
   allowReactions: true,
   acceptsCarryOver: true,
   allowVoteRatchet: true,
+  redeemTokensEnabled: false,
 };
 
 const withTiers = {
@@ -275,5 +276,22 @@ describe('BoardSettings', () => {
     await screen.findByRole('radio', { name: /only my supporters/i });
     expect(screen.queryByText(/patreon webhook/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/signing secret/i)).not.toBeInTheDocument();
+  });
+
+  it('hides the per-tier token grants until tokens are switched on', async () => {
+    // A grant nobody can spend is a setting that does nothing, and asking a creator to fill it
+    // in before enabling the feature gets the order backwards.
+    withPolicy();
+    renderPage();
+    await screen.findByRole('checkbox', { name: /give tiers redeem tokens/i });
+
+    expect(screen.queryByText(/redeem tokens per tier/i)).not.toBeInTheDocument();
+  });
+
+  it('shows the per-tier token grants once tokens are on', async () => {
+    withPolicy({ redeemTokensEnabled: true });
+    renderPage();
+
+    expect(await screen.findByText(/redeem tokens per tier/i)).toBeInTheDocument();
   });
 });

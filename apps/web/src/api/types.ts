@@ -199,6 +199,8 @@ export interface CreatorProfile {
     order: number;
     /** What one vote from this tier counts for. 1 unless the creator has changed it. */
     voteWeight: number;
+    /** Redeem tokens granted to this tier each period. Zero until the creator sets it. */
+    tokensPerPeriod: number;
   }>;
 }
 

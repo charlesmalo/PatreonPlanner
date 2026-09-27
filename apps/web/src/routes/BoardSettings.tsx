@@ -4,6 +4,7 @@ import { api } from '../api/client';
 import { useCreator } from '../api/hooks';
 import { Blocklist } from '../components/Blocklist';
 import { TierWeights } from '../components/TierWeights';
+import { TierTokens } from '../components/TierTokens';
 import { WebhookSecret } from '../components/WebhookSecret';
 
 type Visibility = 'PUBLIC' | 'ANY_PATREON_USER' | 'SUBSCRIBERS_ONLY';
@@ -17,6 +18,7 @@ interface Policy {
   allowReactions: boolean;
   acceptsCarryOver: boolean;
   allowVoteRatchet: boolean;
+  redeemTokensEnabled: boolean;
 }
 
 /**
@@ -92,6 +94,11 @@ const SWITCHES: Array<{ key: keyof Policy; label: string; hint: string }> = [
     key: 'allowVoteRatchet',
     label: 'Let patrons lift old votes to their current tier',
     hint: 'On by default: paying more, even once, is not meant to be taken back. Turn it off for a board that should reflect current support rather than past generosity.',
+  },
+  {
+    key: 'redeemTokensEnabled',
+    label: 'Give tiers redeem tokens',
+    hint: 'A patron spends one to mark an accepted entry as Priority, with a note saying what they want played. Nothing is granted until you set a number against a tier below. Turning this off later keeps every balance — it just stops showing them.',
   },
 ];
 
@@ -271,6 +278,10 @@ export function BoardSettings() {
           <fieldset className="mt-8">
             <legend className="text-sm font-medium">What a vote from each tier counts for</legend>
             <TierWeights slug={slug} tiers={tiers} />
+            {/* Only once tokens are on: a grant nobody can spend is a setting that does nothing,
+                and asking a creator to fill it in before enabling the feature gets the order
+                backwards. */}
+            {policy.redeemTokensEnabled ? <TierTokens slug={slug} tiers={tiers} /> : null}
           </fieldset>
 
           <fieldset className="mt-8">
