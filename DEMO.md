@@ -236,3 +236,12 @@ docker compose -f docker-compose.demo.yml down -v && docker compose -f docker-co
 
 The seed is idempotent, so re-running it against a live stack changes nothing — the way to get a
 clean board is to drop the volume.
+
+`-v` drops both volumes, and the second one is the embedding model: the next start re-downloads
+about 120MB. To reset the board and keep the model, name the one you mean:
+
+```bash
+docker compose -f docker-compose.demo.yml down && \
+  docker volume rm patreonplanner-demo_demo-pgdata && \
+  docker compose -f docker-compose.demo.yml up -d
+```

@@ -29,6 +29,19 @@ name: patreonplanner-demo
 services:
   postgres:
     image: pgvector/pgvector:pg16
+    volumes:
+      # The demo's data, and the reason `down` and `down -v` mean different things here.
+      #
+      # This was missing, and both this file's documentation and the seed's own header already
+      # described the behaviour it provides: "whatever you did survives the restart", and "a
+      # playtester who restarts it should find their board where they left it". Neither was true
+      # — with no volume the database lived in the container's writable layer and a plain `down`
+      # took it, so every restart silently discarded a playtester's session and handed them the
+      # seeded board again. It looked like it worked, because the seed reruns on every `up`.
+      #
+      # Unlike the e2e stack, which stays deliberately ephemeral: a test suite wants a known
+      # database every run, and this wants the opposite.
+      - demo-pgdata:/var/lib/postgresql/data
     environment:
       POSTGRES_USER: planner
       POSTGRES_PASSWORD: planner
@@ -185,3 +198,4 @@ services:
 
 volumes:
   demo-models:
+  demo-pgdata:
