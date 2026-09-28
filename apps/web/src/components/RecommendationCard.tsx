@@ -161,6 +161,28 @@ export function RecommendationCard({
             {recommendation.description}
           </p>
         ) : null}
+        {/*
+          What the token was spent *on*. The count above says somebody wants this sooner; only
+          this says which part of it, because nothing here models an episode and the sentence a
+          patron wrote is the whole instruction.
+
+          Rendered as text, never as markup — it is a stranger's words arriving on a creator's
+          screen. Who may see which note is the API's decision, not this component's: it renders
+          what it was given.
+        */}
+        {(recommendation.redeems ?? []).length > 0 ? (
+          <ul className="mt-1 space-y-0.5">
+            {(recommendation.redeems ?? []).map((redeem) => (
+              <li key={redeem.id} className="break-words text-xs text-sky-800 dark:text-sky-300">
+                <span className="font-medium">Redeemed:</span> {redeem.note}
+                <span className="text-slate-500 dark:text-slate-400">
+                  {' '}
+                  — {redeem.user.fullName ?? 'a patron'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
         <PublishedLinks
           slug={slug}
           links={recommendation.links ?? []}

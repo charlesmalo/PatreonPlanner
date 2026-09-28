@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useCreator, useSession, useThemes, useViewMode } from '../api/hooks';
 import { useTokens } from '../api/use-tokens';
+import { TokenWallet } from '../components/TokenWallet';
 import { hydrate, localThemes, rememberThemes } from '../api/board-settings';
 import { encodeGroups } from '../components/label-groups';
 import { narrowCapabilities } from '../api/view-mode';
@@ -208,6 +209,12 @@ export function CreatorBoard() {
           />
         </div>
       ) : null}
+
+      {/* Above the columns, because it explains the controls inside them — a reader with no
+          tokens is otherwise looking at cards whose redeem button is simply missing. */}
+      <div className="mt-6">
+        <TokenWallet tokens={tokens} />
+      </div>
 
       {/* One column at a time. Four side by side truncated every one of them at laptop width;
           this gives whichever is being read the whole screen. */}

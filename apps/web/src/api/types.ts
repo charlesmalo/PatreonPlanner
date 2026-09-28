@@ -176,6 +176,19 @@ export interface Recommendation {
    * the feature existed. Goes to zero when the creator moves the entry to Now Playing.
    */
   unconsumedRedeems: number;
+  /**
+   * The notes behind that count — what each spender actually asked for.
+   *
+   * Staff receive every one; a patron receives only their own. The API decides that, and the
+   * card renders whatever it was given: a component deciding who may read a note would be a
+   * second place for the rule to be wrong.
+   */
+  redeems?: Array<{
+    id: string;
+    note: string;
+    createdAt: string;
+    user: { id: string; fullName: string | null; avatarUrl: string | null };
+  }>;
   themes: Array<{ id: string; name: string }>;
   links: RecommendationLink[];
   /**

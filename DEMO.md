@@ -112,6 +112,11 @@ three weighted votes to two. That inversion is the whole mechanic — a token bu
 approval. Spend Cal's last one on Akira, and watch the control disappear at a balance of nought
 rather than stay on screen and refuse.
 
+Ada and Mo also see the note Cal left — _"The forest spirit bit, if you can find a good print"_
+— because the note is the instruction, not a comment on one. Cal sees his own and nobody else's;
+signed out, you get the marker and none of the words. Your own balance, and when the next grant
+lands, sit above the columns.
+
 Then sign in as Mo, who holds one token Ada gave him for running the queue — the moderator
 thank-you, and the only way somebody who is not a patron holds a token at all. Move a redeemed
 entry to **Now Playing**: the marker clears, because the redeem was consumed by the thing it

@@ -157,3 +157,74 @@ describe('RecommendationCard redeems', () => {
     expect(screen.queryByText(/priority/i)).not.toBeInTheDocument();
   });
 });
+
+describe('RecommendationCard redeem notes', () => {
+  const redeem = (over: object = {}) => ({
+    id: 'rd1',
+    note: 'S2E04, the one with the dog',
+    createdAt: '2026-09-20T00:00:00.000Z',
+    user: { id: 'u9', fullName: 'Cal Nguyen', avatarUrl: null },
+    ...over,
+  });
+
+  it('shows what the token was spent on, and who spent it', () => {
+    // The count says somebody wants this sooner; only the note says which part. Without it a
+    // creator has a Priority marker and no way to learn what it asks for.
+    renderCard(recommendation({ unconsumedRedeems: 1, redeems: [redeem()] }));
+
+    expect(screen.getByText(/S2E04, the one with the dog/)).toBeInTheDocument();
+    expect(screen.getByText(/Cal Nguyen/)).toBeInTheDocument();
+  });
+
+  it('renders a note as text, because it is a stranger&apos;s words', () => {
+    const { container } = renderCard(
+      recommendation({
+        unconsumedRedeems: 1,
+        redeems: [redeem({ note: '<img src=x onerror="alert(1)">' })],
+      }),
+    );
+
+    expect(screen.getByText(/<img src=x onerror="alert\(1\)">/)).toBeInTheDocument();
+    expect(container.querySelector('img')).toBeNull();
+  });
+
+  it('lists every note when several people have spent on one entry', () => {
+    // Redeems stack, and two people asking for different parts of the same show is exactly the
+    // case a single note would hide.
+    renderCard(
+      recommendation({
+        unconsumedRedeems: 2,
+        redeems: [
+          redeem(),
+          redeem({
+            id: 'rd2',
+            note: 'the finale',
+            user: { id: 'u8', fullName: 'Bea', avatarUrl: null },
+          }),
+        ],
+      }),
+    );
+
+    expect(screen.getAllByText(/Redeemed:/)).toHaveLength(2);
+    expect(screen.getByText(/the finale/)).toBeInTheDocument();
+  });
+
+  it('shows nothing where the reader was given no notes to see', () => {
+    // A patron who spent nothing receives an empty list from the API. An empty heading or a
+    // stray label would imply a note exists that they are not being shown.
+    renderCard(recommendation({ unconsumedRedeems: 3, redeems: [] }));
+
+    expect(screen.queryByText(/Redeemed:/)).not.toBeInTheDocument();
+  });
+
+  it('names an anonymous spender rather than rendering a blank', () => {
+    renderCard(
+      recommendation({
+        unconsumedRedeems: 1,
+        redeems: [redeem({ user: { id: 'u9', fullName: null, avatarUrl: null } })],
+      }),
+    );
+
+    expect(screen.getByText(/a patron/)).toBeInTheDocument();
+  });
+});

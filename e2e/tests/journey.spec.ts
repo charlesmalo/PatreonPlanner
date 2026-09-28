@@ -1285,6 +1285,11 @@ test('a patron spends a token, the entry leads Accepted, and playing it clears t
   makeStaff('patreon-redeemmod-e2e');
   await page.goto(`/c/${CREATOR.slug}`);
   await showColumn(page, 'Accepted');
+  // The note, on the creator's screen. Nothing here models an episode, so this sentence is the
+  // entire instruction — a Priority marker without it tells them somebody wants this sooner and
+  // nothing about which part. It is also the only assertion that the note survives the round
+  // trip from one reader's keyboard to another reader's board.
+  await expect(page.getByText('The bike slide, obviously')).toBeVisible();
   await page.getByRole('button', { name: /Move .*Akira.* to another column/i }).click();
   await page.getByRole('menuitem', { name: 'Now Playing' }).click();
   await signOut(page);
@@ -1297,6 +1302,9 @@ test('a patron spends a token, the entry leads Accepted, and playing it clears t
   const playing = page.getByRole('region', { name: /now playing/i });
   await expect(playing.getByRole('heading', { level: 3, name: 'Akira' })).toBeVisible();
   await expect(playing.getByText(/Priority/)).toHaveCount(0);
+  // The note goes with it: a consumed redeem describes something already done, and left on the
+  // card it would read as an outstanding request for ever.
+  await expect(page.getByText('The bike slide, obviously')).toHaveCount(0);
 
   // And the reader who spent it was told, because they asked for this by name.
   await expect(page.getByRole('button', { name: /1 unread notification/i })).toBeVisible();
