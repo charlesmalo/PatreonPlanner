@@ -169,6 +169,13 @@ export interface Recommendation {
    * `parentId` alone would do nothing on half the cards it appeared on.
    */
   parentSource: 'STAFF' | 'CATALOGUE' | null;
+  /**
+   * How many redeems on this entry are still waiting to be played.
+   *
+   * Zero on every board that never enables tokens, so a card renders exactly as it did before
+   * the feature existed. Goes to zero when the creator moves the entry to Now Playing.
+   */
+  unconsumedRedeems: number;
   themes: Array<{ id: string; name: string }>;
   links: RecommendationLink[];
   /**

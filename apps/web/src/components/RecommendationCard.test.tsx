@@ -84,3 +84,76 @@ describe('RecommendationCard link candidates', () => {
     expect(screen.getByRole('button', { name: /pick/i })).toBeInTheDocument();
   });
 });
+
+describe('RecommendationCard redeems', () => {
+  function renderRedeemable(entry: Recommendation, tokensAvailable = 2) {
+    return render(
+      <MemoryRouter>
+        <ul>
+          <RecommendationCard
+            slug="ada-writes"
+            recommendation={entry}
+            canUpvote={false}
+            canModerate={false}
+            onCount={vi.fn()}
+            onStatusChanged={vi.fn()}
+            tokensAvailable={tokensAvailable}
+            onRedeemed={vi.fn()}
+          />
+        </ul>
+      </MemoryRouter>,
+    );
+  }
+
+  it('offers the redeem control on an accepted entry', () => {
+    renderRedeemable(recommendation({ status: 'ACCEPTED' }));
+
+    expect(screen.getByRole('button', { name: /redeem a token/i })).toBeInTheDocument();
+  });
+
+  it('hides the redeem control on an entry that is not accepted', () => {
+    // The API refuses a redeem on anything but ACCEPTED. Drawing the button on a pending entry
+    // spends the reader's attention on a control whose only possible answer is 409.
+    for (const status of ['PENDING', 'ACTIVE', 'COMPLETED', 'REJECTED'] as const) {
+      renderRedeemable(recommendation({ status }));
+      expect(screen.queryByRole('button', { name: /redeem a token/i })).not.toBeInTheDocument();
+      cleanup();
+    }
+  });
+
+  it('hides the redeem control where nothing can handle the result', () => {
+    // Search hits and an entry's own page pass no `onRedeemed`. Spending a token there would
+    // succeed on the server and leave the screen showing the old state.
+    render(
+      <MemoryRouter>
+        <ul>
+          <RecommendationCard
+            slug="ada-writes"
+            recommendation={recommendation({ status: 'ACCEPTED' })}
+            canUpvote={false}
+            canModerate={false}
+            onCount={vi.fn()}
+            onStatusChanged={vi.fn()}
+            tokensAvailable={2}
+          />
+        </ul>
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole('button', { name: /redeem a token/i })).not.toBeInTheDocument();
+  });
+
+  it('marks an entry somebody has spent a token on, with how many', () => {
+    // The count carries the weight: three readers spending on one entry is a different signal
+    // from one, and the board orders on exactly that number.
+    renderRedeemable(recommendation({ status: 'ACCEPTED', unconsumedRedeems: 3 }));
+
+    expect(screen.getByText(/priority · 3/i)).toBeInTheDocument();
+  });
+
+  it('marks nothing on an entry nobody has redeemed', () => {
+    renderRedeemable(recommendation({ status: 'ACCEPTED', unconsumedRedeems: 0 }));
+
+    expect(screen.queryByText(/priority/i)).not.toBeInTheDocument();
+  });
+});

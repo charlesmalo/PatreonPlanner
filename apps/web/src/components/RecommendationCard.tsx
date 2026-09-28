@@ -14,6 +14,7 @@ import { PickButton } from './PickButton';
 import { DRAG_TYPE } from './drag';
 import { ReactionBar } from './ReactionBar';
 import { GroupControl } from './GroupControl';
+import { RedeemButton } from './RedeemButton';
 import { StatusControl } from './StatusControl';
 import { WatchOrderList } from './WatchOrderList';
 import { UpvoteButton } from './UpvoteButton';
@@ -41,6 +42,9 @@ interface RecommendationCardProps {
    */
   groupTargets?: Recommendation[];
   onGroupChanged?: () => void;
+  /** This reader's balance. Zero draws no control — see `RedeemButton`. */
+  tokensAvailable?: number;
+  onRedeemed?: () => void;
   /**
    * `h1` when this card *is* the page — on an entry's own page the title is the document's
    * subject, and repeating it above the card would show it twice.
@@ -61,6 +65,8 @@ export function RecommendationCard({
   children,
   groupTargets,
   onGroupChanged,
+  tokensAvailable = 0,
+  onRedeemed,
 }: RecommendationCardProps) {
   const Heading = headingLevel === 1 ? 'h1' : 'h3';
   return (
@@ -136,6 +142,13 @@ export function RecommendationCard({
           <span className="mt-1 mr-2 inline-block text-xs text-slate-500 dark:text-slate-400">
             {recommendation.weightedScore} points from {recommendation.upvoteCount}{' '}
             {recommendation.upvoteCount === 1 ? 'patron' : 'patrons'}
+          </span>
+        ) : null}
+        {recommendation.unconsumedRedeems > 0 ? (
+          <span className="mt-1 ml-1 inline-block rounded bg-sky-100 px-1.5 py-0.5 text-xs font-medium text-sky-900 dark:bg-sky-900/40 dark:text-sky-200">
+            {/* The count, not just the badge: redeems stack, and "three people spent a token on
+                this" is a different thing from "somebody did". */}
+            Priority · {recommendation.unconsumedRedeems}
           </span>
         ) : null}
         {recommendation.isCreatorPick ? (
@@ -235,6 +248,18 @@ export function RecommendationCard({
             capabilities payload without `permissions` would blank the board rather than hide a
             button.
           */}
+          {/* Only an accepted entry can be redeemed: the API refuses anything else, and a
+              control that is always refused is worse than none. The balance does the rest of the
+              gating inside the button. */}
+          {recommendation.status === 'ACCEPTED' && onRedeemed ? (
+            <RedeemButton
+              slug={slug}
+              recommendationId={recommendation.id}
+              title={recommendation.customTitle}
+              available={tokensAvailable}
+              onRedeemed={onRedeemed}
+            />
+          ) : null}
           {/* Grouping is MOVE_ENTRIES on both endpoints — the same gate, for the same reason. */}
           {canModerate &&
           permissions?.includes('MOVE_ENTRIES') &&
