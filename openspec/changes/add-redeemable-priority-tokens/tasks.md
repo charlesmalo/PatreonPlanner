@@ -95,12 +95,12 @@ Every test is verified by mutation: break the thing, confirm the test that names
 
 ## 10. Demo and journeys
 
-- [ ] Seed: the feature **on** for Ada's board, a grant on the Producer tier, and a redeem already
+- [x] Seed: the feature **on** for Ada's board, a grant on the Producer tier, and a redeem already
       spent — so the mechanic differs visibly from its absence. Measure before choosing the
       numbers; §6 of the grouping spec was wrong for guessing instead
-- [ ] e2e: Cal redeems an accepted entry, it leads the Accepted column, Ada plays it, the marker
+- [x] e2e: Cal redeems an accepted entry, it leads the Accepted column, Ada plays it, the marker
       clears
-- [ ] Walkthrough section, in the file's voice, naming what a token cannot do
+- [x] Walkthrough section, in the file's voice, naming what a token cannot do
 
 ## Before opening the PR
 

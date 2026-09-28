@@ -43,7 +43,7 @@ async function main() {
       ownerUserId: users.ada,
       displayName: 'Ada Watches Things',
       slug: 'ada-watches-things',
-      policy: { create: { viewVisibility: 'PUBLIC' } },
+      policy: { create: { viewVisibility: 'PUBLIC', redeemTokensEnabled: true } },
       // Claiming a board writes an OWNER staff row; a seeded board without one is a board the
       // app cannot produce.
       staff: { create: { userId: users.ada, role: 'OWNER' } },
@@ -52,6 +52,15 @@ async function main() {
     select: { id: true },
   });
   const creatorId = creator.id;
+
+  // The board's own upsert leaves an existing policy alone, which is right for everything a
+  // playtester may have changed — but the walkthrough below describes a board with tokens on,
+  // and the demo volume survives between runs. Without this, reseeding an older demo database
+  // leaves the whole feature invisible and the documentation describing controls nobody has.
+  await prisma.creatorPolicy.update({
+    where: { creatorId },
+    data: { redeemTokensEnabled: true },
+  });
 
   const tiers = [
     { patreonTierId: 'demo-tier-basic', title: 'Sidekick', amountCents: 500, order: 0 },
@@ -64,6 +73,10 @@ async function main() {
       amountCents: 1500,
       order: 1,
       voteWeight: 3,
+      // Only the top tier grants tokens, which is the arrangement the feature is for. Sidekick
+      // stays at the default of nought so the demo shows the gate as well as the mechanic: Bea
+      // pledges and still has no redeem control, and that absence is the point.
+      tokensPerPeriod: 2,
     },
   ];
   for (const tier of tiers) {
@@ -80,6 +93,7 @@ async function main() {
         amountCents: tier.amountCents,
         order: tier.order,
         voteWeight: tier.voteWeight ?? 1,
+        tokensPerPeriod: tier.tokensPerPeriod ?? 0,
       },
     });
   }
@@ -168,6 +182,17 @@ async function main() {
       status: 'ACCEPTED',
       description: 'Gentler than the others. Good palate cleanser.',
       upvotes: ['bea'],
+    },
+    {
+      // The second accepted entry, and the only reason a redeem is visible at all: with one
+      // entry in the column, "the redeemed one leads" and "it was already the only one" look
+      // identical. This one outscores Totoro 3 to 1 — Cal's Producer vote against Bea's
+      // Sidekick vote — so Totoro can only be above it because a token was spent.
+      title: 'Akira',
+      by: 'bea',
+      status: 'ACCEPTED',
+      description: 'The one everyone means when they say the word.',
+      upvotes: ['cal'],
     },
     {
       title: 'Princess Mononoke',
@@ -618,9 +643,87 @@ async function main() {
     update: {},
   });
 
+  // ---------------------------------------------------------------------------------------
+  // Redeem tokens.
+  //
+  // Rebuilt from scratch each run rather than upserted. A SPEND row carries no period key, so
+  // the ledger's unique index cannot de-duplicate one, and reseeding is how the demo returns to
+  // the state the walkthrough describes — a playtester who spent Cal's tokens should get them
+  // back.
+  //
+  // Both sides of every balance are written together, because `verify:token-ledger` checks that
+  // `SUM(ledger) = available` and a seed that wrote only balances would make the demo database
+  // fail its own integrity check.
+  await prisma.$transaction(async (tx) => {
+    await tx.redeem.deleteMany({ where: { creatorId } });
+    await tx.tokenLedger.deleteMany({ where: { creatorId } });
+    await tx.tokenBalance.deleteMany({ where: { creatorId } });
+    await tx.recommendation.updateMany({ where: { creatorId }, data: { unconsumedRedeems: 0 } });
+
+    const producerTierId = tierByTitle.get('Producer') ?? null;
+    // This month's key, not a fixed string: a grant written for some past month would leave this
+    // month still due, and Cal would be granted two more the first time he opened the board.
+    const periodKey = `${new Date().getUTCFullYear()}-${String(new Date().getUTCMonth() + 1).padStart(2, '0')}`;
+
+    // Cal's tier grant for the current period — the same row `grantDue` would have written, so
+    // the lazy grant finds the period already served and does not double it.
+    await tx.tokenLedger.create({
+      data: {
+        creatorId,
+        userId: users.cal,
+        kind: 'TIER_GRANT',
+        amount: 2,
+        tierId: producerTierId,
+        periodKey,
+      },
+    });
+
+    // One already spent, on the *weaker* of the two accepted entries. That is the whole
+    // demonstration: Totoro is worth 1 against Akira's 3 and sits above it anyway.
+    const totoro = await tx.recommendation.findFirst({
+      where: { creatorId, customTitle: 'My Neighbor Totoro' },
+      select: { id: true },
+    });
+    if (totoro) {
+      const redeem = await tx.redeem.create({
+        data: {
+          creatorId,
+          recommendationId: totoro.id,
+          userId: users.cal,
+          note: 'The forest spirit bit, if you can find a good print',
+        },
+      });
+      await tx.tokenLedger.create({
+        data: { creatorId, userId: users.cal, kind: 'SPEND', amount: -1, redeemId: redeem.id },
+      });
+      await tx.recommendation.update({
+        where: { id: totoro.id },
+        data: { unconsumedRedeems: 1 },
+      });
+    }
+    // Leaves one in hand, so a playtester signed in as Cal can spend one themselves rather than
+    // only reading about it.
+    await tx.tokenBalance.create({
+      data: { creatorId, userId: users.cal, available: totoro ? 1 : 2 },
+    });
+
+    // Mo is not a patron and never will be — he moderates. A direct grant is the only way he
+    // holds a token at all, which is the case the creator-grant path exists for.
+    await tx.tokenLedger.create({
+      data: {
+        creatorId,
+        userId: users.mo,
+        kind: 'CREATOR_GRANT',
+        amount: 1,
+        reason: 'For running the queue all month',
+      },
+    });
+    await tx.tokenBalance.create({ data: { creatorId, userId: users.mo, available: 1 } });
+  });
+
   console.log(
     `Seeded ${entries.length} entries on /c/ada-watches-things, a second board at ` +
-      `/c/mo-reads-things, and premium for Cal.`,
+      `/c/mo-reads-things, premium for Cal, and redeem tokens (Cal 1 in hand, Mo 1 gifted).`,
   );
 }
 
