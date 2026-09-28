@@ -12,6 +12,7 @@
     "prisma:migrate": "dotenv -e ../../.env -- prisma migrate dev",
     "prisma:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
     "verify:embeddings": "tsx scripts/verify-embeddings.ts",
+    "verify:tokens": "tsx scripts/verify-token-ledger.ts",
     "coverage": "jest --config jest-e2e.json --runInBand --coverage && node ../../scripts/audit-coverage-floor.mjs apps/api"
   },
   "dependencies": {

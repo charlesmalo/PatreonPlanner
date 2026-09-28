@@ -90,7 +90,7 @@ Every test is verified by mutation: break the thing, confirm the test that names
 
 ## 9. Integrity
 
-- [ ] A check asserting `SUM(ledger) = balance` per reader per creator, and a test that it fails
+- [x] A check asserting `SUM(ledger) = balance` per reader per creator, and a test that it fails
       when a balance is edited behind the ledger's back
 
 ## 10. Demo and journeys
