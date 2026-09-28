@@ -48,4 +48,13 @@ export class UpdatePolicyDto {
   @ValidateIf((_, value) => value !== undefined)
   @IsBoolean()
   allowVoteRatchet?: boolean;
+
+  /**
+   * Whether this board grants redeem tokens at all. Off until the creator says otherwise, and
+   * turning it off keeps every balance and redeem — they stop being visible and spendable, and
+   * come back unchanged if it is turned on again.
+   */
+  @ValidateIf((_, value) => value !== undefined)
+  @IsBoolean()
+  redeemTokensEnabled?: boolean;
 }

@@ -14,6 +14,7 @@ import { PickButton } from './PickButton';
 import { DRAG_TYPE } from './drag';
 import { ReactionBar } from './ReactionBar';
 import { GroupControl } from './GroupControl';
+import { RedeemButton } from './RedeemButton';
 import { StatusControl } from './StatusControl';
 import { WatchOrderList } from './WatchOrderList';
 import { UpvoteButton } from './UpvoteButton';
@@ -41,6 +42,9 @@ interface RecommendationCardProps {
    */
   groupTargets?: Recommendation[];
   onGroupChanged?: () => void;
+  /** This reader's balance. Zero draws no control — see `RedeemButton`. */
+  tokensAvailable?: number;
+  onRedeemed?: () => void;
   /**
    * `h1` when this card *is* the page — on an entry's own page the title is the document's
    * subject, and repeating it above the card would show it twice.
@@ -61,6 +65,8 @@ export function RecommendationCard({
   children,
   groupTargets,
   onGroupChanged,
+  tokensAvailable = 0,
+  onRedeemed,
 }: RecommendationCardProps) {
   const Heading = headingLevel === 1 ? 'h1' : 'h3';
   return (
@@ -138,6 +144,13 @@ export function RecommendationCard({
             {recommendation.upvoteCount === 1 ? 'patron' : 'patrons'}
           </span>
         ) : null}
+        {recommendation.unconsumedRedeems > 0 ? (
+          <span className="mt-1 ml-1 inline-block rounded bg-sky-100 px-1.5 py-0.5 text-xs font-medium text-sky-900 dark:bg-sky-900/40 dark:text-sky-200">
+            {/* The count, not just the badge: redeems stack, and "three people spent a token on
+                this" is a different thing from "somebody did". */}
+            Priority · {recommendation.unconsumedRedeems}
+          </span>
+        ) : null}
         {recommendation.isCreatorPick ? (
           <span className="mt-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">
             Creator pick
@@ -147,6 +160,28 @@ export function RecommendationCard({
           <p className="mt-1 whitespace-pre-line break-words text-sm text-slate-600 dark:text-slate-300">
             {recommendation.description}
           </p>
+        ) : null}
+        {/*
+          What the token was spent *on*. The count above says somebody wants this sooner; only
+          this says which part of it, because nothing here models an episode and the sentence a
+          patron wrote is the whole instruction.
+
+          Rendered as text, never as markup — it is a stranger's words arriving on a creator's
+          screen. Who may see which note is the API's decision, not this component's: it renders
+          what it was given.
+        */}
+        {(recommendation.redeems ?? []).length > 0 ? (
+          <ul className="mt-1 space-y-0.5">
+            {(recommendation.redeems ?? []).map((redeem) => (
+              <li key={redeem.id} className="break-words text-xs text-sky-800 dark:text-sky-300">
+                <span className="font-medium">Redeemed:</span> {redeem.note}
+                <span className="text-slate-500 dark:text-slate-400">
+                  {' '}
+                  — {redeem.user.fullName ?? 'a patron'}
+                </span>
+              </li>
+            ))}
+          </ul>
         ) : null}
         <PublishedLinks
           slug={slug}
@@ -235,6 +270,18 @@ export function RecommendationCard({
             capabilities payload without `permissions` would blank the board rather than hide a
             button.
           */}
+          {/* Only an accepted entry can be redeemed: the API refuses anything else, and a
+              control that is always refused is worse than none. The balance does the rest of the
+              gating inside the button. */}
+          {recommendation.status === 'ACCEPTED' && onRedeemed ? (
+            <RedeemButton
+              slug={slug}
+              recommendationId={recommendation.id}
+              title={recommendation.customTitle}
+              available={tokensAvailable}
+              onRedeemed={onRedeemed}
+            />
+          ) : null}
           {/* Grouping is MOVE_ENTRIES on both endpoints — the same gate, for the same reason. */}
           {canModerate &&
           permissions?.includes('MOVE_ENTRIES') &&

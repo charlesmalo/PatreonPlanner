@@ -321,6 +321,7 @@ export class RecommendationsService {
       upvoteCount: number;
       weightedScore: number;
       isCreatorPick: boolean;
+      unconsumedRedeems: number;
       manualRank: number | null;
       groupHeadId: string | null;
       createdAt: Date;

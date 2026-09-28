@@ -11,8 +11,8 @@ import { fakeApi } from '../test-support';
  * count, and the board's "Top rated" sort a plain popularity sort.
  */
 const tiers = [
-  { id: 't-lo', title: 'Sidekick', amountCents: 500, order: 0, voteWeight: 1 },
-  { id: 't-hi', title: 'Producer', amountCents: 1500, order: 1, voteWeight: 1 },
+  { id: 't-lo', title: 'Sidekick', amountCents: 500, order: 0, voteWeight: 1, tokensPerPeriod: 0 },
+  { id: 't-hi', title: 'Producer', amountCents: 1500, order: 1, voteWeight: 1, tokensPerPeriod: 0 },
 ];
 
 describe('TierWeights', () => {
@@ -31,7 +31,11 @@ describe('TierWeights', () => {
 
   it('saves a new weight', async () => {
     const fetchMock = fakeApi({
-      'PATCH /api/v1/creators/ada-writes/tiers/t-hi': { id: 't-hi', voteWeight: 3 },
+      'PATCH /api/v1/creators/ada-writes/tiers/t-hi': {
+        id: 't-hi',
+        voteWeight: 3,
+        tokensPerPeriod: 0,
+      },
     });
     global.fetch = fetchMock;
     render(<TierWeights slug="ada-writes" tiers={tiers} />);
@@ -43,6 +47,9 @@ describe('TierWeights', () => {
 
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/saved/i));
     const sent = fetchMock.mock.calls.find(([, init]) => init?.method === 'PATCH');
+    // Only the weight. A blanket fixture edit once added `tokensPerPeriod` here too, which
+    // asserted this control sends a field it has nothing to do with — the two settings are
+    // separate PATCHes on purpose.
     expect(JSON.parse(String(sent?.[1]?.body))).toEqual({ voteWeight: 3 });
   });
 

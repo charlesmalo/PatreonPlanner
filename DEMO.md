@@ -67,7 +67,7 @@ way to see two sides of an interaction is to switch back and forth.
 | Ada Lovelace | Owner         | Everything, including policy and the blocklist                                                                 |
 | Mo Ferran    | Moderator     | Moves entries, works the review queue, edits and merges themes — **cannot** change policy or touch the webhook |
 | Bea Okonjo   | Patron, $5    | Read, upvote, submit                                                                                           |
-| Cal Nguyen   | Patron, $15   | Same, on the higher tier                                                                                       |
+| Cal Nguyen   | Patron, $15   | Same, on the higher tier — and the only tier granting redeem tokens                                            |
 | Dee Alvarez  | Lapsed patron | Read only — cannot upvote or submit                                                                            |
 | _(nobody)_   | Signed out    | Read only, on a public board                                                                                   |
 
@@ -100,6 +100,43 @@ POST /api/v1/creators/ada-watches-things/blocklist   { "pattern": "…", "action
 Then as Bea, submit "The Ganondorf Cut" — refused. Submit something with "spoiler" in it — it goes
 through, and a moderator finds it waiting. Both are recorded in `ModerationResult` with what
 matched and why; the offending text itself is deliberately never stored.
+
+**Redeem tokens.** Switched on for this board, and off by default everywhere else — it is a
+thing a creator opts into for their own channel. The Producer tier grants two a month; Sidekick
+grants none, so Bea pledges and still has no redeem control, and that absence is as much the
+feature as the button is.
+
+Sign in as Cal. He has one token left, having already spent one: open **Accepted** and you will
+find _My Neighbor Totoro_ above _Akira_, marked `Priority · 1`, even though Akira outscores it
+three weighted votes to two. That inversion is the whole mechanic — a token buys position, not
+approval. Spend Cal's last one on Akira, and watch the control disappear at a balance of nought
+rather than stay on screen and refuse.
+
+Ada and Mo also see the note Cal left — _"The forest spirit bit, if you can find a good print"_
+— because the note is the instruction, not a comment on one. Cal sees his own and nobody else's;
+signed out, you get the marker and none of the words. Your own balance, and when the next grant
+lands, sit above the columns.
+
+Then sign in as Mo, who holds one token Ada gave him for running the queue — the moderator
+thank-you, and the only way somebody who is not a patron holds a token at all. Move a redeemed
+entry to **Now Playing**: the marker clears, because the redeem was consumed by the thing it
+asked for, and Cal gets told it is playing. Ada can hand out more from **Board settings → Redeem
+tokens**.
+
+What a token cannot do, all of it deliberate:
+
+- **It cannot skip the queue.** Only an already-accepted entry can be redeemed. A token buys
+  position inside the Accepted column and nothing before it — try it on something in Suggestions
+  and there is no control to try.
+- **It cannot outrank the creator.** A creator pick still leads a redeemed entry. When the
+  person who spent a token and the person who owns the board disagree, the owner wins.
+- **It cannot name an episode the system knows about.** Nothing here models episodes, so the note
+  Cal writes _is_ the instruction, in his own words, read by a person. That is why an empty one
+  is refused.
+- **It cannot be taken back.** Spending is final, and a consumed redeem never returns to a
+  balance. The undo for a mis-spent token is the creator granting another one.
+- **It cannot be bought here.** Tokens come from a tier or from the creator's own hand. There is
+  no purchase path, and there is no billing information behind any of this.
 
 **Search.** Try a misspelling ("cowbay bebop"), and try describing something instead of naming it.
 Trigram matching and semantic search are fused, so both routes find the entry.

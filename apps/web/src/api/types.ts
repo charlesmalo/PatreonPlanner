@@ -169,6 +169,26 @@ export interface Recommendation {
    * `parentId` alone would do nothing on half the cards it appeared on.
    */
   parentSource: 'STAFF' | 'CATALOGUE' | null;
+  /**
+   * How many redeems on this entry are still waiting to be played.
+   *
+   * Zero on every board that never enables tokens, so a card renders exactly as it did before
+   * the feature existed. Goes to zero when the creator moves the entry to Now Playing.
+   */
+  unconsumedRedeems: number;
+  /**
+   * The notes behind that count — what each spender actually asked for.
+   *
+   * Staff receive every one; a patron receives only their own. The API decides that, and the
+   * card renders whatever it was given: a component deciding who may read a note would be a
+   * second place for the rule to be wrong.
+   */
+  redeems?: Array<{
+    id: string;
+    note: string;
+    createdAt: string;
+    user: { id: string; fullName: string | null; avatarUrl: string | null };
+  }>;
   themes: Array<{ id: string; name: string }>;
   links: RecommendationLink[];
   /**
@@ -199,6 +219,8 @@ export interface CreatorProfile {
     order: number;
     /** What one vote from this tier counts for. 1 unless the creator has changed it. */
     voteWeight: number;
+    /** Redeem tokens granted to this tier each period. Zero until the creator sets it. */
+    tokensPerPeriod: number;
   }>;
 }
 
@@ -276,7 +298,9 @@ export interface Notification {
     | 'ENTRY_FLAGGED'
     | 'ENTRY_MOVED'
     | 'TICKET_RAISED'
-    | 'TICKET_RESOLVED';
+    | 'TICKET_RESOLVED'
+    /** The entry you spent a token on is playing. */
+    | 'REDEEM_PLAYING';
   /** A snapshot taken when the event happened, not a live view of the entry. */
   payload: NotificationPayload;
   /**

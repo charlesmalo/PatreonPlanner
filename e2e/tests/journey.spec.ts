@@ -14,6 +14,8 @@ import {
   makeOwner,
   makeStaff,
   seedCreator,
+  enableTokens,
+  clearTokens,
   seedSecondBoard,
   makePremium,
   supports,
@@ -47,6 +49,9 @@ test.beforeEach(() => {
   // Premium outlives a run; without this the second run of the suite starts with a reader who
   // is already premium and the palette test fails for a reason nowhere near itself.
   clearPremium();
+  // Tokens and the feature flag both outlive a run. A leftover redeem reorders the Accepted
+  // column in a journey that never mentions tokens, on the second run and never the first.
+  clearTokens();
 });
 
 async function signIn(
@@ -1224,4 +1229,83 @@ test('a reader buys premium, sees the receipt, and a refund takes it straight ba
   // expiring: a refund gets no grace window at all.
   await page.goto(`/c/${CREATOR.slug}/notifications`);
   await expect(page.getByRole('checkbox', { name: /now playing/i })).toBeDisabled();
+});
+
+test('a patron spends a token, the entry leads Accepted, and playing it clears the marker', async ({
+  page,
+}) => {
+  // The one seam only this suite reaches: a redeem is a write in the API, a sort key in the
+  // board query, and a marker in the SPA, and nothing below this level puts all three together.
+  // Exactly one, and granted by the tier rather than handed over by a fixture. Reading the
+  // balance is what grants it, so this is also the only place the lazy grant is exercised
+  // through a browser — and one token means spending it empties the balance, which is the state
+  // the control is supposed to vanish in.
+  enableTokens(1);
+  seedEntryFrom('patreon-other-e2e', 'Akira', 'ACCEPTED');
+  seedEntryFrom('patreon-other-e2e', 'Nausicaa', 'ACCEPTED');
+
+  await signIn(page, 500, 'patreon-redeemer-e2e');
+  await page.goto(`/c/${CREATOR.slug}`);
+  await showColumn(page, 'Accepted');
+
+  const accepted = page.getByRole('region', { name: /accepted/i });
+  // Neither entry has been upvoted, so the column falls back to newest-first and Nausicaa
+  // leads. Asserting it *before* the redeem is what makes the assertion afterwards mean
+  // anything: without this line, "Akira is first" could always have been true.
+  await expect(accepted.getByRole('heading', { level: 3 }).first()).toHaveText('Nausicaa');
+
+  // The tier grant, arrived without anything scheduling it: the board asked for a balance and
+  // the answer to that question is what created the tokens.
+  await expect(page.getByRole('button', { name: /Redeem a token on .*Akira/i })).toHaveText(
+    /Redeem · 1/,
+  );
+  await page.getByRole('button', { name: /Redeem a token on .*Akira/i }).click();
+  await page.getByLabel(/what should be played/i).fill('The bike slide, obviously');
+  await page.getByRole('button', { name: /^Spend$/ }).click();
+
+  // Waited for *before* reloading, not merely asserted after. The control refetches the column
+  // on success, so this is the moment the write is known to have landed — reloading straight
+  // after the click races the request still in flight, and the reloaded board then reads the
+  // old order and never refetches, so the failure looks exactly like broken ordering.
+  await expect(accepted.getByText(/Priority · 1/)).toBeVisible();
+
+  // Survives a reload: the marker is a stored count, not an optimistic flourish.
+  await page.reload();
+  await showColumn(page, 'Accepted');
+  await expect(accepted.getByRole('heading', { level: 3 }).first()).toHaveText('Akira');
+  await expect(accepted.getByText(/Priority · 1/)).toBeVisible();
+
+  // Spent, not merely displayed. One token in, one token gone — and with the balance at nought
+  // the control is absent everywhere rather than present and refusing.
+  await expect(page.getByRole('button', { name: /Redeem a token on/i })).toHaveCount(0);
+  await signOut(page);
+
+  // The creator plays it.
+  await signIn(page, 500, 'patreon-redeemmod-e2e');
+  makeStaff('patreon-redeemmod-e2e');
+  await page.goto(`/c/${CREATOR.slug}`);
+  await showColumn(page, 'Accepted');
+  // The note, on the creator's screen. Nothing here models an episode, so this sentence is the
+  // entire instruction — a Priority marker without it tells them somebody wants this sooner and
+  // nothing about which part. It is also the only assertion that the note survives the round
+  // trip from one reader's keyboard to another reader's board.
+  await expect(page.getByText('The bike slide, obviously')).toBeVisible();
+  await page.getByRole('button', { name: /Move .*Akira.* to another column/i }).click();
+  await page.getByRole('menuitem', { name: 'Now Playing' }).click();
+  await signOut(page);
+
+  // And the marker is gone, because the redeem was consumed by the thing it asked for. An entry
+  // that kept its Priority badge after playing would lead its next column for ever.
+  await signIn(page, 500, 'patreon-redeemer-e2e');
+  await page.goto(`/c/${CREATOR.slug}`);
+  await showColumn(page, /now playing/i);
+  const playing = page.getByRole('region', { name: /now playing/i });
+  await expect(playing.getByRole('heading', { level: 3, name: 'Akira' })).toBeVisible();
+  await expect(playing.getByText(/Priority/)).toHaveCount(0);
+  // The note goes with it: a consumed redeem describes something already done, and left on the
+  // card it would read as an outstanding request for ever.
+  await expect(page.getByText('The bike slide, obviously')).toHaveCount(0);
+
+  // And the reader who spent it was told, because they asked for this by name.
+  await expect(page.getByRole('button', { name: /1 unread notification/i })).toBeVisible();
 });

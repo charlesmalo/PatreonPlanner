@@ -165,7 +165,16 @@ export class CreatorsService {
           // and a patron can already read it for their own tier on the my-votes page. The
           // settings page needs it to show what it is editing, and a reader deciding whether to
           // pledge is entitled to know what the pledge is worth here.
-          select: { id: true, title: true, amountCents: true, order: true, voteWeight: true },
+          select: {
+            id: true,
+            title: true,
+            amountCents: true,
+            order: true,
+            voteWeight: true,
+            // Sent with the tier for the same reason `voteWeight` is: it is what this board
+            // grants that tier, and the settings page cannot render the field without it.
+            tokensPerPeriod: true,
+          },
           orderBy: { amountCents: 'asc' },
         },
       },

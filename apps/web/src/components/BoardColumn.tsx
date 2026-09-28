@@ -21,6 +21,9 @@ interface BoardColumnProps {
    */
   selectedThemes: string[][];
   onSelectThemes: (groups: string[][]) => void;
+  /** This reader's token balance on the board, or zero when tokens are off or they hold none. */
+  tokensAvailable?: number;
+  onRedeemed?: () => void;
   canUpvote: boolean;
   canModerate: boolean;
   /** Which staff controls the cards may draw. The API checks each one again. */
@@ -56,6 +59,8 @@ export function BoardColumn({
   themes,
   selectedThemes,
   onSelectThemes,
+  tokensAvailable = 0,
+  onRedeemed,
   canUpvote,
   canModerate,
   permissions,
@@ -208,6 +213,8 @@ export function BoardColumn({
         board.remove(id);
         onMoved(id, next);
       }}
+      tokensAvailable={tokensAvailable}
+      onRedeemed={onRedeemed}
       groupTargets={canMove ? targetsFor(node.item) : undefined}
       onGroupChanged={canMove ? () => onMoved(node.item.id, status) : undefined}
     >

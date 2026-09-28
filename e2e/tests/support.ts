@@ -376,3 +376,35 @@ export function clearStaff(): void {
     DELETE FROM "CreatorStaff" WHERE "creatorId" = '${CREATOR.id}';
   `);
 }
+
+/**
+ * Switches redeem tokens on for the seeded board and makes its one tier grant them.
+ *
+ * `tokensPerPeriod` on the tier and the policy flag are two separate gates and both are needed:
+ * a tier that grants tokens on a board with the feature off grants nothing, which is the point
+ * of having two.
+ */
+export function enableTokens(tokensPerPeriod = 2): void {
+  seed(`
+    UPDATE "CreatorPolicy" SET "redeemTokensEnabled" = true WHERE "creatorId" = '${CREATOR.id}';
+    UPDATE "Tier" SET "tokensPerPeriod" = ${tokensPerPeriod} WHERE id = '${CREATOR.tierId}';
+  `);
+}
+
+/**
+ * Tokens outlive a run, and the feature flag outlives it too.
+ *
+ * Without this, one journey's leftover redeem reorders another journey's Accepted column — a
+ * failure that appears in a test that never mentions tokens, on the second run and never the
+ * first.
+ */
+export function clearTokens(): void {
+  seed(`
+    DELETE FROM "Redeem";
+    DELETE FROM "TokenLedger";
+    DELETE FROM "TokenBalance";
+    UPDATE "Recommendation" SET "unconsumedRedeems" = 0 WHERE "unconsumedRedeems" <> 0;
+    UPDATE "CreatorPolicy" SET "redeemTokensEnabled" = false WHERE "creatorId" = '${CREATOR.id}';
+    UPDATE "Tier" SET "tokensPerPeriod" = 0 WHERE "creatorId" = '${CREATOR.id}';
+  `);
+}

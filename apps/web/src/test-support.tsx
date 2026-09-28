@@ -46,6 +46,7 @@ export function recommendation(overrides: Partial<Recommendation> = {}): Recomme
     notes: [],
     parentId: null,
     parentSource: null,
+    unconsumedRedeems: 0,
     themes: [],
     links: [],
     submittedBy: { id: 'user-1', fullName: 'Grace', avatarUrl: null },

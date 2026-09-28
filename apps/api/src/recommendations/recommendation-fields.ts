@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { NOTE_FIELDS } from '../notes/notes.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import { visibleLinks, type LinkViewer } from './links.service';
+import { visibleRedeems } from '../tokens/visible-redeems';
 import type { ReactionCount } from '../reactions/reactions.service';
 
 /**
@@ -70,6 +71,12 @@ export const recommendationFields = (viewer: LinkViewer) =>
     upvoteCount: true,
     weightedScore: true,
     isCreatorPick: true,
+    // Read by the board's ordering and rendered as the Priority marker. Zero on every board that
+    // never enables tokens, so it changes nothing there.
+    unconsumedRedeems: true,
+    // The notes behind that count. Staff read all of them, a patron reads only their own — see
+    // `visibleRedeems`. Empty on every board that never enables tokens.
+    redeems: visibleRedeems(viewer),
     manualRank: true,
     // Read for the parent projection below, then dropped from the response — the contract exposes
     // `parentId`, whether the head was chosen by staff or implied by the catalogue.

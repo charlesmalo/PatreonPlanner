@@ -19,8 +19,8 @@ export class TiersService {
   async setWeight(
     creatorId: string,
     tierId: string,
-    voteWeight: number,
-  ): Promise<{ id: string; voteWeight: number }> {
+    changes: { voteWeight?: number; tokensPerPeriod?: number },
+  ): Promise<{ id: string; voteWeight: number; tokensPerPeriod: number }> {
     // Scoped by creator: a tier id alone says nothing about which board owns it.
     const tier = await this.prisma.tier.findFirst({
       where: { id: tierId, creatorId },
@@ -31,9 +31,19 @@ export class TiersService {
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.tier.update({
         where: { id: tier.id },
-        data: { voteWeight },
-        select: { id: true, voteWeight: true },
+        data: {
+          ...(changes.voteWeight !== undefined ? { voteWeight: changes.voteWeight } : {}),
+          ...(changes.tokensPerPeriod !== undefined
+            ? { tokensPerPeriod: changes.tokensPerPeriod }
+            : {}),
+        },
+        select: { id: true, voteWeight: true, tokensPerPeriod: true },
       });
+
+      // Only a weight change can move a score. Rescoring the whole board because somebody
+      // changed how many tokens a tier grants would be a table scan for nothing — and tokens
+      // deliberately have no bearing on the weighted score at all.
+      if (changes.voteWeight === undefined) return updated;
 
       // A vote with no tier is worth one, which is why COALESCE carries a default rather than the
       // join dropping those rows.
