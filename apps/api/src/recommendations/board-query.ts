@@ -24,30 +24,54 @@ export const HIDDEN_STATUSES: RecommendationStatus[] = ['DELETED', 'REJECTED'];
  * Both are derived from one place on purpose: an ordering and a cursor comparison that disagree
  * page the wrong way silently — rows repeat or vanish, and nothing errors.
  */
-export function boardOrdering(sort: BoardSort): Prisma.RecommendationOrderByWithRelationInput[] {
+export function boardOrdering(
+  sort: BoardSort,
+  /**
+   * Whether this board's creator has redeem tokens switched on.
+   *
+   * Zero for every entry on a board that never enabled them, so the key would change no ordering
+   * there — but a board that enabled them, collected redeems and switched them *off* still has
+   * non-zero counts, and kept sorting by a feature its settings say is off. Defaults to off so a
+   * caller that forgets orders like a board without the feature, which is the harmless direction.
+   *
+   * Whatever is passed here MUST be passed to `afterCursor` as well: an ordering and a cursor
+   * comparison that disagree page silently wrong.
+   */
+  tokensEnabled = false,
+): Prisma.RecommendationOrderByWithRelationInput[] {
   // The creator's picks lead every sort. Below them the chosen order applies as usual.
   const pick = { isCreatorPick: 'desc' } as const;
   // Then entries somebody spent a token on. Below a pick, because a pick is the creator's own
   // statement about their own board and a redeem is a request — when they disagree, the person
-  // who owns the board wins. Zero for every entry on a board that never enables tokens, so this
-  // key changes no ordering there.
-  const redeemed = { unconsumedRedeems: 'desc' } as const;
-  if (sort === 'newest') return [pick, redeemed, { createdAt: 'desc' }, { id: 'desc' }];
-  if (sort === 'oldest') return [pick, redeemed, { createdAt: 'asc' }, { id: 'asc' }];
+  // who owns the board wins.
+  const redeemed: Prisma.RecommendationOrderByWithRelationInput[] = tokensEnabled
+    ? [{ unconsumedRedeems: 'desc' }]
+    : [];
+  if (sort === 'newest') return [pick, ...redeemed, { createdAt: 'desc' }, { id: 'desc' }];
+  if (sort === 'oldest') return [pick, ...redeemed, { createdAt: 'asc' }, { id: 'asc' }];
   // Highest first, and a card never placed by hand falls to the bottom rather than the top.
   if (sort === 'manual') {
     return [
       pick,
-      redeemed,
+      ...redeemed,
       { manualRank: { sort: 'desc', nulls: 'last' } },
       { createdAt: 'desc' },
       { id: 'desc' },
     ];
   }
-  return [pick, redeemed, { weightedScore: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }];
+  return [pick, ...redeemed, { weightedScore: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }];
 }
 
-export function afterCursor(sort: BoardSort, cursor: BoardCursor): Prisma.RecommendationWhereInput {
+export function afterCursor(
+  sort: BoardSort,
+  cursor: BoardCursor,
+  /**
+   * MUST match what was given to `boardOrdering` for the same request. The two are derived
+   * together in this file precisely because an ordering and a keyset that disagree drop rows or
+   * repeat them, and every individual page still looks correct.
+   */
+  tokensEnabled = false,
+): Prisma.RecommendationWhereInput {
   const ascending = sort === 'oldest';
   const beyond = ascending ? { gt: cursor.createdAt } : { lt: cursor.createdAt };
   const tie = ascending ? { gt: cursor.id } : { lt: cursor.id };
@@ -72,11 +96,16 @@ export function afterCursor(sort: BoardSort, cursor: BoardCursor): Prisma.Recomm
         ...(cursor.isCreatorPick ? [{ isCreatorPick: false }] : []),
         {
           isCreatorPick: cursor.isCreatorPick,
-          OR: [
-            // Past this cursor's redeem count entirely, then within it.
-            { unconsumedRedeems: { lt: cursor.unconsumedRedeems } },
-            { unconsumedRedeems: cursor.unconsumedRedeems, OR: beyondRank },
-          ],
+          // Dropped entirely when the ordering drops it, so the two stay the same shape.
+          ...(tokensEnabled
+            ? {
+                OR: [
+                  // Past this cursor's redeem count entirely, then within it.
+                  { unconsumedRedeems: { lt: cursor.unconsumedRedeems } },
+                  { unconsumedRedeems: cursor.unconsumedRedeems, OR: beyondRank },
+                ],
+              }
+            : { OR: beyondRank }),
         },
       ],
     };
@@ -101,12 +130,16 @@ export function afterCursor(sort: BoardSort, cursor: BoardCursor): Prisma.Recomm
       ...(cursor.isCreatorPick ? [{ isCreatorPick: false }] : []),
       {
         isCreatorPick: cursor.isCreatorPick,
-        OR: [
-          // Then redeems, which sort directly below the pick — so once past this cursor's redeem
-          // count, everything with fewer follows regardless of the sort beneath.
-          { unconsumedRedeems: { lt: cursor.unconsumedRedeems } },
-          { unconsumedRedeems: cursor.unconsumedRedeems, OR: withinPickGroup },
-        ],
+        ...(tokensEnabled
+          ? {
+              OR: [
+                // Then redeems, which sort directly below the pick — so once past this cursor's
+                // redeem count, everything with fewer follows regardless of the sort beneath.
+                { unconsumedRedeems: { lt: cursor.unconsumedRedeems } },
+                { unconsumedRedeems: cursor.unconsumedRedeems, OR: withinPickGroup },
+              ],
+            }
+          : { OR: withinPickGroup }),
       },
     ],
   };

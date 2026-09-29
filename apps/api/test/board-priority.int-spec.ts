@@ -12,6 +12,11 @@ import { applyTestConfigDefaults } from './support/env';
  * Priority ordering, and the cursor that has to match it.
  *
  * The trap this file exists for: the keyset cursor mirrors the ordering column by column. A sort
+ * Both are given `tokensEnabled: true` explicitly, because both default to *off*: a board that
+ * enabled redeems, collected some and switched the feature off must stop ordering by them, and a
+ * caller that forgets the flag gets the ordering of a board without the feature. That default is
+ * why these four tests failed the moment the gate landed, which is the loud direction to fail in.
+ *
  * key added to `boardOrdering` and not to `afterCursor` breaks pagination *silently* — page one
  * is correct and later pages skip or repeat rows. The comment on `isCreatorPick` in the cursor
  * says exactly this, and redeems need the same treatment.
@@ -78,9 +83,9 @@ describe('Priority ordering (integration)', () => {
       await prisma.recommendation.findMany({
         where: {
           creatorId,
-          ...(cursor ? { AND: [afterCursor('upvotes', decodeCursor(cursor)!)] } : {}),
+          ...(cursor ? { AND: [afterCursor('upvotes', decodeCursor(cursor)!, true)] } : {}),
         },
-        orderBy: boardOrdering('upvotes'),
+        orderBy: boardOrdering('upvotes', true),
         ...(take ? { take } : {}),
       })
     ).map((r) => r.customTitle);
@@ -138,9 +143,9 @@ describe('Priority ordering (integration)', () => {
       const rows = await prisma.recommendation.findMany({
         where: {
           creatorId,
-          ...(cursor ? { AND: [afterCursor('upvotes', decodeCursor(cursor)!)] } : {}),
+          ...(cursor ? { AND: [afterCursor('upvotes', decodeCursor(cursor)!, true)] } : {}),
         },
-        orderBy: boardOrdering('upvotes'),
+        orderBy: boardOrdering('upvotes', true),
         take: 2,
       });
       if (rows.length === 0) break;
@@ -164,7 +169,7 @@ describe('Priority ordering (integration)', () => {
 
     const firstPage = await prisma.recommendation.findMany({
       where: { creatorId },
-      orderBy: boardOrdering('upvotes'),
+      orderBy: boardOrdering('upvotes', true),
       take: 2,
     });
     expect(firstPage.map((r) => r.customTitle)).toEqual(['R1', 'R2']);

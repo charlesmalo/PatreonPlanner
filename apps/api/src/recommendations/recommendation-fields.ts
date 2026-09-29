@@ -39,6 +39,8 @@ export function present<
     creatorNotes?: unknown[];
     groupHeadId?: string | null;
     links?: SelectedLink[];
+    redeems?: unknown[];
+    unconsumedRedeems?: number;
   },
 >(row: T) {
   // `groupHeadId` is internal: the contract exposes `parentId`, which is the same answer whether
@@ -51,6 +53,16 @@ export function present<
   const strip = ({ status, ...link }: SelectedLink) => link;
   return {
     ...rest,
+    // The count and the notes are the same feature, so one decision governs both: if the
+    // projection did not expose `redeems`, the creator has tokens off and the count goes too.
+    // Tying them here rather than at each call site is what stops them drifting apart — the
+    // count leaked on its own once, drawing a Priority badge on a board whose settings said the
+    // feature was off, because only the notes were gated.
+    //
+    // The field is always *present* and numeric. A client types it as a required number, and an
+    // absent one would read as `undefined > 0` — accidentally correct, and one refactor from a
+    // crash.
+    unconsumedRedeems: row.redeems === undefined ? 0 : (row.unconsumedRedeems ?? 0),
     links: (links ?? []).filter((link) => link.status === 'PUBLISHED').map(strip),
     candidateLinks: (links ?? []).filter((link) => link.status === 'CANDIDATE').map(strip),
     notes: creatorNotes ?? [],
@@ -61,7 +73,16 @@ export function present<
 // which belongs on a public board.
 export { visibleLinks, type LinkViewer };
 
-export const recommendationFields = (viewer: LinkViewer) =>
+/**
+ * The viewer, plus whether this board's creator has redeem tokens switched on.
+ *
+ * Optional and defaulting to off, deliberately: a call site that forgets it hides the feature
+ * rather than exposing it. The failure of omission should be an absent badge, never a patron's
+ * words shown on a board whose settings say the feature is off.
+ */
+export type EntryViewer = LinkViewer & { tokensEnabled?: boolean };
+
+export const recommendationFields = (viewer: EntryViewer) =>
   ({
     id: true,
     type: true,
@@ -75,8 +96,12 @@ export const recommendationFields = (viewer: LinkViewer) =>
     // never enables tokens, so it changes nothing there.
     unconsumedRedeems: true,
     // The notes behind that count. Staff read all of them, a patron reads only their own — see
-    // `visibleRedeems`. Empty on every board that never enables tokens.
-    redeems: visibleRedeems(viewer),
+    // `visibleRedeems`.
+    //
+    // Omitted entirely when the creator has the feature off, which is also what tells `present`
+    // to zero the count above. Retained in the database either way: disabling hides, it does not
+    // destroy, and re-enabling brings back exactly what was there.
+    ...(viewer.tokensEnabled ? { redeems: visibleRedeems(viewer) } : {}),
     manualRank: true,
     // Read for the parent projection below, then dropped from the response — the contract exposes
     // `parentId`, whether the head was chosen by staff or implied by the catalogue.
