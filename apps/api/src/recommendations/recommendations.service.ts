@@ -82,7 +82,12 @@ export class RecommendationsService {
   ) {}
 
   async findOne(
-    creator: { id: string; hidePendingFromPublic: boolean; allowReactions?: boolean },
+    creator: {
+      id: string;
+      hidePendingFromPublic: boolean;
+      allowReactions?: boolean;
+      redeemTokensEnabled?: boolean;
+    },
     id: string,
     viewer: { userId: string | null; staffRole: StaffRoleValue | null },
   ) {
@@ -90,7 +95,11 @@ export class RecommendationsService {
       where: {
         AND: [{ id, creatorId: creator.id }, visibilityWhere(creator, viewer)],
       },
-      select: recommendationFields({ userId: viewer.userId, isStaff: viewer.staffRole !== null }),
+      select: recommendationFields({
+        userId: viewer.userId,
+        isStaff: viewer.staffRole !== null,
+        tokensEnabled: creator.redeemTokensEnabled ?? false,
+      }),
     });
     if (!entry) throw new NotFoundException();
 
@@ -229,7 +238,12 @@ export class RecommendationsService {
   }
 
   async list(
-    creator: { id: string; hidePendingFromPublic: boolean; allowReactions?: boolean },
+    creator: {
+      id: string;
+      hidePendingFromPublic: boolean;
+      allowReactions?: boolean;
+      redeemTokensEnabled?: boolean;
+    },
     rawCursor: string | undefined,
     limit: number | undefined,
     viewer: { userId: string | null; staffRole: StaffRoleValue | null },
@@ -257,6 +271,9 @@ export class RecommendationsService {
     }
 
     const isStaff = viewer.staffRole !== null;
+    // Read once and given to the ordering, the cursor and the projection, so the three cannot
+    // disagree about whether this board has the feature.
+    const tokensEnabled = creator.redeemTokensEnabled ?? false;
     const items = (await this.prisma.recommendation.findMany({
       where: {
         creatorId: creator.id,
@@ -289,13 +306,13 @@ export class RecommendationsService {
           // rule would overwrite it, and asking for REJECTED would return the column rather than
           // nothing. Narrowing only ever intersects.
           ...(status ? [{ status }] : []),
-          ...(cursor ? [afterCursor(sort, cursor)] : []),
+          ...(cursor ? [afterCursor(sort, cursor, tokensEnabled)] : []),
         ],
       },
-      orderBy: boardOrdering(sort),
+      orderBy: boardOrdering(sort, tokensEnabled),
       take: take + 1,
       select: {
-        ...recommendationFields({ userId: viewer.userId, isStaff }),
+        ...recommendationFields({ userId: viewer.userId, isStaff, tokensEnabled }),
         upvoteCount: true,
         weightedScore: true,
         createdAt: true,

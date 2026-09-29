@@ -26,6 +26,8 @@ export interface ResolvedCreator {
   allowVoteRatchet: boolean;
   allowAnonymousTickets: boolean;
   allowReactions: boolean;
+  /** Carried here for the same reason as the others: the board read model must not re-query. */
+  redeemTokensEnabled: boolean;
 }
 
 type CreatorRequest = Request & { creator?: ResolvedCreator; viewer?: Viewer };
@@ -92,6 +94,9 @@ export class CreatorAccessGuard implements CanActivate {
       // Fail closed for the same reason viewVisibility does: a creator with no policy row is a
       // data-integrity fault, and the safe reading of a missing toggle is "hide".
       hidePendingFromPublic: creator.policy?.hidePendingFromPublic ?? true,
+      // Fail closed, like `hidePendingFromPublic` above: a creator without a policy row is a
+      // data-integrity fault, and the safe reading of one is that the feature is off.
+      redeemTokensEnabled: creator.policy?.redeemTokensEnabled ?? false,
       // Defaults to off when a board somehow has no policy row, matching how the rest of this
       // resolver fails closed.
       allowVoteRatchet: creator.policy?.allowVoteRatchet ?? false,
@@ -117,6 +122,7 @@ export class CreatorAccessGuard implements CanActivate {
           select: {
             viewVisibility: true,
             hidePendingFromPublic: true,
+            redeemTokensEnabled: true,
             allowVoteRatchet: true,
             allowAnonymousTickets: true,
             allowReactions: true,

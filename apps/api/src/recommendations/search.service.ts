@@ -59,7 +59,7 @@ export class SearchService {
    * first time those rules changed — which they have, twice.
    */
   async similar(
-    creator: { id: string; hidePendingFromPublic: boolean },
+    creator: { id: string; hidePendingFromPublic: boolean; redeemTokensEnabled?: boolean },
     query: string,
     viewer: Viewer,
   ) {
@@ -89,6 +89,9 @@ export class SearchService {
         ...recommendationFields({
           userId: viewer.userId,
           isStaff: viewer.staffRole !== null,
+          // A search hit renders the same card as the board, so hiding the feature on one and
+          // not the other would put a Priority badge on a board that has none.
+          tokensEnabled: creator.redeemTokensEnabled ?? false,
         }),
         ...(viewer.userId
           ? {
