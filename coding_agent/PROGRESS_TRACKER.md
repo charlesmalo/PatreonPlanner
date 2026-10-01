@@ -8,11 +8,16 @@ being built in sequence. Every sequenced step has shipped, including the
 link/candidate model (design §4), which was split out of grouping rather than
 dropped.
 
-The verification baseline, re-measured rather than carried forward: **1250 API +
-379 web + 71 e2e tests passing** (92 API suites), typecheck clean across every
-package, and both coverage gates enforced in CI. The number that stood here said
-1045, which was true when it was written and had not been true for some weeks —
-a count copied forward is a claim nobody is checking, so this one was re-run.
+The verification baseline, re-measured rather than carried forward: **1390 API +
+603 web + 95 e2e tests passing** (108 API suites), typecheck clean across every
+package, and both coverage gates enforced in CI. Measured on `main` @ `6a24967`; the two
+commits since (`#141`) changed only `CLAUDE.md` and `.gitignore`, so no code moved.
+
+This number has now been wrong twice. It said 1045 when the truth had moved on; it
+was corrected to 1250, and by 2026-10-01 that was stale too — 140 API tests and 224
+web tests behind. **A count copied forward is a claim nobody is checking.** Re-run
+the five commands before editing this paragraph. Do not adjust it by reasoning about
+what has been added since.
 
 ## Milestones
 
@@ -43,116 +48,35 @@ a count copied forward is a claim nobody is checking, so this one was re-run.
 - [x] M20: Playtest round one — private by default, one board column at a time,
       and a settings page a creator can actually reach every policy from
       (plan 21)
+- [x] M21: Grouped label filters — per-tab filtering, OR-groups formed by dragging
+      one chip onto another (#131, #132, #134, #135)
+- [x] M22: Redeemable priority tokens — a creator opts their board in, tiers grant
+      per period, a patron spends one to mark an accepted entry Priority with a
+      note, and the redeem is consumed when it plays (#137, #140). The first
+      feature taken through OpenSpec end to end
 
 ## Active Task
 
-**Nothing in flight.** Grouped label filters shipped (#131, #134, #132, #135); `main` @ `4444dd7`.
+**Nothing in flight.** `main` @ `4809745`, repo private, no open PRs, working tree clean.
 
-### Next up — redeemable priority tokens, planned and unstarted
+Shipped since the last entry: redeemable priority tokens with its demo, journey and ledger
+integrity check (#137); the demo database made genuinely persistent (#138); the first OpenSpec
+change archived (#139); the disable-visibility fix that archiving exposed (#140); and `CLAUDE.md`
+corrected to say which spec mechanism is actually in use (#141).
 
-An OpenSpec change is ready at `openspec/changes/add-redeemable-priority-tokens/` — proposal,
-spec delta, design and tasks, `openspec validate --strict` clean. **Nothing is built.**
+### Next up
 
-A creator may opt their board into tokens: each tier grants N per period, the creator may grant
-extra directly (including to a moderator who pays nothing), and a patron spends one to mark an
-already-`ACCEPTED` entry **Priority** with a note. Redeems stack, lead the Accepted column, and are
-consumed when the entry reaches `ACTIVE`. Off for every board until a creator turns it on.
+1. **Flaky e2e test, if it recurs.** `journey.spec.ts` › "a moderator writes notes, and only the
+   timeline one reaches the board". Failed both CI attempts at _different_ lines (1132, then
+   1137), passed 3/3 locally, passed on re-run with no code change — timing on a loaded runner
+   against tight 10s expect timeouts, not a code fault. Harden rather than re-run if it returns.
+2. **Nothing else queued.** The next feature is the engineer's call.
 
-**The idea as first written could not be built, and the proposal says why.** It asked for a
-redeem on "the next unwatched episode" — but nothing here models an episode. `WatchOrderItem` is a
-hand-ordered list of _titles_, and no table tracks per-episode watched state. Real episodes would
-mean a TMDB episode sync, an `Episode` table, per-episode watched UI and a job to keep it fresh.
-The redeem carries a **free-text note** instead: the patron writes `S2E04`, the creator reads it
-and plays it. Recorded under _Out, with reasons_ rather than quietly dropped.
+### How this file relates to `.agent-state/`
 
-**A second thing the code decided for us:** there is no Patreon billing period to grant against.
-`currentPeriodEnd` belongs to _this product's own_ premium subscription, not to a reader's Patreon
-membership — `Membership` stores a state, never a date. So a period is a **UTC calendar month**,
-and the design states the consequence plainly: a reader joining on the 28th gets a full month's
-tokens for three days.
-
-Two questions left open on purpose: whether a redeemer is notified when their redeem is played,
-and whether a spend is undoable within a short window.
-
-### The previous active task
-
-**Grouped label filters — planned, not started.**
-
-| artefact     | state                                                                             |
-| ------------ | --------------------------------------------------------------------------------- |
-| Spec         | `docs/superpowers/specs/2026-09-18-grouped-label-filters-design.md` — PR #132     |
-| Plan         | `docs/superpowers/plans/2026-09-18-grouped-label-filters.md` — 10 tasks, 64 steps |
-| Prerequisite | **PR #131 must merge first** (`feat/filter-labels-per-tab`)                       |
-
-**Do not start Task 1 until #131 is on `main`.** The plan's whole starting point — multi-select
-OR, `themes=a,b`, `ThemeFilter` taking `selected: string[]`, `localThemes` / `rememberThemes` — is
-in that PR. It is open and unmerged only because CI is blocked (see the billing note in §2 of the
-resume file; the repo has to be public for Actions to run).
-
-**What is being built.** A reader combines filter labels into AND groups that are ORed together —
-`(A) OR (B AND Y)` — by dragging one chip onto another or choosing from a menu, and splits them
-again at magnets between members. Disjunctive normal form, deliberately not a general boolean
-expression: DNF is exactly what the interaction can express, so model and UI cannot drift.
-
-**Two things the plan's self-review caught**, both spec requirements with no task, now fixed:
-
-- **Focus placement.** A magnet and a group's ✕ each destroy the element that was clicked, so
-  focus falls to `<body>` unless it is placed — the same trap #131 hit with the per-chip ✕.
-  Task 4 now specifies where focus lands for each action and tests it.
-- **Pruning deleted labels.** Labels are merged and deleted on the `/themes` page, so a remembered
-  filter can name one that is gone and 404 the board on load. Task 6 now prunes on read, silently.
-
-**The risk worth knowing before it is built.** An AND group is narrow by construction. Measured on
-the demo board: five labels, ten possible pairs, **five of which never co-occur at all**, largest
-overlap four entries between two near-synonyms. So the common outcome of combining two labels is
-an empty column that reads as broken. Task 7 makes the column say what it asked for; Task 9 seeds
-a pair that co-occurs so the mechanic differs visibly from its absence — the tracker's own
-_"too uniform to show a feature"_ rule, applied before shipping rather than after.
-
-**Two decisions taken from the spec's recommendations, and reversible:** the empty column names
-the filter (§4), and a group of one is unrepresentable (Open question 2).
-
-### The previous active task
-
-Nothing in flight, and nothing designed but unbuilt.
-
-The last thing built was the pair of tier gates on the settings page — who may
-suggest, and who may upvote. They complete plan 21's task 5, which had shipped
-with both fields wired end to end and **no control to set either**: it read as
-finished from the inside and was caught only by reading the original request
-against the page. The plan's findings record why nothing failed.
-
-Phase 2 and **Amendment A** are complete. **Plan 20** put every payment provider
-behind one `PaymentProvider` port with a second implementation that takes no
-money, so the whole product — including buying premium — can be demonstrated
-before anybody has a merchant account. **Plan 21** is the first playtest round,
-and is finished; its findings are at the foot of that plan.
-
-**Payments are deliberately deferred to launch.** The intended provider is now
-**Stripe Managed Payments** rather than Lemon Squeezy — Lemon Squeezy is being
-folded into it, and it recommends Managed Payments for this business location
-itself. Nothing is wired: the demo runs the fake provider, the premium page says
-plainly that payments are simulated, and `docs/billing-sandbox-runbook.md`
-describes the switch. The Lemon Squeezy adapter stays as the second
-implementation the conformance suite holds the port to; a Stripe adapter is one
-new file and a config value when it is wanted.
-
-One thing found while reading Stripe's documentation, recorded before it is
-needed: Managed Payments uses standard Stripe Billing, so ordinary
-`customer.subscription.*` webhooks — but `client_reference_id` arrives **only on
-`checkout.session.completed`**, not on later subscription events. Lemon Squeezy
-puts the reader's id on every one. `parse()` reads `userId` straight from the
-payload, which for Stripe works on the first event and nothing after it. A
-port-level question to settle deliberately rather than discover.
-
-What remains needs access this repository does not have:
-
-|                                  |                                                        |
-| -------------------------------- | ------------------------------------------------------ |
-| A real payment provider          | `docs/billing-sandbox-runbook.md` — deferred to launch |
-| SPF and DKIM on a sending domain | `docs/email-setup.md`                                  |
-| One Svix test webhook            | confirms the bounce signature check                    |
-| `VITE_DONATION_URL`              | the donation page is built and switched off            |
+`.agent-state/` is untracked working state — progress and decisions carried across `/compact`
+and `/clear`, scaffolding for a session. **This file is the durable record.** When the two
+disagree, re-measure rather than believing either.
 
 ## Open Questions Blocking Work
 
@@ -830,3 +754,7 @@ missing for a decision somebody can already make. Recorded in _Known Debt_.
 | 2026-09-03 | Payments deferred to launch; brand, landing page and the slogan shipped         |
 | 2026-09-04 | Playtest round one: private by default, tabbed board, settings page (plan 21)   |
 | 2026-09-05 | Tier gates finish plan 21; history-is-an-audit-trail made a permanent rule      |
+| 2026-09-20 | Grouped label filters shipped (#131, #132, #134, #135)                          |
+| 2026-09-28 | Redeemable priority tokens shipped (#137); demo persistence fixed (#138)        |
+| 2026-09-28 | First OpenSpec change archived (#139) — promoting its spec exposed #140         |
+| 2026-10-01 | CLAUDE.md records which spec mechanism is in use (#141); baseline re-measured   |
