@@ -27,3 +27,8 @@ coverage/
 # Playwright
 e2e/test-results/
 e2e/playwright-report/
+
+# Agent working state: progress + decisions carried across /compact and /clear.
+# Deliberately untracked — it is session scaffolding, not project history. The durable
+# record is coding_agent/PROGRESS_TRACKER.md, the git log, and docs/.
+.agent-state/
