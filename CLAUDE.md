@@ -4,11 +4,29 @@ A standalone project (its own git repo, unrelated to any sibling project in the 
 
 ## Tooling
 
-- **OpenSpec** (spec-driven workflow) — configured for Claude Code. Change proposals live in
-  `openspec/`. Commands are available under `/opsx:*` (e.g. `/opsx:propose "idea"`,
-  `/opsx:apply`, `/opsx:archive`). Project context/conventions go in `openspec/config.yaml`.
-- **Superpowers** — user-level Claude Code plugin providing workflow skills (brainstorming,
-  test-driven-development, systematic-debugging, etc.). Active automatically.
+Two spec mechanisms exist here. **Which one to use is not a free choice** — read this before
+reaching for either.
+
+- **Superpowers** — user-level Claude Code plugin (brainstorming, test-driven-development,
+  systematic-debugging). Active automatically. **This is what built the project**: 3 design docs
+  in `docs/superpowers/specs/` and 42 plans in `docs/superpowers/plans/`, covering 139 merged
+  PRs from 2026-08-03 onward. Treat those as the historical record of what was built and why.
+  They are not updated after the fact, so a plan describes its moment, not today's code.
+- **OpenSpec** (`openspec/`, commands under `/opsx:*`, conventions in `openspec/config.yaml`) —
+  **the mechanism for new user-facing features from 2026-09-24 onward.** Configured since the
+  first commit but unused until then: exactly one change has gone through it
+  (`add-redeemable-priority-tokens`, archived 2026-09-28).
+
+  It earned its place immediately. Promoting that change's spec to canonical is what exposed a
+  real bug — the spec said disabling the feature makes it invisible, the code only made it
+  unspendable, and a board that switched tokens off kept showing Priority badges and patrons'
+  notes (fixed in #140). Writing "the system SHALL do X" as a standalone claim invites checking
+  it, which is the point.
+
+  **`openspec/specs/` is not a description of this system.** It holds one capability out of
+  roughly twenty. Do not read it as complete, and do not let a reader assume it is. The other
+  nineteen were never backfilled, deliberately: reconstructing specs for shipped code produces
+  authoritative-looking documents nobody validated against reality.
 
 ## Agent ruleset — read this first
 
