@@ -544,43 +544,34 @@ missing for a decision somebody can already make. Recorded in _Known Debt_.
   had promised the refresh for a long time and the code did not do it — but the embedding
   invalidation it added was dead weight and has been removed.
 
-- **19 vulnerability advisories against production dependencies**, 7 high, down
-  from 24 and 9. The two **reachable** ones were fixed; the rest were traced and
-  left, which is the part worth reading.
+- **5 moderate advisories against production dependencies**, down from 22 (7 high,
+  12 moderate, 3 low). **Every high is gone**, and every low. The high set was one
+  package's subtree: `@huggingface/transformers` pulling `adm-zip` and `sharp`.
 
-  Fixed: `@remix-run/router` (XSS via open redirect) by moving `react-router-dom`
-  6.27.0 → 6.30.6, which pulls router 1.23.4; and `path-to-regexp` (ReDoS) by a
-  pnpm override 0.1.10 → 0.1.12. Both are in-major bumps of existing dependencies,
-  and both sit on paths every request or navigation crosses.
+  Cleared by `pnpm.overrides` — pinning `adm-zip`, `sharp`, `qs`, `body-parser`,
+  `cookie`, `multer` and `uuid` to patched versions — plus `@nestjs/common`
+  10.4.4 → ^10.4.16, the one direct dependency with a fix inside its own major.
 
-  Left, because our code cannot reach them:
+  Overriding under `transformers` is the part that needed proving rather than
+  assuming: the test suites never load the real model, so they cannot tell whether
+  `sharp` or `adm-zip` broke it. `pnpm --filter @app/api verify:embeddings` does,
+  and all six checks pass on the overridden tree.
 
-  | package   | source                      | why it does not apply                                      |
-  | --------- | --------------------------- | ---------------------------------------------------------- |
-  | `multer`  | `@nestjs/platform-express`  | no `FileInterceptor` anywhere; this API accepts no uploads |
-  | `sharp`   | `@huggingface/transformers` | image decoding the embeddings path never invokes           |
-  | `adm-zip` | `@huggingface/transformers` | model-archive extraction, same                             |
+  What remains, and why each is left:
 
-  `multer` was revisited and taken. The fix is a major bump, which is why it was left
-  the first time — but "risky" was an assertion, and testing it is cheap: multer 2.3.0
-  under an override, 1276 API tests, 91 e2e journeys through the whole HTTP stack, and
-  a clean container boot. Nothing referenced it, because nothing ever did.
+  | Advisory       | Needs       | Why not now                                                          |
+  | -------------- | ----------- | -------------------------------------------------------------------- |
+  | `@nestjs/core` | `>=11.1.18` | No fix inside 10.x. A major framework upgrade is the engineer's call |
+  | `react-router` | `>=7.18.0`  | No fix inside 6.x. Same — a major upgrade of the router              |
+  | `file-type` ×2 | `>=21.3.2`  | **Unreachable**, and arrived _with_ the `@nestjs/common` fix         |
 
-  `path-to-regexp` was pinned to exactly `0.1.12` and **went stale**: a second advisory
-  was published against `<0.1.13`, and an exact pin cannot float forward. It is
-  `~0.1.13` now, so the next patch arrives without being asked.
-
-  **A security override is a floor, not a pin.** Its meaning is "at least this
-  version", and writing it as an exact version gives it an expiry date nobody is
-  watching — this one expired inside a day. Both overrides are ranges now (`^2.3.0`,
-  `~0.1.13`). Note this is the opposite of the convention for _direct_ dependencies,
-  which are pinned exactly on purpose and held still by the lockfile: those are
-  choices about what to build against, and an override is a repair to something
-  underneath.
-
-  Production advisories stand at 15, 3 high — `sharp` and `adm-zip` from
-  `@huggingface/transformers`, whose image and archive paths the embedding job never
-  invokes. Re-check with `pnpm audit --prod`.
+  `file-type` is worth the detail. It reaches the tree through `@nestjs/common`'s
+  file-validation surface, and this API has no upload path at all — no
+  `FileInterceptor`, `ParseFilePipe`, `FileTypeValidator`, nor any use of `multer`
+  in `src`. Forcing it to v21 means forcing an ESM-only package into a CommonJS
+  runtime on a path no test exercises, so a break would surface in production and
+  nowhere else. Trading a real runtime risk for an unreachable advisory is a bad
+  deal; it is left, deliberately.
 
 - ~~**Webhooks never reached the API through the deployed origin.**~~ Fixed. nginx
   forwarded `/api/` and `/auth/` and not `/webhooks/`, so every Patreon and Resend
