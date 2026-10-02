@@ -54,29 +54,26 @@ what has been added since.
       per period, a patron spends one to mark an accepted entry Priority with a
       note, and the redeem is consumed when it plays (#137, #140). The first
       feature taken through OpenSpec end to end
+- [x] M23: Board search — the fuzzy/semantic engine reaches readers at last, above
+      the column tabs and across all four at once (#143)
 
 ## Active Task
 
-**Nothing in flight.** `main` @ `4809745`, repo private, no open PRs, working tree clean.
+**Nothing in flight.** `main` @ `54e432a`, repo private, no open PRs, working tree clean.
 
-Shipped since the last entry: redeemable priority tokens with its demo, journey and ledger
-integrity check (#137); the demo database made genuinely persistent (#138); the first OpenSpec
-change archived (#139); the disable-visibility fix that archiving exposed (#140); and `CLAUDE.md`
-corrected to say which spec mechanism is actually in use (#141).
+Board search shipped (#143), closing the oldest user-facing debt item.
 
-### Next up
+### Next up, ranked
 
-1. **Flaky e2e test, if it recurs.** `journey.spec.ts` › "a moderator writes notes, and only the
-   timeline one reaches the board". Failed both CI attempts at _different_ lines (1132, then
-   1137), passed 3/3 locally, passed on re-run with no code change — timing on a loaded runner
-   against tight 10s expect timeouts, not a code fault. Harden rather than re-run if it returns.
-2. **Nothing else queued.** The next feature is the engineer's call.
-
-### How this file relates to `.agent-state/`
-
-`.agent-state/` is untracked working state — progress and decisions carried across `/compact`
-and `/clear`, scaffolding for a session. **This file is the durable record.** When the two
-disagree, re-measure rather than believing either.
+1. **19 vulnerability advisories, 7 high.** Down from 24 and 9; the two _reachable_ ones were
+   fixed and the rest traced and left. The item least comfortable to carry into a launch, and
+   the one that has sat longest.
+2. **Availability is answered for one region, server-wide** — see Open Questions. Needs the
+   engineer's decision, not an implementation choice.
+3. **A ticket notification lands on the list, not the ticket.** Needs a
+   `/c/:slug/tickets/:id` route that does not exist. Fine at ten tickets, not at three hundred.
+4. **Two migrations are not rolling-deploy safe.** Matters at the first real deploy.
+5. **Conditional:** harden the flaky `journey.spec.ts` moderator-notes test if it recurs.
 
 ## Open Questions Blocking Work
 
@@ -428,11 +425,14 @@ missing for a decision somebody can already make. Recorded in _Known Debt_.
   child as an ordinary card while its votes count toward a head the reader cannot see. The client
   offers the honest subset.
 
-- **A board has no search, though the API has one.**
-  `GET /creators/:slug/recommendations/similar` is VIEW-gated, rate limited, fuses a trigram arm
-  with a semantic one, and returns entries from the board. Its only caller is `SimilarEntries`,
-  the duplicate hint inside the submit form — so the capability is reachable only by starting to
-  type a submission, and there is no input anywhere on a board.
+- ~~**A board has no search, though the API has one.**~~ Built (#143). A search box sits above
+  the column tabs, and every result names the column it is in. **Above the tabs deliberately:**
+  the endpoint takes no status filter and returns matches from all four columns, so inside a tab
+  it would answer a narrower question than it was asked without saying so.
+
+  Worth keeping: the route audit could not see this gap. `similar` counted as _reached_ the
+  whole time, because the submit form's duplicate hint called it — reachability answers "does
+  any caller exist", not "can a reader get here".
 
   The endpoint's own comments are written for a reader using it directly: _"returns only entries
   the caller could already read on the board"_, and gating it higher _"would deny a reader the
@@ -758,3 +758,4 @@ missing for a decision somebody can already make. Recorded in _Known Debt_.
 | 2026-09-28 | Redeemable priority tokens shipped (#137); demo persistence fixed (#138)        |
 | 2026-09-28 | First OpenSpec change archived (#139) — promoting its spec exposed #140         |
 | 2026-10-01 | CLAUDE.md records which spec mechanism is in use (#141); baseline re-measured   |
+| 2026-10-02 | Board search shipped (#143) — the search engine finally reaches readers         |
