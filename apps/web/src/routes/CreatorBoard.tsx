@@ -3,6 +3,10 @@ import { Link, useParams } from 'react-router-dom';
 import { useCreator, useSession, useThemes, useViewMode } from '../api/hooks';
 import { useTokens } from '../api/use-tokens';
 import { TokenWallet } from '../components/TokenWallet';
+import { BoardSearch } from '../components/BoardSearch';
+// Shared with BoardSearch rather than declared twice: search has to name the column each result
+// sits in, and two copies of the mapping drift.
+import { COLUMNS } from '../components/board-columns';
 import { hydrate, localThemes, rememberThemes } from '../api/board-settings';
 import { encodeGroups } from '../components/label-groups';
 import { narrowCapabilities } from '../api/view-mode';
@@ -44,13 +48,6 @@ function rememberColumn(slug: string, status: string): void {
     // The board still works; only which column it opens on is forgotten.
   }
 }
-
-const COLUMNS: Array<[string, string]> = [
-  ['PENDING', 'Suggestions'],
-  ['ACCEPTED', 'Accepted'],
-  ['ACTIVE', 'Now Playing'],
-  ['COMPLETED', 'Completed'],
-];
 
 export function CreatorBoard() {
   const { slug = '' } = useParams();
@@ -215,6 +212,18 @@ export function CreatorBoard() {
       <div className="mt-6">
         <TokenWallet tokens={tokens} />
       </div>
+
+      {/* Above the columns, because it searches all four at once. The engine takes no status
+          filter, so putting it inside a tab would answer a narrower question than it was asked
+          without saying so. */}
+      <BoardSearch
+        slug={slug}
+        canUpvote={capabilities.upvote}
+        canModerate={capabilities.moderate}
+        permissions={capabilities.permissions}
+        isPremium={user?.isPremium ?? false}
+        onChanged={refresh}
+      />
 
       {/* One column at a time. Four side by side truncated every one of them at laptop width;
           this gives whichever is being read the whole screen. */}
