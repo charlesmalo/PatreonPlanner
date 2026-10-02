@@ -22,8 +22,14 @@
   },
   "pnpm": {
     "overrides": {
-      "multer": "^2.3.0",
-      "path-to-regexp@0.1": "~0.1.13"
+      "adm-zip": "^0.6.1",
+      "sharp": "^0.35.4",
+      "body-parser": "^1.20.6",
+      "cookie": "^0.7.0",
+      "multer": "^2.4.0",
+      "qs": "^6.16.0",
+      "path-to-regexp@0.1": "~0.1.13",
+      "uuid": "^11.1.1"
     }
   }
 }
