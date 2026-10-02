@@ -1309,3 +1309,34 @@ test('a patron spends a token, the entry leads Accepted, and playing it clears t
   // And the reader who spent it was told, because they asked for this by name.
   await expect(page.getByRole('button', { name: /1 unread notification/i })).toBeVisible();
 });
+
+test('a reader searches the board and finds an entry from another column', async ({ page }) => {
+  // The capability existed since the fuzzy-search work and its only caller was the duplicate
+  // hint inside the submit form — reachable only by starting to type a submission. This is the
+  // journey that makes it a board feature, and the one place the SPA's path is exercised against
+  // the real API through the real proxy.
+  seedEntryFrom('patreon-other-e2e', 'Princess Mononoke', 'COMPLETED');
+  seedEntryFrom('patreon-other-e2e', 'Porco Rosso', 'PENDING');
+
+  await signIn(page, 500, 'patreon-search-e2e');
+  await page.goto(`/c/${CREATOR.slug}`);
+
+  await page.getByLabel(/search this board/i).fill('mononoke');
+
+  // Found from the Suggestions tab, though it is sitting in Completed — the whole reason the
+  // control is above the tabs rather than inside one.
+  const results = page.getByRole('region', { name: /board search/i });
+  await expect(results.getByRole('heading', { name: 'Princess Mononoke' })).toBeVisible();
+  await expect(results.getByText('Completed')).toBeVisible();
+  await expect(results.getByRole('heading', { name: 'Porco Rosso' })).toHaveCount(0);
+
+  // And clearing gives the board back rather than leaving the reader in a filtered view.
+  await page.getByRole('button', { name: /^Clear$/ }).click();
+  await expect(results.getByRole('heading', { name: 'Princess Mononoke' })).toHaveCount(0);
+  await showColumn(page, 'Suggestions');
+  await expect(
+    page
+      .getByRole('region', { name: /suggestions/i })
+      .getByRole('heading', { name: 'Porco Rosso' }),
+  ).toBeVisible();
+});
