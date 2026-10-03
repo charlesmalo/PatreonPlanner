@@ -32,3 +32,8 @@ e2e/playwright-report/
 # Deliberately untracked — it is session scaffolding, not project history. The durable
 # record is coding_agent/PROGRESS_TRACKER.md, the git log, and docs/.
 .agent-state/
+
+# Agent worktrees. Each is its own git checkout, so `git add -A` from the main tree records
+# it as a gitlink — a commit pointer to a repository nobody else can resolve. Caught in #147
+# after exactly that happened.
+.claude/worktrees/
