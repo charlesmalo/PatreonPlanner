@@ -14,6 +14,7 @@ import { AcceptInvite } from './routes/AcceptInvite';
 import { ReviewQueue } from './routes/ReviewQueue';
 import { StaffPage } from './routes/StaffPage';
 import { Support } from './routes/Support';
+import { TicketDetail } from './routes/TicketDetail';
 import { Tickets } from './routes/Tickets';
 import { Themes } from './routes/Themes';
 import { ClaimBoard } from './routes/ClaimBoard';
@@ -41,6 +42,8 @@ export default function App() {
           <Route path="/c/:slug/settings" element={<BoardSettings />} />
           <Route path="/c/:slug/themes" element={<Themes />} />
           <Route path="/c/:slug/tickets" element={<Tickets />} />
+          {/* Where a ticket notification points, now that `payload.ticketId` has somewhere to go. */}
+          <Route path="/c/:slug/tickets/:id" element={<TicketDetail />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/carry-over" element={<CarryOver />} />
           <Route path="/premium" element={<Premium />} />

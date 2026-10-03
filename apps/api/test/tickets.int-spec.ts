@@ -13,6 +13,8 @@ describe('Tickets (integration)', () => {
   let bystander: Auth;
   let patron: Auth;
   let patronUserId: string;
+  /** Someone who can read this public board and has written nothing on it. */
+  let stranger: Auth;
   let entryId: string;
   let anonCsrf: string;
   let anonToken: string;
@@ -65,6 +67,8 @@ describe('Tickets (integration)', () => {
     await ctx.prisma.membership.create({
       data: { userId: patronUserId, creatorId, amountCents: 500, isActivePatron: true },
     });
+
+    stranger = await loginAs('tk-stranger');
   }, 240_000);
 
   afterAll(async () => {
@@ -137,6 +141,13 @@ describe('Tickets (integration)', () => {
     request(ctx.app.getHttpServer())
       .get(`/api/v1/creators/ticket-co/tickets${query}`)
       .set('Cookie', [auth.session, auth.csrf]);
+
+  /** No CSRF token: a GET is safe, and the middleware does not demand one. */
+  const readOne = (auth: Auth | null, id: string, slug = 'ticket-co') => {
+    const req = request(ctx.app.getHttpServer()).get(`/api/v1/creators/${slug}/tickets/${id}`);
+    if (auth) req.set('Cookie', [auth.session, auth.csrf]);
+    return req;
+  };
 
   const resolve = (auth: Auth, id: string, body: object) =>
     request(ctx.app.getHttpServer())
@@ -333,6 +344,98 @@ describe('Tickets (integration)', () => {
 
       const row = await ctx.prisma.ticket.findUniqueOrThrow({ where: { id } });
       expect(row).toMatchObject({ body: 'This is season 3, not a duplicate', subjectId: null });
+    });
+  });
+
+  describe('reading one', () => {
+    const openOne = async (auth: Auth | null = patron, body = 'Please look at this') =>
+      (await raise(auth, { body, subjectId: entryId }).expect(201)).body.id as string;
+
+    it('gives a handler the one message a notification named', async () => {
+      const id = await openOne(patron, 'The message the notification is about');
+
+      const res = await readOne(handler, id).expect(200);
+
+      expect(res.body).toMatchObject({
+        id,
+        body: 'The message the notification is about',
+        status: 'OPEN',
+        subject: { id: entryId },
+      });
+    });
+
+    it('gives the reader who raised it their own message and the answer', async () => {
+      // The fixture that matters: a patron, not staff, holding no permission — exactly who a
+      // TICKET_RESOLVED notification is sent to, and who the list endpoint refuses.
+      const id = await openOne();
+      await resolve(handler, id, { resolution: 'CONFIRMED', reply: 'Fixed, thank you.' }).expect(
+        200,
+      );
+
+      const res = await readOne(patron, id).expect(200);
+
+      expect(res.body).toMatchObject({
+        id,
+        status: 'RESOLVED',
+        resolution: 'CONFIRMED',
+        reply: 'Fixed, thank you.',
+      });
+    });
+
+    it('hides another reader’s message as a 404, not a refusal', async () => {
+      // A reader who can see this board and did not write this message. 404 rather than 403:
+      // telling them the id exists confirms a message they are not party to.
+      const id = await openOne();
+
+      await readOne(stranger, id).expect(404);
+    });
+
+    it('does not hand an anonymous message to the next anonymous reader', async () => {
+      // `raisedByUserId` is null on an anonymous ticket and `viewer.userId` is null for an
+      // anonymous reader, so an ownership test written as equality would match every one of
+      // them against every anonymous message on the board.
+      await ctx.prisma.creatorPolicy.update({
+        where: { creatorId },
+        data: { allowAnonymousTickets: true },
+      });
+      const id = await openOne(null, 'Hello from nobody at all');
+
+      await readOne(null, id).expect(404);
+    });
+
+    it('hides a message from a moderator without the permission', async () => {
+      // Being staff is not the gate here either: HANDLE_REPORTS is, or having written it.
+      const id = await openOne();
+
+      await readOne(bystander, id).expect(404);
+    });
+
+    it('404s a ticket on another board', async () => {
+      const other = await ctx.prisma.creator.create({
+        data: {
+          patreonCampaignId: 'tk-other3',
+          ownerUserId: await userId('tk-owner'),
+          displayName: 'Other',
+          slug: 'tk-other3',
+          policy: { create: { viewVisibility: 'PUBLIC' } },
+          staff: {
+            create: {
+              userId: handlerUserId,
+              role: 'MOD',
+              permissions: ALL_STAFF_PERMISSIONS as never,
+            },
+          },
+        },
+      });
+      const id = await openOne();
+
+      await readOne(handler, id, 'tk-other3').expect(404);
+
+      await ctx.prisma.creator.delete({ where: { id: other.id } });
+    });
+
+    it('404s an id no ticket has', async () => {
+      await readOne(handler, '00000000-0000-0000-0000-00000000dead').expect(404);
     });
   });
 });

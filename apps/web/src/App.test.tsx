@@ -47,6 +47,24 @@ describe('App', () => {
     expect(await screen.findByText(/page not found/i)).toBeInTheDocument();
   });
 
+  it('mounts the single-message page a ticket notification links to', async () => {
+    // App is the only thing that can be wrong about this. Every link to that URL is built
+    // elsewhere, and an unregistered path renders "Page not found" with nothing failing — which
+    // is exactly how `payload.ticketId` pointed at nothing for as long as it did.
+    global.fetch = fakeApi({
+      'GET /api/v1/me': new Error('401'),
+      'GET /api/v1/creators/ada-writes': new Error('404'),
+      'GET /api/v1/creators/ada-writes/capabilities': new Error('404'),
+      'GET /api/v1/creators/ada-writes/tickets/tk1': new Error('404'),
+    });
+    window.history.pushState({}, '', '/c/ada-writes/tickets/tk1');
+    render(<App />);
+
+    // The page's own not-found heading, not the route table's fallback paragraph.
+    expect(await screen.findByRole('heading', { name: /not found/i })).toBeInTheDocument();
+    expect(screen.queryByText(/page not found/i)).not.toBeInTheDocument();
+  });
+
   it('hands the landing page a session, so a signed-in reader is offered a board', async () => {
     global.fetch = signedIn();
     render(<App />);

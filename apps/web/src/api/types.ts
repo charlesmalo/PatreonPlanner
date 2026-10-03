@@ -312,6 +312,33 @@ export interface Notification {
   createdAt: string;
 }
 
+/** What staff decided about a message. Null until they have. */
+export type TicketResolution = 'CONFIRMED' | 'DENIED' | 'LINKED' | 'CLOSED';
+
+/**
+ * A message from a reader to staff.
+ *
+ * One shape for both reads, because one card renders both: the inbox a moderator works through,
+ * and the single message a notification links to. Declared here rather than beside the inbox,
+ * where it used to live — a response shape in a route file is a response shape nothing checks
+ * against the wire, and these two enums were drifting in the dark.
+ */
+export interface Ticket {
+  id: string;
+  body: string;
+  status: 'OPEN' | 'RESOLVED';
+  resolution: TicketResolution | null;
+  /** What the moderator wrote back. Optional on purpose: "handled internally" is an answer. */
+  reply: string | null;
+  subjectId: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
+  /** Null when a signed-out reader wrote it, which a creator must opt into accepting. */
+  raisedBy: { id: string; fullName: string | null; avatarUrl: string | null } | null;
+  /** The entry it disputes, if any. Null for general contact, and once that entry is deleted. */
+  subject: { id: string; customTitle: string; status: string } | null;
+}
+
 export interface DiscoveredCreator {
   id: string;
   slug: string;

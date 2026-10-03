@@ -220,13 +220,13 @@ describe('NotificationBell', () => {
       expect(screen.queryByText(/was updated on/i)).not.toBeInTheDocument();
     });
 
-    it('sends a moderator to the tickets page, where it can be answered', async () => {
+    it('sends a moderator to the message a notification is about, not to the pile', async () => {
       renderBell({ items: [ticket()], unreadCount: 1 });
       await userEvent.click(screen.getByRole('button', { name: /notifications/i }));
 
       expect(screen.getByRole('link', { name: /the board/i })).toHaveAttribute(
         'href',
-        '/c/ada-writes/tickets',
+        '/c/ada-writes/tickets/t1',
       );
     });
 
