@@ -13,6 +13,8 @@ interface BoardColumnProps {
   slug: string;
   status: string;
   label: string;
+  /** Which country's streaming offers to attach. Null means the server's own default. */
+  region?: string | null;
   /** Every label on the board, for the filter this column renders. */
   themes: ThemeSummary[];
   /**
@@ -54,6 +56,7 @@ const SORTS: Array<[string, string]> = [
 
 export function BoardColumn({
   slug,
+  region,
   status,
   label,
   themes,
@@ -92,7 +95,7 @@ export function BoardColumn({
     setSort(next);
     void remember(slug, status, { sort: next });
   };
-  const board = useBoard(slug, true, selectedThemes, status, sort);
+  const board = useBoard(slug, true, selectedThemes, status, sort, region);
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {

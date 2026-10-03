@@ -49,7 +49,11 @@ export class AvailabilityService implements OnApplicationShutdown {
     return this.config.get('AVAILABILITY_TTL_HOURS') * 60 * 60 * 1000;
   }
 
-  private assertRegion(region: string): void {
+  /**
+   * Public because the board read path checks the region *before* its own error swallowing —
+   * a region this deployment does not serve is a bad request, not a quiet board without badges.
+   */
+  assertRegion(region: string): void {
     // Rejected here rather than at the column: VARCHAR(2) would take 'gb' happily, and a
     // lowercase region silently misses every row the job writes with an uppercase one.
     if (!REGION_PATTERN.test(region)) {

@@ -34,6 +34,7 @@ export function useBoard(
   themeGroups?: string[][],
   status?: string,
   sort?: string,
+  region?: string | null,
 ) {
   const [items, setItems] = useState<Board['items']>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -55,6 +56,9 @@ export function useBoard(
   if (themeGroups && themeGroups.length > 0) query.set('themes', encodeGroups(themeGroups));
   if (status) query.set('status', status);
   if (sort) query.set('sort', sort);
+  // Part of the path for the same reason the others are: the answer differs, so a cached page
+  // from another region is the wrong page rather than a stale one.
+  if (region) query.set('region', region);
   const search = query.toString();
   const path = `/creators/${encodeURIComponent(slug)}/recommendations${search ? `?${search}` : ''}`;
 

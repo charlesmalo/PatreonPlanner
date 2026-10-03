@@ -79,23 +79,24 @@ Board search shipped (#143), closing the oldest user-facing debt item.
 
 **One, and it does not block anything shipped.**
 
-**Availability is answered for one region, server-wide.** The board and the entry page both
-embed `availability` for `AVAILABILITY_REGION_DEFAULT`, so a patron in France reads "Where to
-watch (US)" and a list of US offers. `GET /creators/:slug/catalog/titles/:id/availability` takes
-a `region` and is the only thing that can answer otherwise; nothing in the client passes one,
-which is why it sat unreachable. Three ways out, and the choice is the engineer's because each
-costs something different:
+~~**Availability is answered for one region, server-wide.**~~ **Answered: the reader picks,
+stored per reader.** Built — the board and the entry page take a `region` query parameter, a
+`RegionPicker` above the columns changes it, and the choice is kept in `localStorage` so it
+survives without a database column or any new personal data.
 
-| Option                                      | Cost                                                                         |
-| ------------------------------------------- | ---------------------------------------------------------------------------- |
-| Leave it                                    | Wrong answer for every reader outside the default region                     |
-| Reader picks a region, stored as preference | One more setting; the refresh job gains a row per region asked for, forever  |
-| Infer from the request                      | Needs geo-IP — a dependency, and a privacy question this project has avoided |
+The allowed set comes from `GET /meta/regions` rather than a constant in the client: it is
+deployment configuration (`AVAILABILITY_REGIONS`), and a hardcoded copy drifts the moment an
+operator edits it, leaving a reader able to pick a country the server refuses. A stored choice
+that is no longer served is dropped rather than sent, so shortening the list cannot break a
+board for somebody who chose a country that has since gone.
 
-The refresh obligation is the part worth weighing: `AvailabilityQuery` already refuses regions
-the deployment does not serve, with the comment that an open region set lets one caller create a
-permanent row and a permanent refresh obligation for every country on earth. Whichever way this
-goes, the bounded set stays bounded.
+The refresh obligation the table weighed stays bounded, because the bounded set was never
+widened — only exposed.
+
+**Worth keeping:** the region is validated _before_ the availability lookups, not inside them.
+Both swallow their errors on purpose — badges are garnish and a cold provider must not 500 a
+board — so a check inside that try/catch would be swallowed too, and an unserved region would
+produce a board with no badges and no reason. That failure has a test of its own.
 
 All three questions that previously stood here were answered and built:
 

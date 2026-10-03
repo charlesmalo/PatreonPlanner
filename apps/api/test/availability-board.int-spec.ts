@@ -123,6 +123,80 @@ describe('Availability on the board (integration)', () => {
     ).expect(400);
   });
 
+  describe('the reader chooses the region', () => {
+    const boardIn = (region: string, auth?: Auth) =>
+      get(`/creators/availability-co/recommendations?limit=50&region=${region}`, auth);
+
+    it('answers the board in the region the reader asked for', async () => {
+      // The whole point: availability used to be answered for one region server-wide, so a
+      // patron in Britain read "Where to watch (US)" and a list of American offers.
+      await boardIn('GB', patron).expect(200);
+      await ctx.availabilityService.drainRefreshes();
+
+      const res = await boardIn('GB', patron).expect(200);
+      const bound = res.body.items.find((i: { id: string }) => i.id === boundId);
+      expect(bound.availability.region).toBe('GB');
+    });
+
+    it('answers an entry page in the same region', async () => {
+      // A board card and the entry's own page are the same question about the same entry. They
+      // diverged once already — findOne had its own availability path — so this is asserted
+      // rather than assumed.
+      await get(`/creators/availability-co/recommendations/${boundId}?region=GB`, patron).expect(
+        200,
+      );
+      await ctx.availabilityService.drainRefreshes();
+
+      const res = await get(
+        `/creators/availability-co/recommendations/${boundId}?region=GB`,
+        patron,
+      ).expect(200);
+      expect(res.body.availability.region).toBe('GB');
+    });
+
+    it('still defaults when the reader asks for nothing', async () => {
+      await board(patron).expect(200);
+      await ctx.availabilityService.drainRefreshes();
+
+      const res = await board(patron).expect(200);
+      const bound = res.body.items.find((i: { id: string }) => i.id === boundId);
+      expect(bound.availability.region).toBe('US');
+    });
+
+    it('refuses a region the deployment does not serve, rather than dropping the badges', async () => {
+      // The trap this guards. Both availability lookups swallow their own errors — badges are
+      // garnish and a cold provider must not 500 a board — so a region check *inside* that
+      // try/catch would be swallowed too, and the reader would get a board with no badges and
+      // no reason. 400 is the honest answer, and it has to be given before the swallowing.
+      await boardIn('ZZ', patron).expect(400);
+      await get(`/creators/availability-co/recommendations/${boundId}?region=ZZ`, patron).expect(
+        400,
+      );
+    });
+
+    it('rejects a malformed region on the board too', async () => {
+      await boardIn('GBR', patron).expect(400);
+      await boardIn('gb', patron).expect(400);
+    });
+
+    it('lists the regions it serves, and which is the default', async () => {
+      // A route rather than a constant in the client: the set is deployment configuration, and a
+      // hardcoded copy drifts the moment an operator edits it — leaving a reader able to pick a
+      // country the server refuses, which reads as a broken setting.
+      const res = await get('/meta/regions').expect(200);
+
+      expect(res.body.regions).toContain('US');
+      expect(res.body.regions).toContain('GB');
+      expect(res.body.default).toBe('US');
+    });
+
+    it('offers the region list without a session', async () => {
+      // Availability is shown to signed-out readers, so the control that changes it must work
+      // for them. It exposes nothing but country codes an operator chose.
+      await get('/meta/regions').expect(200);
+    });
+  });
+
   it('exposes the catalogue id the availability endpoint keys on', async () => {
     // Without it the endpoint is unreachable: no response anywhere carried the title's id.
     const res = await board(patron).expect(200);

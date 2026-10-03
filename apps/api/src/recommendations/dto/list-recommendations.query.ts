@@ -33,6 +33,19 @@ export class ListRecommendationsQuery {
   @IsIn(['PENDING', 'ACCEPTED', 'ACTIVE', 'COMPLETED', 'REJECTED', 'DELETED'])
   status?: RecommendationStatus;
 
+  /**
+   * Which country's streaming offers to attach, as ISO-3166-1 alpha-2.
+   *
+   * Validated here only for *shape*. Whether the deployment actually serves a region is
+   * `AvailabilityService.assertRegion`'s decision and stays there — the bounded set exists so one
+   * caller cannot create a permanent refresh obligation for every country on earth, and that rule
+   * belongs with the service that owns the obligation, not copied into a DTO that will drift.
+   */
+  @IsOptional()
+  @IsString()
+  @Matches(/^[A-Z]{2}$/, { message: 'region must be a two-letter ISO-3166-1 country code' })
+  region?: string;
+
   /** How the column is ordered beneath the creator's own picks, which always lead. */
   @IsOptional()
   @IsIn(['upvotes', 'newest', 'oldest', 'manual'])

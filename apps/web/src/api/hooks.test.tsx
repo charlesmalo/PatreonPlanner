@@ -78,6 +78,33 @@ describe('useBoard', () => {
     global.fetch = originalFetch;
   });
 
+  it('asks for the reader&apos;s region, and omits it when they have none', async () => {
+    // The seam that makes the whole preference work. Everything either side of it had tests —
+    // the hook that stores the choice, the control that changes it, the API that honours it —
+    // and the request in the middle carried nothing, which no test could see.
+    const fetchMock = fakeApi({
+      'GET /api/v1/creators/ada-writes/recommendations': { items: [], nextCursor: null },
+    });
+    global.fetch = fetchMock;
+
+    const { rerender } = renderHook(
+      ({ region }) => useBoard('ada-writes', true, [], 'ACCEPTED', 'upvotes', region),
+      {
+        initialProps: { region: 'GB' as string | null },
+      },
+    );
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(String(fetchMock.mock.calls[0][0])).toContain('region=GB');
+
+    rerender({ region: null });
+
+    // Not `region=` or `region=null`: no choice means the server applies its own default, and
+    // sending an empty one would be asking for a region named "".
+    await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(1));
+    const latest = String(fetchMock.mock.calls[fetchMock.mock.calls.length - 1][0]);
+    expect(latest).not.toContain('region');
+  });
+
   it('reports loading until the fetch for this creator lands', async () => {
     global.fetch = fakeApi({
       'GET /api/v1/creators/a/recommendations': { items: [recommendation()], nextCursor: null },

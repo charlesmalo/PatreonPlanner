@@ -72,6 +72,7 @@ export class RecommendationsController {
       parseLabelFilter(query.themes),
       query.status,
       query.sort,
+      query.region,
     );
   }
 
@@ -106,8 +107,10 @@ export class RecommendationsController {
     @CurrentCreator() creator: ResolvedCreator,
     @CurrentViewer() viewer: Viewer,
     @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: ListRecommendationsQuery,
   ) {
-    return this.recommendations.findOne(creator, id, viewer);
+    // An entry's own page shows the same badges the board does, so it takes the same region.
+    return this.recommendations.findOne(creator, id, viewer, query.region);
   }
 
   @Post()
