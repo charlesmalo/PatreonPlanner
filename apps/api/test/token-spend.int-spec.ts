@@ -144,6 +144,15 @@ describe('TokensService spending (integration)', () => {
     const firstMayFinish = new Promise<void>((resolve) => {
       releaseFirst = resolve;
     });
+    // Resolved once the first spend's decrement has actually landed. Without it this test was
+    // itself racy at the start: `second` was issued the moment `first` was *created*, so if the
+    // second decrement won, `first` saw `count: 0` and the assertion **inside** the transaction
+    // failed. That reads as "the ratchet broke" — the worst possible false alarm from the one
+    // test defending it. Seen once in CI, on a commit that touched no token code.
+    let firstHasDecremented!: () => void;
+    const firstDecremented = new Promise<void>((resolve) => {
+      firstHasDecremented = resolve;
+    });
 
     const first = prisma.$transaction(async (tx) => {
       const { count } = await tx.tokenBalance.updateMany({
@@ -151,6 +160,7 @@ describe('TokensService spending (integration)', () => {
         data: { available: { decrement: 1 } },
       });
       expect(count).toBe(1);
+      firstHasDecremented();
       await firstMayFinish;
       const redeem = await tx.redeem.create({
         data: { creatorId, recommendationId: acceptedId, userId, note: 'first' },
@@ -165,6 +175,10 @@ describe('TokensService spending (integration)', () => {
       });
     });
 
+    // Ordered, not hoped for. The second spend must start *after* the first has decremented,
+    // or the two simply race to be first and the interleave under test never happens.
+    await firstDecremented;
+
     // The second spend now runs against a row the first has already decremented. Under a
     // conditional decrement it blocks on the uncommitted row and then finds zero; under a
     // read-then-write it would read the pre-decrement value and hand out a token that is gone.
@@ -174,6 +188,11 @@ describe('TokensService spending (integration)', () => {
     );
 
     // Let the holder commit, then see what the second one did.
+    //
+    // A wall clock, and deliberately not load-bearing: if this fires before `second` has reached
+    // its decrement, `first` simply commits and `second` finds a balance of zero — refused, for
+    // the same reason, and every assertion below still holds. It buys the *interleave* rather
+    // than the outcome, which is why a slow machine cannot turn it into a failure.
     setTimeout(() => releaseFirst(), 150);
     await first;
     expect(await second).toBe('refused');
