@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Notification } from '../api/types';
+import { destinationFor } from '../api/notification-destination';
 import { describeResolution } from '../api/ticket-wording';
 
 interface NotificationBellProps {
@@ -111,25 +112,6 @@ export function NotificationBell({
       ) : null}
     </div>
   );
-}
-
-/**
- * Where the news is acted on, which is not always where it happened.
- *
- * A report goes to the queue: the board is where an entry is read, the queue is where a
- * moderator can do something about it. A status change goes to the entry itself, which has its
- * own page and says so plainly when it has since been removed.
- */
-function destinationFor(item: Notification): string {
-  const board = `/c/${item.payload.creatorSlug}`;
-  if (item.type === 'ENTRY_FLAGGED') return `${board}/review`;
-  // A message is answered on the tickets page. Sending a moderator to the entry it happens to be
-  // about leaves them looking at the thing rather than at what was said about it.
-  if (item.type === 'TICKET_RAISED' || item.type === 'TICKET_RESOLVED') return `${board}/tickets`;
-  return item.payload.recommendationId
-    ? `${board}/e/${item.payload.recommendationId}`
-    : // No id means the content was refused before it existed; the board is all there is.
-      board;
 }
 
 /** Rendered from type and payload; there is nothing else to consult, by design. */

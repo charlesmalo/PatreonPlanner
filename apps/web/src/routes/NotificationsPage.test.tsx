@@ -162,13 +162,13 @@ describe('NotificationsPage', () => {
       expect(screen.queryByText(/was updated on/i)).not.toBeInTheDocument();
     });
 
-    it('links to the tickets page, where the message lives', async () => {
+    it('links to the one message, not to a list the reader cannot even open', async () => {
       stubApi([resolved]);
       setup();
 
       expect(await screen.findByRole('link', { name: /your message/i })).toHaveAttribute(
         'href',
-        '/c/ada-writes/tickets',
+        '/c/ada-writes/tickets/t1',
       );
     });
 

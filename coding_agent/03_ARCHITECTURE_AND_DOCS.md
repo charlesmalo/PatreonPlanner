@@ -53,6 +53,8 @@ Check here **before writing any utility** (`08_TOKEN_EFFICIENCY.md` §1).
 | `narrowCapabilities()`              | `apps/web/src/api/view-mode.ts`                           | View-as narrowing; never widens                       |
 | `buildTree()`                       | `apps/web/src/components/board-tree.ts`                   | Nests entries by `parentId`, defensively              |
 | `present()`                         | `apps/api/src/recommendations/recommendations.service.ts` | Renames `creatorNotes` to `notes` at the API boundary |
+| `destinationFor()`                  | `apps/web/src/api/notification-destination.ts`            | Where a notification's link goes; was written twice   |
+| `TicketCard`                        | `apps/web/src/components/TicketCard.tsx`                  | One message, with the answer controls when permitted  |
 
 ## Domain Model Registry
 
@@ -87,6 +89,7 @@ Things that exist exactly once. Building a second one is a defect.
 | Entry visibility        | `visibilityWhere()`                 | Compose with `AND`, never spread          |
 | Board ordering + keyset | `boardOrdering()` / `afterCursor()` | They must agree or paging breaks silently |
 | Moderation pipeline     | `moderation/moderation.service.ts`  | One `review()`, which also records        |
+| Notification links      | `destinationFor()`                  | Two copies is how `ticketId` went unread  |
 
 ## Key Decisions
 

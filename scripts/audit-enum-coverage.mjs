@@ -66,6 +66,11 @@ const MIRRORED = new Set([
   'OfferKind',
   'RecommendationStatus',
   'StaffPermission',
+  // Mirrored since the ticket shape moved out of `routes/Tickets.tsx` and into `api/types.ts`,
+  // which is the file this check can reason about — a response type in a route file is one
+  // nothing compares against the wire.
+  'TicketResolution',
+  'TicketStatus',
 ]);
 
 /** Unions the client narrows on purpose, with the reason. */

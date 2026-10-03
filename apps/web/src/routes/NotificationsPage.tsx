@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import type { Notification } from '../api/types';
+import { destinationFor } from '../api/notification-destination';
 import { describeResolution } from '../api/ticket-wording';
 import { NOTIFICATION_FILTERS } from '../api/notification-wording';
 
@@ -160,13 +161,4 @@ function describe(item: Notification): string {
   const alsoCount = (item.groupCount ?? 1) - 1;
   const also = alsoCount > 0 ? ` and ${alsoCount} other change${alsoCount === 1 ? '' : 's'}` : '';
   return `was ${(item.payload.status ?? 'updated').toLowerCase()} on ${item.payload.creatorName}${also}`;
-}
-
-/** Same rule as the dropdown: a report goes where it can be acted on. */
-function destinationFor(item: Notification): string {
-  const board = `/c/${item.payload.creatorSlug}`;
-  if (item.type === 'ENTRY_FLAGGED') return `${board}/review`;
-  // A message is answered on the tickets page, not on the entry it happens to be about.
-  if (item.type === 'TICKET_RAISED' || item.type === 'TICKET_RESOLVED') return `${board}/tickets`;
-  return item.payload.recommendationId ? `${board}/e/${item.payload.recommendationId}` : board;
 }

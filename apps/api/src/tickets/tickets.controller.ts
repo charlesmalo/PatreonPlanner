@@ -53,6 +53,28 @@ export class TicketsController {
     return this.tickets.list(creator.id, query.status);
   }
 
+  /**
+   * VIEW and no permission, unlike the inbox beside it: the reader who raised a ticket is an
+   * ordinary reader of the board, and they are the audience of every TICKET_RESOLVED
+   * notification. Which of them may see *this* ticket is decided in the service, because the
+   * answer is a union — the inbox permission, or having written it — and a decorator can only
+   * demand one thing of everybody.
+   *
+   * A reader who can no longer see the board does not get here at all: VIEW fails in the guard
+   * first, which is right. A lapsed patron of a subscribers-only board has lost the board their
+   * message was about.
+   */
+  @Get(':id')
+  @RequireCapability('VIEW')
+  @UseGuards(CreatorAccessGuard)
+  findOne(
+    @CurrentCreator() creator: ResolvedCreator,
+    @CurrentViewer() viewer: Viewer,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.tickets.findOne(creator, id, viewer);
+  }
+
   @Patch(':id')
   @RequireCapability('MODERATE')
   @RequirePermission('HANDLE_REPORTS')

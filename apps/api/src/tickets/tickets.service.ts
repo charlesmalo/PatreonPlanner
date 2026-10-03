@@ -6,6 +6,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { AbuseService } from '../abuse/abuse.service';
+import type { Viewer } from '../access/capability';
+import { hasPermission } from '../access/permissions';
 import { ModerationService } from '../moderation/moderation.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -19,6 +21,17 @@ const TICKET_FIELDS = {
   subjectId: true,
   createdAt: true,
   resolvedAt: true,
+} as const;
+
+/**
+ * The inbox's shape and one message's shape, which are deliberately the same: both are rendered
+ * by one card on the client, and a field present in the list and absent from the single read
+ * would make that card's output depend on which page it was drawn on.
+ */
+const TICKET_WITH_CONTEXT = {
+  ...TICKET_FIELDS,
+  raisedBy: { select: { id: true, fullName: true, avatarUrl: true } },
+  subject: { select: { id: true, customTitle: true, status: true } },
 } as const;
 
 /**
@@ -106,17 +119,47 @@ export class TicketsService {
   async list(creatorId: string, status: 'OPEN' | 'RESOLVED' = 'OPEN') {
     const items = await this.prisma.ticket.findMany({
       where: { creatorId, status },
-      select: {
-        ...TICKET_FIELDS,
-        raisedBy: { select: { id: true, fullName: true, avatarUrl: true } },
-        subject: { select: { id: true, customTitle: true, status: true } },
-      },
+      select: TICKET_WITH_CONTEXT,
       // Oldest first: a ticket must not rot while newer ones arrive above it. The same reasoning
       // the review queue carries.
       orderBy: { createdAt: 'asc' },
       take: 50,
     });
     return { items };
+  }
+
+  /**
+   * One message, for the notification that named it.
+   *
+   * Two different readers arrive here and neither is the other: staff who would work it, and the
+   * person who wrote it — who is told the answer by notification and, until this existed, had
+   * nowhere to read the message that answer was about. So the gate is not the inbox's
+   * `HANDLE_REPORTS` alone; it is that permission **or** having raised this ticket.
+   *
+   * Everyone else gets 404 rather than 403, for the reason the entry reads do: an id that answers
+   * "exists, but not yours" has confirmed a private exchange between two other people.
+   */
+  async findOne(creator: { id: string }, id: string, viewer: Viewer) {
+    // Scoped by creator as well as id, like `resolve`: a ticket id alone says nothing about which
+    // board owns it.
+    const ticket = await this.prisma.ticket.findFirst({
+      where: { id, creatorId: creator.id },
+      select: { ...TICKET_WITH_CONTEXT, raisedByUserId: true },
+    });
+    if (!ticket) throw new NotFoundException();
+
+    // Both sides must be a real id. `raisedByUserId` is null on an anonymous ticket and
+    // `viewer.userId` is null for an anonymous reader, so a bare equality would hand every
+    // anonymous message on the board to every anonymous reader of it.
+    const raisedByThisViewer = viewer.userId !== null && ticket.raisedByUserId === viewer.userId;
+    if (!raisedByThisViewer && !hasPermission(viewer, 'HANDLE_REPORTS')) {
+      throw new NotFoundException();
+    }
+
+    // The column is the gate's input, not the reader's business: `raisedBy` already names whoever
+    // wrote it, to whoever is allowed to know.
+    const { raisedByUserId: _gate, ...rest } = ticket;
+    return rest;
   }
 
   async resolve(
