@@ -1122,14 +1122,37 @@ test('a moderator writes notes, and only the timeline one reaches the board', as
   await page.goto(`/c/${CREATOR.slug}/review`);
 
   // Exact: the delete control's accessible name also contains "note".
-  await page.getByLabel('Note', { exact: true }).fill(PRIVATE);
-  await page.getByRole('button', { name: /add note/i }).click();
-  await expect(page.getByText(PRIVATE)).toBeVisible();
+  const noteField = page.getByLabel('Note', { exact: true });
+  const addNote = page.getByRole('button', { name: /add note/i });
+
+  await noteField.fill(PRIVATE);
+  await addNote.click();
+  // Deliberately *not* `getByText(PRIVATE)`. Playwright reads a textarea's value as its text, so
+  // that locator matches the box this test just typed into — measured: it already matched once
+  // before the click, and resolved 110ms before the written note existed. It asserted nothing and
+  // let everything after it race the request still in flight.
+  //
+  // The note's own delete control is the thing that only exists once the server answered, and its
+  // accessible name is the only place the stored kind is readable — so this also pins the note
+  // down as commentary, which the board assertion at the end had been carrying alone.
+  await expect(page.getByRole('button', { name: 'Delete this private note' })).toBeVisible();
+  // The editor emptying is what says the write is finished and the form is ready for the next
+  // note, and waiting for it is the whole fix. The handler clears the body on success, so with the
+  // request still in flight the second note is typed into a box that response then wipes: "Add
+  // note" submits nothing and answers "Write something first". Reproduced here 1/1.
+  //
+  // Landing a little later wipes something else instead. The kind select is controlled, so a React
+  // commit arriving between Playwright setting its value and the change event being delivered
+  // rewrites it back to NOTE — the second note is then stored as commentary, the review queue still
+  // shows its text, and only the board notices. That is why CI failed this test at two different
+  // lines on its two attempts: one race, two things it can clobber.
+  await expect(noteField).toHaveValue('');
 
   await page.getByLabel('Kind').selectOption('TIMELINE');
-  await page.getByLabel('Note', { exact: true }).fill('Covering this in March');
-  await page.getByRole('button', { name: /add note/i }).click();
-  await expect(page.getByText('Covering this in March')).toBeVisible();
+  await noteField.fill('Covering this in March');
+  await addNote.click();
+  await expect(page.getByRole('button', { name: 'Delete this timeline note' })).toBeVisible();
+  await expect(noteField).toHaveValue('');
 
   // The board shows the timeline note and does not contain the commentary anywhere — asserted
   // against the whole page, because the kind is the only thing keeping them apart.
