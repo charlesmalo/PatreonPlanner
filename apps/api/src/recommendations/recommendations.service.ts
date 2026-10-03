@@ -90,7 +90,9 @@ export class RecommendationsService {
     },
     id: string,
     viewer: { userId: string | null; staffRole: StaffRoleValue | null },
+    region?: string,
   ) {
+    const chosenRegion = this.regionFor(region);
     const entry = await this.prisma.recommendation.findFirst({
       where: {
         AND: [{ id, creatorId: creator.id }, visibilityWhere(creator, viewer)],
@@ -118,7 +120,7 @@ export class RecommendationsService {
     // was no way to stop following from the page the notification links to.
     const titleId = entry.title?.id ?? null;
     const [availability, themes, reactions, following] = await Promise.all([
-      this.availabilityFor(titleId),
+      this.availabilityFor(titleId, chosenRegion),
       titleId ? this.themesFor([titleId], creator.id) : null,
       // Empty when the board has reactions off, rather than fetched and hidden — the rule the
       // board list already follows: a count nobody may see is a query nobody needs.
@@ -155,10 +157,27 @@ export class RecommendationsService {
    * precisely because `forTitle` waits for the provider — right for the endpoint a caller asks
    * with, wrong for a page render.
    */
-  private async availabilityFor(titleId: string | null): Promise<StoredAvailability | null> {
+  /**
+   * The region to answer availability for, defaulted and checked.
+   *
+   * Checked *here*, before either caller's try/catch, and deliberately not inside it. Both
+   * availability lookups swallow their errors — badges are garnish and a cold provider must not
+   * 500 a board — so a region this deployment does not serve would be swallowed too, and the
+   * reader would get a board with no badges and no reason. A region that cannot be served is a
+   * bad request, and has to be answered as one before the swallowing starts.
+   */
+  private regionFor(region: string | undefined): string {
+    const chosen = region ?? this.config.get('AVAILABILITY_REGION_DEFAULT');
+    this.availability.assertRegion(chosen);
+    return chosen;
+  }
+
+  private async availabilityFor(
+    titleId: string | null,
+    region: string,
+  ): Promise<StoredAvailability | null> {
     if (!titleId) return null;
     try {
-      const region = this.config.get('AVAILABILITY_REGION_DEFAULT');
       return (await this.availability.forTitles([titleId], region)).get(titleId) ?? null;
     } catch (error) {
       this.logger.warn(`Availability lookup failed for entry title ${titleId}: ${String(error)}`);
@@ -250,6 +269,7 @@ export class RecommendationsService {
     themeGroups?: string[][],
     status?: RecommendationStatus,
     sort: BoardSort = 'upvotes',
+    region?: string,
   ) {
     const take = Math.min(Math.max(limit ?? 20, 1), MAX_PAGE);
     const cursor = decodeCursor(rawCursor);
@@ -271,6 +291,9 @@ export class RecommendationsService {
     }
 
     const isStaff = viewer.staffRole !== null;
+    // Resolved before anything is fetched: an unserved region must 400 rather than quietly
+    // produce a board with no badges — see `regionFor`.
+    const chosenRegion = this.regionFor(region);
     // Read once and given to the ordering, the cursor and the projection, so the three cannot
     // disagree about whether this board has the feature.
     const tokensEnabled = creator.redeemTokensEnabled ?? false;
@@ -362,14 +385,13 @@ export class RecommendationsService {
     // One query for the whole page, not one per card: twenty entries would otherwise mean twenty
     // round trips. Never blocks on the upstream — a cold board renders without badges and the
     // refresh it queues lands before the next read.
-    const region = this.config.get('AVAILABILITY_REGION_DEFAULT');
     const titleIds = page.flatMap((item) => (item.titleId ? [item.titleId] : []));
     // Badges are garnish; the board is the product. The unconfigured path already degrades, but a
     // *runtime* failure here — a slow query, an exhausted pool — would otherwise 500 the whole
     // board rather than dropping the badges.
     let availability = new Map<string, StoredAvailability>();
     try {
-      availability = await this.availability.forTitles(titleIds, region);
+      availability = await this.availability.forTitles(titleIds, chosenRegion);
     } catch (error) {
       this.logger.warn(`Availability lookup failed for board ${creator.id}: ${String(error)}`);
     }

@@ -4,6 +4,8 @@ import { useCreator, useSession, useThemes, useViewMode } from '../api/hooks';
 import { useTokens } from '../api/use-tokens';
 import { TokenWallet } from '../components/TokenWallet';
 import { BoardSearch } from '../components/BoardSearch';
+import { RegionPicker } from '../components/RegionPicker';
+import { useRegion } from '../api/use-region';
 // Shared with BoardSearch rather than declared twice: search has to name the column each result
 // sits in, and two copies of the mapping drift.
 import { COLUMNS } from '../components/board-columns';
@@ -72,6 +74,9 @@ export function CreatorBoard() {
    */
   const [validated, setValidated] = useState(() => localThemes(slug).length === 0);
   const themes = useThemes(slug, !loading && !error);
+  // Where the reader watches from. Held here rather than inside the column so changing it
+  // refetches every column, the way a theme or sort change does.
+  const { region, regions, setRegion, fallback } = useRegion();
   // Reading a balance is also what grants it — see `useTokens`. Only once the board is readable:
   // a signed-out visitor has no balance, and asking would be a 401 on every public board.
   const tokens = useTokens(slug, !loading && !error && user !== null);
@@ -216,6 +221,8 @@ export function CreatorBoard() {
       {/* Above the columns, because it searches all four at once. The engine takes no status
           filter, so putting it inside a tab would answer a narrower question than it was asked
           without saying so. */}
+      <RegionPicker region={region} regions={regions} fallback={fallback} onChange={setRegion} />
+
       <BoardSearch
         slug={slug}
         canUpvote={capabilities.upvote}
@@ -238,6 +245,7 @@ export function CreatorBoard() {
             slug={slug}
             status={tab.status}
             label={tab.label}
+            region={region}
             themes={themes}
             selectedThemes={validated ? themeIds : []}
             tokensAvailable={tokens.enabled ? tokens.available : 0}
