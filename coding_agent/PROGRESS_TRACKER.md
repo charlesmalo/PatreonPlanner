@@ -54,30 +54,44 @@ what has been added since.
       per period, a patron spends one to mark an accepted entry Priority with a
       note, and the redeem is consumed when it plays (#137, #140). The first
       feature taken through OpenSpec end to end
+- [x] M24: Reader-chosen availability region — "where to watch" answers for the
+      country the reader picked, stored per reader, from a bounded server-side set (#146)
 - [x] M23: Board search — the fuzzy/semantic engine reaches readers at last, above
       the column tabs and across all four at once (#143)
 
 ## Active Task
 
-**Nothing in flight.** `main` @ `54e432a`, repo private, no open PRs, working tree clean.
+`main` @ `412e280`. **Repo is public for the rest of this project**, by the engineer's
+instruction — no more private flips between merges, so CI runs on every push.
 
-Board search shipped (#143), closing the oldest user-facing debt item.
+Shipped since the last entry: board search (#143), the dependency sweep that cleared every high
+advisory (#145), and reader-chosen availability regions (#146), which answered the last open
+design question.
 
-### Next up, ranked
+### In flight — two parallel agents, isolated worktrees
 
-1. **19 vulnerability advisories, 7 high.** Down from 24 and 9; the two _reachable_ ones were
-   fixed and the rest traced and left. The item least comfortable to carry into a launch, and
-   the one that has sat longest.
-2. **Availability is answered for one region, server-wide** — see Open Questions. Needs the
-   engineer's decision, not an implementation choice.
-3. **A ticket notification lands on the list, not the ticket.** Needs a
-   `/c/:slug/tickets/:id` route that does not exist. Fine at ten tickets, not at three hundred.
-4. **Two migrations are not rolling-deploy safe.** Matters at the first real deploy.
-5. **Conditional:** harden the flaky `journey.spec.ts` moderator-notes test if it recurs.
+| Branch                    | Task                                             | Owns                                                                           |
+| ------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------ |
+| `feat/ticket-deep-link`   | A ticket notification should reach _that ticket_ | `apps/api/src/tickets/**`, `apps/web/src/routes/**`, notification destinations |
+| `fix/flaky-notes-journey` | Harden the flaky moderator-notes journey         | `e2e/tests/journey.spec.ts`                                                    |
+
+Split that way because the two share no files. Both were told to leave this tracker alone — a
+merge conflict in the file that records state is worse than the state being a commit late.
+
+### Needs the engineer's decision, not work
+
+**Two framework majors**, each the last advisory of its kind:
+
+- `@nestjs/core` → `>=11.1.18` (no fix inside 10.x)
+- `react-router` → `>=7.18.0` (no fix inside 6.x)
+
+Neither is a dependency bump; each is a framework upgrade with its own migration guide, and each
+deserves its own change with the full suite behind it. The remaining `file-type` x2 is
+**unreachable** and deliberately left — see Known Debt.
 
 ## Open Questions Blocking Work
 
-**One, and it does not block anything shipped.**
+**None.** The last one was answered and built in #146.
 
 ~~**Availability is answered for one region, server-wide.**~~ **Answered: the reader picks,
 stored per reader.** Built — the board and the entry page take a `region` query parameter, a
@@ -751,3 +765,5 @@ missing for a decision somebody can already make. Recorded in _Known Debt_.
 | 2026-09-28 | First OpenSpec change archived (#139) — promoting its spec exposed #140         |
 | 2026-10-01 | CLAUDE.md records which spec mechanism is in use (#141); baseline re-measured   |
 | 2026-10-02 | Board search shipped (#143) — the search engine finally reaches readers         |
+| 2026-10-02 | 22 advisories to 5; every high and low cleared (#145)                           |
+| 2026-10-03 | Reader-chosen availability region (#146) — the last open question answered      |
